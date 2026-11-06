@@ -47,7 +47,7 @@
   /* ================= state ================= */
   var S = {
     me: null, session: LS.get('session', null), data: null, lastSync: 0, online: true,
-    view: 'home', filter: 'all', q: '', people: LS.get('people', null)
+    view: 'home', filter: 'all', q: '', sort: LS.get('sort', 'place'), people: LS.get('people', null)
   };
   function req(action, payload) {
     return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} });
@@ -343,10 +343,10 @@
       '</div></div>';
   }
 
-  function devRow(d) {
+  function devRow(d, grouped) {
     var s = stOf(d), c = cert(d), place = '';
     if (d.pending) place = 'Transfer waiting';
-    else if (d.status === 'At Client') place = coName(d.companyId) + ' · ' + names(d.holders);
+    else if (d.status === 'At Client') place = grouped ? 'With ' + names(d.holders) : coName(d.companyId) + ' · ' + names(d.holders);
     else if (d.status === 'In Office') place = 'In office';
     else place = s.short + (d.note ? ' · ' + d.note : '') + (d.holders && d.holders.length ? ' · ' + names(d.holders) : '');
     return '<button class="row" data-dev="' + d.id + '">' + tag(d) + '<span class="t"><b>' + esc(devTitle(d)) + '</b><small>' + esc(devSub(d)) + '</small>' +
@@ -358,20 +358,53 @@
   function viewDevices() {
     var f = S.filter, q = S.q;
     var list = S.data.devices.filter(function (d) {
-      if (f === 'office' && d.status !== 'In Office') return false;
+      if (f === 'office' && (d.status !== 'In Office' || d.pending)) return false;
+      if (f === 'out' && ((d.status === 'In Office' && !d.pending) || d.status === 'Out of Service')) return false;
       if (f === 'client' && d.status !== 'At Client') return false;
       if (f === 'service' && (Core.SERVICE.indexOf(d.status) < 0)) return false;
       if (f === 'oos' && d.status !== 'Out of Service') return false;
       if (f === 'expired' && cert(d).kind !== 'expired') return false;
       return matches(d, q);
     });
-    list.sort(function (a, b) { return a.category.localeCompare(b.category) || a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); });
-    var fl = [['all', 'All'], ['office', 'In office'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+    var byPlace = S.sort === 'place';
+    function bySerial(a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); }
+    var fl = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
     var h = header('Devices') + '</header><main>' +
       '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Name or last digits of serial" value="' + esc(q) + '" autocomplete="off" aria-label="Search devices"></div>' +
-      '<div class="filters" role="tablist">' + fl.map(function (x) { return '<button class="fbtn' + (f === x[0] ? ' on' : '') + '" data-filter="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
-    if (!list.length) h += '<div class="empty"><b>No device matches “' + esc(q) + '”.</b>Try the last 2–3 digits of the serial, or a word like “tachometer”.</div>';
-    else {
+      '<div class="filters" role="tablist">' + fl.map(function (x) { return '<button class="fbtn' + (f === x[0] ? ' on' : '') + '" data-filter="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="sortbar"><span>' + list.length + ' device' + (list.length === 1 ? '' : 's') + '</span><div class="seg" role="radiogroup" aria-label="Group devices">' +
+        '<button data-sort="place" class="' + (byPlace ? 'on' : '') + '" role="radio" aria-checked="' + byPlace + '">By location</button>' +
+        '<button data-sort="type" class="' + (byPlace ? '' : 'on') + '" role="radio" aria-checked="' + !byPlace + '">By type</button></div></div>';
+    if (!list.length) h += '<div class="empty"><b>' + (q ? 'No device matches “' + esc(q) + '”.' : 'No devices here right now.') + '</b>' + (q ? 'Try the last 2–3 digits of the serial, or a word like “tachometer”.' : '') + '</div>';
+    else if (byPlace) {
+      /* Group by where each device is right now: office first, then each client site, then service / other places */
+      var groups = {}, meta = {};
+      list.forEach(function (d) {
+        var k, title, sub = '', rank;
+        if (d.pending) { k = 'pending'; title = 'Transfer waiting'; rank = 2; }
+        else if (d.status === 'In Office') { k = 'office'; title = 'In office'; rank = 0; }
+        else if (d.status === 'At Client') { k = 'co:' + d.companyId; title = coName(d.companyId); rank = 1; }
+        else if (d.status === 'Out of Service') { k = 'oos'; title = 'Out of service'; rank = 6; }
+        else if (d.status === 'Other') { k = 'other:' + (d.note || ''); title = 'Other' + (d.note ? ' · ' + d.note : ''); rank = 5; }
+        else { k = 'st:' + d.status; title = d.status; rank = d.status === 'Maintenance' ? 3 : 4; }
+        (groups[k] = groups[k] || []).push(d);
+        if (!meta[k]) meta[k] = { title: title, rank: rank, people: {}, since: d.since || '' };
+        (d.holders || []).forEach(function (p) { meta[k].people[p.name || p.id] = 1; });
+        if (d.since && (!meta[k].since || d.since < meta[k].since)) meta[k].since = d.since;
+      });
+      var keys = Object.keys(groups).sort(function (a, b) { return meta[a].rank - meta[b].rank || groups[b].length - groups[a].length || meta[a].title.localeCompare(meta[b].title); });
+      var inN = list.filter(function (d) { return d.status === 'In Office' && !d.pending; }).length;
+      var outsideN = list.filter(function (d) { return (d.status !== 'In Office' || d.pending) && d.status !== 'Out of Service'; }).length;
+      var sites = keys.filter(function (k) { return k.indexOf('co:') === 0; }).length;
+      if (f === 'all') h += '<div class="placesum"><div><b>' + inN + '</b><span>in office</span></div><div><b>' + outsideN + '</b><span>outside</span></div><div><b>' + sites + '</b><span>client site' + (sites === 1 ? '' : 's') + '</span></div></div>';
+      keys.forEach(function (k) {
+        var m = meta[k], ppl = Object.keys(m.people);
+        h += '<div class="sec place"><h2>' + esc(m.title) + ' <span class="cnt">' + groups[k].length + '</span></h2>' +
+          (k !== 'office' && (ppl.length || m.since) ? '<small>' + esc(ppl.join(', ')) + (ppl.length && m.since ? ' · ' : '') + (m.since ? 'since ' + esc(when(m.since)) : '') + '</small>' : '') + '</div>' +
+          '<div class="list">' + groups[k].sort(bySerial).map(function (d) { return devRow(d, true); }).join('') + '</div>';
+      });
+    } else {
+      list.sort(function (a, b) { return a.category.localeCompare(b.category) || bySerial(a, b); });
       var cat = null, out = '';
       list.forEach(function (d) {
         if (d.category !== cat) { if (cat !== null) out += '</div>'; cat = d.category; out += '<div class="sec"><h2>' + esc(cat) + '</h2></div><div class="list">'; }
@@ -441,6 +474,7 @@
     $$('[data-dev]').forEach(function (b) { b.onclick = function () { openDevice(b.dataset.dev); }; });
     $$('[data-goto-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.gotoFilter; S.q = ''; location.hash = '#devices'; }; });
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
+    $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; LS.set('sort', S.sort); S._keepScroll = false; render(); }; });
     var q = $('#q');
     if (q) {
       q.oninput = function () {
