@@ -1107,9 +1107,15 @@
   var timer = null;
   function boot() {
     var cached = LS.get('cache', null);
-    if (cached && !S.data) { S.data = cached; index(); }
-    route();
-    refresh(!!cached);
+    if (cached && !S.data && cached.users) {
+      var meC = cached.users.filter(function (u) { return u.id === S.session.userId; })[0];
+      if (meC) { S.data = cached; S.me = S.me || meC; index(); }
+    }
+    try { route(); } catch (e) {
+      /* never leave a blank screen: drop the cached copy and wait for live data */
+      S.data = null; LS.del('cache'); try { route(); } catch (e2) {}
+    }
+    refresh(!!S.data);
     clearInterval(timer);
     timer = setInterval(function () { if (document.visibilityState === 'visible' && S.session && !sheetStack.length) { S._keepScroll = true; refresh(true); } }, 20000);
   }

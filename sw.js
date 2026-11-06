@@ -1,5 +1,5 @@
 /* App shell cache: the app opens instantly; data always comes live from the server. */
-var CACHE = 'akh-devices-v3';
+var CACHE = 'akh-devices-v4';
 var SHELL = ['./', './index.html', './app.css', './app.js', './core.js', './config.js', './logo.png', './jspdf.umd.min.js', './icon-192.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
