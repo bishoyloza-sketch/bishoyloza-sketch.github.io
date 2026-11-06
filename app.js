@@ -652,19 +652,55 @@
     }
     draw();
   }
+  /* Device groups shown as tiles when picking devices. A category may sit in more than one group (e.g. ΔP is also HVAC). */
+  var DEV_GROUPS = [
+    ['Temperature', ['Temperature']],
+    ['Pressure', ['Pressure']],
+    ['Differential Pressure (ΔP)', ['Differential Pressure']],
+    ['Rotational Speed (RPM)', ['RPM']],
+    ['Humidity (RH)', ['Relative Humidity']],
+    ['Timer', ['Time']],
+    ['HVAC', ['Air Flow', 'DOP', 'Particle Count', 'Differential Pressure', 'Relative Humidity']],
+    ['Thermal Mapping', ['Thermal Mapping', 'Data Logger']],
+    ['Weight', ['Weight']],
+    ['Lab Solutions', ['pH Solution', 'Conductivity', 'Chlorine', 'Redox', 'Viscosity']]
+  ];
+  function devGroups() {
+    var known = {}, cats = {};
+    DEV_GROUPS.forEach(function (g) { g[1].forEach(function (c) { known[c] = 1; }); });
+    S.data.devices.forEach(function (d) { if (d.active !== false && !known[d.category]) cats[d.category] = 1; });
+    var other = Object.keys(cats).sort();
+    return DEV_GROUPS.concat(other.length ? [['Other devices', other]] : []);
+  }
   function devicePicker(container, selected, filterFn, onChange) {
-    var q = '';
+    var q = '', grp = S.data.devices.filter(filterFn).length > 10 ? null : '__all';
     function draw() {
-      var list = S.data.devices.filter(function (d) { return filterFn(d) && matches(d, q); });
+      var groups = devGroups();
+      var inGroup = grp === null ? null : groups.filter(function (g) { return g[0] === grp; })[0];
+      var list = S.data.devices.filter(function (d) { return filterFn(d) && matches(d, q) && (q || !inGroup || inGroup[1].indexOf(d.category) >= 0); });
       list.sort(function (a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); });
       var picked = selected.map(function (id) { return IDX.dev[id]; }).filter(Boolean);
-      container.innerHTML = '<div class="selbar"><div class="search" style="margin-bottom:8px">' + ICON.search + '<input id="dq" type="search" placeholder="Name or last digits of serial" value="' + esc(q) + '" autocomplete="off"></div>' +
-        '<div class="picked">' + picked.map(function (d) { return '<button data-unpick="' + d.id + '" aria-label="Remove">' + esc(d.serialTail) + ' · ' + esc(d.description.split(' ').slice(0, 2).join(' ')) + ' ✕</button>'; }).join('') + '</div></div>' +
+      var head = '<div class="selbar"><div class="search" style="margin-bottom:8px">' + ICON.search + '<input id="dq" type="search" placeholder="Search all: name or last digits of serial" value="' + esc(q) + '" autocomplete="off"></div>' +
+        '<div class="picked">' + picked.map(function (d) { return '<button data-unpick="' + d.id + '" aria-label="Remove">' + esc(d.serialTail) + ' · ' + esc(d.description.split(' ').slice(0, 2).join(' ')) + ' ✕</button>'; }).join('') + '</div></div>';
+      if (!q && grp === null) {
+        /* Step A: choose a category, like the people screen */
+        container.innerHTML = head + '<div class="sec" style="margin-top:4px"><h2>Choose a category</h2></div><div class="cats">' + groups.map(function (g) {
+          var all = S.data.devices.filter(function (d) { return d.active !== false && g[1].indexOf(d.category) >= 0; });
+          if (!all.length) return '';
+          var free = all.filter(filterFn).length;
+          var chosen = all.filter(function (d) { return selected.indexOf(d.id) >= 0; }).length;
+          return '<button data-grp="' + esc(g[0]) + '"' + (free ? '' : ' class="none"') + '><b>' + esc(g[0]) + '</b><small>' + free + ' available' + (all.length !== free ? ' of ' + all.length : '') + '</small>' + (chosen ? '<i>' + chosen + ' picked</i>' : '') + '</button>';
+        }).join('') + '<button data-grp="__all"><b>All devices</b><small>' + S.data.devices.filter(filterFn).length + ' available</small></button></div>';
+      } else {
+        container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
         (list.length ? '<div class="list">' + list.map(function (d) {
           var on = selected.indexOf(d.id) >= 0, c = cert(d);
           return '<button class="row' + (on ? ' sel' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
             (c.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
         }).join('') + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
+      }
+      $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; }; });
+      $$('[data-back]', container).forEach(function (b) { b.onclick = function () { grp = null; draw(); }; });
       var inp = $('#dq', container); inp.oninput = function () { q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} };
       $$('[data-d]', container).forEach(function (b) { b.onclick = function () { var id = b.dataset.d, i = selected.indexOf(id); if (i >= 0) selected.splice(i, 1); else selected.push(id); draw(); onChange && onChange(); }; });
       $$('[data-unpick]', container).forEach(function (b) { b.onclick = function () { selected.splice(selected.indexOf(b.dataset.unpick), 1); draw(); onChange && onChange(); }; });
