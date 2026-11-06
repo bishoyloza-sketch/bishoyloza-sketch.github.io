@@ -105,7 +105,9 @@
     'Other': { c: 'var(--service)', bg: 'var(--service-soft)', short: 'Other' },
     'Out of Service': { c: 'var(--oos)', bg: 'var(--oos-soft)', short: 'Out of service' }
   };
-  function stOf(d) { return d.pending ? { c: 'var(--pending)', bg: 'var(--pending-soft)', short: 'Transfer waiting' } : (ST[d.status] || ST['Other']); }
+  function isReq(d) { return String(d.pending || '').indexOf('CO-') === 0; }
+  function reqOf(d) { return isReq(d) ? S.data.checkouts.filter(function (c) { return c.id === d.pending; })[0] : null; }
+  function stOf(d) { return d.pending ? { c: 'var(--pending)', bg: 'var(--pending-soft)', short: isReq(d) ? 'Waiting approval' : 'Transfer waiting' } : (ST[d.status] || ST['Other']); }
   function cert(d) {
     if (d.certStatus === 'none') return { kind: 'none', text: 'No certificate needed' };
     if (!d.calDue) return { kind: 'missing', text: 'No calibration date' };
@@ -248,7 +250,7 @@
     else if (v === 'activity') html += viewActivity();
     else html += viewMore();
     html += '</div>';
-    if (can('keep') && (v === 'home' || v === 'devices')) html += '<button class="btn fab" id="fab">' + ICON.out + 'Check out</button>';
+    if (v === 'home' || v === 'devices') html += '<button class="btn fab" id="fab">' + ICON.out + (can('keep') ? 'Check out' : 'Request devices') + '</button>';
     html += '<nav class="nav" aria-label="Main"><div>' + [
       ['home', 'Today', ICON.home], ['devices', 'Devices', ICON.devices], ['activity', 'Activity', ICON.activity], ['more', 'Me', ICON.more]
     ].map(function (n) {
@@ -278,8 +280,15 @@
   }
   function myPending() {
     if (!S.data || !S.me) return [];
-    return S.data.transfers.filter(function (t) { return t.status === 'Pending' && (t.toEngineer.id === S.me.id || can('keep')); });
+    return S.data.transfers.filter(function (t) { return t.status === 'Pending' && (t.toEngineer.id === S.me.id || can('keep')); })
+      .concat(myRequests());
   }
+  /* Check-out requests: lab keepers see all, others see their own */
+  function myRequests() {
+    if (!S.data || !S.me) return [];
+    return S.data.checkouts.filter(function (c) { return c.status === 'Pending' && (can('keep') || c.byId === S.me.id || (c.engineers || []).some(function (e) { return e.id === S.me.id; })); });
+  }
+  function isOut(c) { return !c.status || c.status === 'Approved'; }
 
   /* ---------- Today ---------- */
   function viewHome() {
@@ -297,7 +306,24 @@
       leg('service', c.service, 'In service', '#E2A13C') + leg('expired', c.expired, 'Expired', '#F07468') +
       '</div></header><main>';
 
-    var pend = myPending();
+    var reqs = myRequests();
+    if (reqs.length) {
+      h += '<div class="sec"><h2>' + (can('keep') ? 'Check-out requests to approve' : 'Your requests') + '</h2><small>' + reqs.length + '</small></div>';
+      reqs.forEach(function (c) {
+        var mine = c.byId === S.me.id;
+        h += '<div class="site" style="--c:var(--pending)"><div class="site-h"><div><h3>' + esc(coName(c.companyId)) + '</h3>' +
+          '<div class="meta">Requested by <b>' + esc(c.byName) + '</b> · ' + when(c.requestedTs || c.ts) + '</div>' +
+          '<div class="meta">Team: <b>' + esc(names(c.engineers)) + '</b>' + (c.expectedReturn ? ' · back ' + fmtDate(c.expectedReturn) : '') + '</div>' +
+          (c.note ? '<div class="meta">Note: ' + esc(c.note) + '</div>' : '') + '</div>' +
+          '<span class="cnt">' + c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + '</span></div>' +
+          '<div class="chips">' + c.deviceIds.map(function (id) { var d = IDX.dev[id]; return d ? '<button class="dchip" data-dev="' + id + '">' + tag(d, 'sm') + '<em>' + esc(devTitle(d)) + '</em></button>' : ''; }).join('') + '</div>' +
+          '<div class="site-f">' + (can('keep')
+            ? '<button class="btn sm blue" data-rq-ok="' + c.id + '">Approve</button><button class="btn sm ghost" data-rq-review="' + c.id + '">Review</button><button class="btn sm ghost" data-rq-no="' + c.id + '">Decline</button>'
+            : '<span class="meta" style="flex:1;align-self:center">⏳ Waiting for a lab keeper</span>' + (mine ? '<button class="btn sm ghost" data-rq-no="' + c.id + '">Cancel request</button>' : '')) +
+          '</div></div>';
+      });
+    }
+    var pend = myPending().filter(function (t) { return t.toEngineer; });
     if (pend.length) {
       h += '<div class="sec"><h2>Waiting for you</h2></div>';
       pend.forEach(function (t) {
@@ -345,7 +371,8 @@
 
   function devRow(d, grouped) {
     var s = stOf(d), c = cert(d), place = '';
-    if (d.pending) place = 'Transfer waiting';
+    if (isReq(d)) { var rq = reqOf(d); place = 'Waiting approval' + (rq ? ' · ' + rq.byName + ' → ' + coName(rq.companyId) : ''); }
+    else if (d.pending) place = 'Transfer waiting';
     else if (d.status === 'At Client') place = grouped ? 'With ' + names(d.holders) : coName(d.companyId) + ' · ' + names(d.holders);
     else if (d.status === 'In Office') place = 'In office';
     else place = s.short + (d.note ? ' · ' + d.note : '') + (d.holders && d.holders.length ? ' · ' + names(d.holders) : '');
@@ -361,8 +388,8 @@
     var f = S.filter, q = S.q;
     return S.data.devices.filter(function (d) {
       if (d.active === false) return false;
-      if (f === 'office' && (d.status !== 'In Office' || d.pending)) return false;
-      if (f === 'out' && ((d.status === 'In Office' && !d.pending) || d.status === 'Out of Service')) return false;
+      if (f === 'office' && d.status !== 'In Office') return false;
+      if (f === 'out' && ((d.status === 'In Office' && (!d.pending || isReq(d))) || d.status === 'Out of Service')) return false;
       if (f === 'client' && d.status !== 'At Client') return false;
       if (f === 'service' && (Core.SERVICE.indexOf(d.status) < 0)) return false;
       if (f === 'oos' && d.status !== 'Out of Service') return false;
@@ -372,6 +399,7 @@
   }
   /* Where a device is right now, as a group key + title + sort rank */
   function placeOf(d) {
+    if (isReq(d)) return { k: 'request', title: 'In office · waiting approval', rank: 0.5 };
     if (d.pending) return { k: 'pending', title: 'Transfer waiting', rank: 2 };
     if (d.status === 'In Office') return { k: 'office', title: 'In office', rank: 0 };
     if (d.status === 'At Client') return { k: 'co:' + d.companyId, title: coName(d.companyId), rank: 1 };
@@ -407,8 +435,8 @@
     if (!list.length) h += '<div class="empty"><b>' + (q ? 'No device matches “' + esc(q) + '”.' : 'No devices here right now.') + '</b>' + (q ? 'Try the last 2–3 digits of the serial, or a word like “tachometer”.' : '') + '</div>';
     else if (byPlace) {
       var G = groupByPlace(list), groups = G.groups, meta = G.meta, keys = G.keys;
-      var inN = list.filter(function (d) { return d.status === 'In Office' && !d.pending; }).length;
-      var outsideN = list.filter(function (d) { return (d.status !== 'In Office' || d.pending) && d.status !== 'Out of Service'; }).length;
+      var inN = list.filter(function (d) { return d.status === 'In Office'; }).length;
+      var outsideN = list.filter(function (d) { return d.status !== 'In Office' && d.status !== 'Out of Service'; }).length;
       var sites = keys.filter(function (k) { return k.indexOf('co:') === 0; }).length;
       if (f === 'all') h += '<div class="placesum"><button data-filter="office"><b>' + inN + '</b><span>in office</span></button><button data-filter="out"><b>' + outsideN + '</b><span>outside</span></button><button data-filter="client"><b>' + sites + '</b><span>client site' + (sites === 1 ? '' : 's') + '</span></button></div>';
       keys.forEach(function (k) {
@@ -432,7 +460,7 @@
   /* ---------- Activity ---------- */
   function viewActivity() {
     var mv = S.data.movements.slice().reverse().slice(0, 120);
-    var cos = S.data.checkouts.slice().reverse().slice(0, 30);
+    var cos = S.data.checkouts.filter(isOut).slice().reverse().slice(0, 30);
     var h = header('Activity') + '</header><main>';
     h += '<div class="sec"><h2>Check-out receipts</h2><small>latest ' + cos.length + '</small></div>';
     if (!cos.length) h += '<div class="empty"><b>No check-outs yet.</b>Each check-out makes a PDF receipt you can share.</div>';
@@ -502,6 +530,9 @@
     $$('[data-transfer-co]').forEach(function (b) { b.onclick = function () { transferFlow(b.dataset.transferCo); }; });
     $$('[data-pdf]').forEach(function (b) { b.onclick = function () { receiptPdf(b.dataset.pdf); }; });
     $$('[data-tr-ok]').forEach(function (b) { b.onclick = function () { decide(b.dataset.trOk, true); }; });
+    $$('[data-rq-ok]').forEach(function (b) { b.onclick = function () { decideRequest(b.dataset.rqOk, true); }; });
+    $$('[data-rq-no]').forEach(function (b) { b.onclick = function () { decideRequest(b.dataset.rqNo, false); }; });
+    $$('[data-rq-review]').forEach(function (b) { b.onclick = function () { reviewRequest(b.dataset.rqReview); }; });
     $$('[data-tr-no]').forEach(function (b) { b.onclick = function () { decide(b.dataset.trNo, false); }; });
     $$('[data-act]').forEach(function (b) {
       b.onclick = function () {
@@ -568,7 +599,10 @@
     openSheet(function (body, setFoot, setTitle) {
       setTitle('Device');
       var s = stOf(d), c = cert(d), where = '';
-      if (d.pending) {
+      if (isReq(d)) {
+        var rq = reqOf(d);
+        where = '<div class="where" style="color:var(--pending)">In the office · reserved</div><div class="meta">Requested by <b>' + esc(rq ? rq.byName : '') + '</b> for ' + esc(rq ? coName(rq.companyId) : '') + ' · waiting for a lab keeper</div>';
+      } else if (d.pending) {
         var t = S.data.transfers.filter(function (x) { return x.id === d.pending; })[0];
         where = '<div class="where" style="color:var(--pending)">Being handed to ' + esc(t ? t.toEngineer.name : '') + '</div><div class="meta">Going to ' + esc(t ? coName(t.toCompanyId) : '') + ' · waiting for confirmation</div>';
       } else if (d.status === 'At Client') {
@@ -725,7 +759,7 @@
 
   /* ---------- check-out wizard ---------- */
   function checkoutFlow(preDevices) {
-    var st = { step: 1, companyId: '', engineers: [], devices: (preDevices || []).slice(), expectedReturn: '', note: '' };
+    var st = { step: 1, companyId: '', engineers: can('keep') ? [] : [S.me.id], devices: (preDevices || []).slice(), expectedReturn: '', note: '' };
     openSheet(function (body, setFoot, setTitle) {
       function go(n) { st.step = n; draw(); }
       function draw() {
@@ -739,7 +773,7 @@
           peoplePicker($('#pp', body), st.engineers, {}, foot);
         } else if (st.step === 3) {
           setTitle('Which devices?', 'Step 3 of ' + total);
-          devicePicker(body, st.devices, function (d) { return d.status === 'In Office' || st.devices.indexOf(d.id) >= 0; }, foot);
+          devicePicker(body, st.devices, function (d) { return (d.status === 'In Office' && !d.pending) || st.devices.indexOf(d.id) >= 0; }, foot);
         } else {
           setTitle('Check and confirm', 'Step 4 of ' + total);
           var devs = st.devices.map(function (id) { return IDX.dev[id]; });
@@ -762,7 +796,7 @@
       }
       function foot() {
         var ok = st.step === 1 ? !!st.companyId : st.step === 2 ? st.engineers.length > 0 : st.step === 3 ? st.devices.length > 0 : true;
-        var label = st.step === 4 ? 'Confirm check-out' : st.step === 3 ? 'Next · ' + st.devices.length + ' selected' : 'Next';
+        var label = st.step === 4 ? (can('keep') ? 'Confirm check-out' : 'Send request') : st.step === 3 ? 'Next · ' + st.devices.length + ' selected' : 'Next';
         setFoot((st.step > 1 ? '<button class="btn ghost" data-prev style="flex:0 0 auto">Back</button>' : '') + '<button class="btn ' + (st.step === 4 ? 'blue' : '') + '" data-next ' + (ok ? '' : 'disabled') + '>' + label + '</button>');
         var p = $('[data-prev]'); if (p) p.onclick = function () { go(st.step - 1); };
         $('[data-next]').onclick = function () {
@@ -770,18 +804,62 @@
           var b = this; b.disabled = true; b.innerHTML = '<span class="spin"></span>';
           req('checkout', { companyId: st.companyId, engineerIds: st.engineers, deviceIds: st.devices, expectedReturn: st.expectedReturn, note: st.note })
             .then(function (r) { return refresh(true).then(function () { return r; }); })
-            .then(function (r) { doneScreen(body, setFoot, setTitle, r.checkoutId); })
-            .catch(function (e) { toast(e.message, true); b.disabled = false; b.textContent = 'Confirm check-out'; });
+            .then(function (r) { if (r.pending) requestSent(body, setFoot, setTitle, r.checkoutId); else doneScreen(body, setFoot, setTitle, r.checkoutId); })
+            .catch(function (e) { toast(e.message, true); b.disabled = false; b.textContent = can('keep') ? 'Confirm check-out' : 'Send request'; });
         };
       }
       draw();
     });
   }
+  function requestSent(body, setFoot, setTitle, coId) {
+    setTitle('Request sent', '');
+    var c = S.data.checkouts.filter(function (x) { return x.id === coId; })[0] || { companyId: '', deviceIds: [], engineers: [] };
+    body.innerHTML = '<div class="done"><div class="ok" style="background:var(--pending)">' + ICON.bigtick + '</div><h3>Waiting for a lab keeper</h3><p>' +
+      c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' for ' + esc(coName(c.companyId)) + ' are reserved for you.<br>Ahmed, Sara or Mohamed will review and approve the list.</p></div>';
+    setFoot('<button class="btn ghost" data-close>Done</button>');
+    $('[data-close]').onclick = function () { closeAll(); };
+  }
+  /* Lab keeper reviews a request: untick devices that are not going, then approve */
+  function reviewRequest(coId) {
+    var c = S.data.checkouts.filter(function (x) { return x.id === coId; })[0]; if (!c) return;
+    var keep = c.deviceIds.slice();
+    openSheet(function (body, setFoot, setTitle) {
+      setTitle('Review request', coId);
+      function draw() {
+        body.innerHTML = '<div class="box" style="margin-top:0"><h4>Going to</h4><div class="where">' + esc(coName(c.companyId)) + '</div>' +
+          '<div class="meta">Requested by <b>' + esc(c.byName) + '</b> · ' + when(c.requestedTs || c.ts) + '</div><div class="meta">Team: <b>' + esc(names(c.engineers)) + '</b></div>' +
+          (c.note ? '<div class="meta">Note: ' + esc(c.note) + '</div>' : '') + '</div>' +
+          '<div class="note" style="margin-top:12px">Untick any device that is <b>not</b> leaving, then approve.</div>' +
+          '<div class="list">' + c.deviceIds.map(function (id) {
+            var d = IDX.dev[id]; if (!d) return ''; var on = keep.indexOf(id) >= 0, k = cert(d);
+            return '<button class="row' + (on ? ' sel' : '') + '" data-k="' + id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
+              (k.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
+          }).join('') + '</div>';
+        $$('[data-k]', body).forEach(function (b) { b.onclick = function () { var i = keep.indexOf(b.dataset.k); if (i >= 0) keep.splice(i, 1); else keep.push(b.dataset.k); draw(); }; });
+        setFoot('<button class="btn ghost" data-no style="flex:0 0 auto">Decline</button><button class="btn blue" data-yes ' + (keep.length ? '' : 'disabled') + '>Approve ' + keep.length + ' device' + (keep.length === 1 ? '' : 's') + '</button>');
+        $('[data-no]').onclick = function () { closeSheet(); decideRequest(coId, false); };
+        $('[data-yes]').onclick = function () { closeSheet(); decideRequest(coId, true, keep); };
+      }
+      draw();
+    });
+  }
+  function decideRequest(coId, ok, keep) {
+    var c = S.data.checkouts.filter(function (x) { return x.id === coId; })[0];
+    var mine = c && c.byId === S.me.id && !can('keep');
+    function go() {
+      busy(true);
+      req('checkoutDecide', { checkoutId: coId, accept: ok, deviceIds: keep || null })
+        .then(function () { toast(ok ? 'Approved — devices checked out' : mine ? 'Request cancelled' : 'Request declined'); return refresh(true); })
+        .then(function () { if (ok) openSheet(function (body, setFoot, setTitle) { doneScreen(body, setFoot, setTitle, coId); }); })
+        .catch(function (e) { toast(e.message, true); }).then(function () { busy(false); });
+    }
+    if (ok) go(); else askConfirm(mine ? 'Cancel this request? The devices become free again.' : 'Decline this request? The devices stay in the office.', mine ? 'Cancel request' : 'Decline', go, true);
+  }
   function doneScreen(body, setFoot, setTitle, coId) {
     setTitle('Checked out', '');
     var c = S.data.checkouts.filter(function (x) { return x.id === coId; })[0];
     body.innerHTML = '<div class="done"><div class="ok">' + ICON.bigtick + '</div><h3>' + esc(coName(c.companyId)) + '</h3><p>' + c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' with ' + esc(names(c.engineers)) + '<br>Receipt ' + esc(coId) + '</p>' +
-      '<button class="btn blue wide" data-pdf-now>' + ICON.pdf + 'Share receipt PDF</button></div>';
+      '<button class="btn blue wide" data-pdf-now>' + ICON.pdf + 'Receipt PDF</button></div>';
     setFoot('<button class="btn ghost" data-close>Done</button>');
     $('[data-pdf-now]', body).onclick = function () { receiptPdf(coId); };
     $('[data-close]').onclick = function () { closeAll(); };
@@ -1084,7 +1162,7 @@
       });
       doc.setDrawColor(214, 221, 230); doc.setLineWidth(0.3); doc.line(M, y, W - M, y);
       y += 6; doc.setFontSize(10); doc.setTextColor(90, 104, 121);
-      doc.text(c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' in total. Checked out by ' + c.byName + '.', M, y);
+      doc.text(c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' in total. ' + (c.decidedByName && c.decidedByName !== c.byName ? 'Requested by ' + lat(c.byName) + ', approved by ' + lat(c.decidedByName) + '.' : 'Checked out by ' + lat(c.byName) + '.'), M, y);
       if (y > 236) { doc.addPage(); y = 20; }
       y = Math.max(y + 16, 238);
       [['Received by (engineer)', M], ['Handed over by (lab keeper)', 118]].forEach(function (s) {
@@ -1162,6 +1240,7 @@
         var x = M + 2; cols.forEach(function (cl) { doc.text(cl.t, x, y + 5.1); x += cl.w; }); doc.setFont('helvetica', 'normal'); y += 7.5;
       }
       function where(d) {
+        if (isReq(d)) return 'Lab (waiting approval)';
         if (d.pending) return 'Transfer waiting';
         if (d.status === 'At Client') return coName(d.companyId);
         if (d.status === 'In Office') return 'Lab';
@@ -1177,7 +1256,7 @@
         devs.forEach(function (d) {
           n++;
           var c = cert(d);
-          var cells = [String(n), lat(d.description) + (d.manufacturer ? ' — ' + lat([d.manufacturer, d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ')) : ''), lat(d.serial), d.pending ? 'Transfer' : d.status, lat(where(d)), lat(names(d.holders)), d.status === 'In Office' || !d.since ? '' : fmtDate(d.since), d.certStatus === 'none' ? 'Not req.' : (d.calDue ? fmtDate(d.calDue) + (c.kind === 'expired' ? ' (expired)' : '') : '')];
+          var cells = [String(n), lat(d.description) + (d.manufacturer ? ' — ' + lat([d.manufacturer, d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ')) : ''), lat(d.serial), d.pending ? (isReq(d) ? 'Requested' : 'Transfer') : d.status, lat(where(d)), lat(names(d.holders)), d.status === 'In Office' || !d.since ? '' : fmtDate(d.since), d.certStatus === 'none' ? 'Not req.' : (d.calDue ? fmtDate(d.calDue) + (c.kind === 'expired' ? ' (expired)' : '') : '')];
           var wrapped = cells.map(function (t, k) { return doc.splitTextToSize(t || '', cols[k].w - 2.5); });
           var h = Math.max.apply(null, wrapped.map(function (w) { return w.length; })) * 4.2 + 3;
           if (y + h > H - 14) { doc.addPage(); y = 14; headRow(); }

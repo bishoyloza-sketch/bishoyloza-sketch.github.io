@@ -71,8 +71,18 @@ var Core = (function () {
     d.companyId = ''; d.holders = []; d.expectedReturn = ''; d.checkoutId = ''; d.note = ''; d.pending = '';
   }
 
+  function isCoReq(d) { return String(d.pending || '').indexOf('CO-') === 0; }
   function cancelPendingFor(db, now, actor, d) {
     if (!d.pending) return;
+    if (isCoReq(d)) {
+      var c = byId(db.checkouts, d.pending);
+      if (c && c.status === 'Pending') {
+        c.deviceIds = c.deviceIds.filter(function (x) { return x !== d.id; });
+        if (!c.deviceIds.length) { c.status = 'Cancelled'; c.decidedById = actor.id; c.decidedByName = actor.name; c.decidedTs = iso(now); }
+        touch(db, 'checkouts');
+      }
+      d.pending = ''; return;
+    }
     var t = byId(db.transfers, d.pending);
     if (t && t.status === 'Pending') {
       t.deviceIds = t.deviceIds.filter(function (x) { return x !== d.id; });
@@ -86,6 +96,16 @@ var Core = (function () {
     var y = new Date(now).getFullYear(), n = 0, pre = 'CO-' + y + '-';
     db.checkouts.forEach(function (c) { if (c.id.indexOf(pre) === 0) n = Math.max(n, parseInt(c.id.slice(pre.length), 10) || 0); });
     return pre + pad(n + 1, 4);
+  }
+
+  function releaseCheckout(db, now, actor, rec, devs, co) {
+    devs.forEach(function (d) {
+      if (d.pending !== rec.id) cancelPendingFor(db, now, actor, d); else d.pending = '';
+      d.status = 'At Client'; d.companyId = co.id; d.holders = rec.engineers; d.since = iso(now);
+      d.expectedReturn = rec.expectedReturn || ''; d.checkoutId = rec.id; d.note = rec.note || '';
+      log(db, now, actor, d, 'Checked out', { checkoutId: rec.id, note: rec.note });
+    });
+    touch(db, 'devices'); co.lastUsed = iso(now); touch(db, 'companies');
   }
 
   /* ---------- auth ---------- */
@@ -108,31 +128,61 @@ var Core = (function () {
       return { ok: true };
     },
 
+    /* Lab keepers / admin: devices leave now. Everyone else: a request that waits for a lab keeper. */
     checkout: function (db, actor, p, now) {
-      need(canKeep(actor), 'Only lab keepers can check devices out.');
       var co = byId(db.companies, p.companyId); need(co, 'Choose the company.');
       need(p.engineerIds && p.engineerIds.length, 'Choose at least one engineer.');
       need(p.deviceIds && p.deviceIds.length, 'Choose at least one device.');
       var eng = p.engineerIds.map(function (id) { var u = byId(db.users, id); need(u, 'Unknown engineer.'); return personRef(u); });
+      var keeper = canKeep(actor);
       var devs = p.deviceIds.map(function (id) {
         var d = byId(db.devices, id); need(d, 'Unknown device.');
         need(d.status === 'In Office' || isAdmin(actor), devName(d) + ' is not in the office (' + d.status + ').');
+        if (!keeper) need(!d.pending, devName(d) + ' is already reserved in another request.');
         return d;
       });
       var id = nextCheckoutId(db, now);
-      db.checkouts.push({
+      var rec = {
         id: id, ts: iso(now), companyId: co.id, engineers: eng, deviceIds: p.deviceIds.slice(),
-        expectedReturn: p.expectedReturn || '', note: p.note || '', byId: actor.id, byName: actor.name
-      });
+        expectedReturn: p.expectedReturn || '', note: p.note || '', byId: actor.id, byName: actor.name,
+        status: keeper ? 'Approved' : 'Pending', requestedTs: iso(now),
+        decidedById: keeper ? actor.id : '', decidedByName: keeper ? actor.name : '', decidedTs: keeper ? iso(now) : ''
+      };
+      db.checkouts.push(rec);
       touch(db, 'checkouts');
-      devs.forEach(function (d) {
-        cancelPendingFor(db, now, actor, d);
-        d.status = 'At Client'; d.companyId = co.id; d.holders = eng; d.since = iso(now);
-        d.expectedReturn = p.expectedReturn || ''; d.checkoutId = id; d.note = p.note || '';
-        log(db, now, actor, d, 'Checked out', { checkoutId: id, note: p.note });
-      });
-      touch(db, 'devices'); co.lastUsed = iso(now); touch(db, 'companies');
+      if (!keeper) {
+        devs.forEach(function (d) { d.pending = id; log(db, now, actor, d, 'Check-out requested', { checkoutId: id, note: 'for ' + co.name }); });
+        touch(db, 'devices');
+        return { checkoutId: id, pending: true };
+      }
+      releaseCheckout(db, now, actor, rec, devs, co);
       return { checkoutId: id };
+    },
+
+    /* Lab keeper approves (optionally removing some devices) or declines; the requester may cancel. */
+    checkoutDecide: function (db, actor, p, now) {
+      var c = byId(db.checkouts, p.checkoutId); need(c && c.status === 'Pending', 'This request is no longer waiting.');
+      var own = c.byId === actor.id;
+      need(canKeep(actor) || (own && !p.accept), 'Only a lab keeper can approve this request.');
+      var co = byId(db.companies, c.companyId);
+      var keep = p.accept ? (p.deviceIds && p.deviceIds.length ? p.deviceIds : c.deviceIds) : [];
+      if (p.accept) need(keep.length, 'Keep at least one device, or decline the request.');
+      c.deviceIds.forEach(function (id) {
+        var d = byId(db.devices, id); if (!d || d.pending !== c.id) return;
+        if (keep.indexOf(id) < 0) { d.pending = ''; log(db, now, actor, d, p.accept ? 'Removed from request' : (own && !canKeep(actor) ? 'Request cancelled' : 'Request declined'), { checkoutId: c.id, note: p.note || '' }); }
+      });
+      c.decidedById = actor.id; c.decidedByName = actor.name; c.decidedTs = iso(now);
+      if (!p.accept) { c.status = own && !canKeep(actor) ? 'Cancelled' : 'Declined'; touch(db, 'checkouts'); touch(db, 'devices'); return { ok: true }; }
+      var devs = keep.map(function (id) {
+        var d = byId(db.devices, id); need(d && (d.pending === c.id || d.status === 'In Office'), 'A device in this request is no longer available.');
+        need(d.status === 'In Office' || isAdmin(actor), devName(d) + ' is not in the office (' + d.status + ').');
+        return d;
+      });
+      c.deviceIds = keep.slice(); c.status = 'Approved'; c.ts = iso(now);
+      if (p.note) c.note = [c.note, p.note].filter(Boolean).join(' — ');
+      touch(db, 'checkouts');
+      releaseCheckout(db, now, actor, c, devs, co);
+      return { checkoutId: c.id };
     },
 
     checkin: function (db, actor, p, now) {
@@ -304,7 +354,7 @@ var Core = (function () {
   }
 
   return {
-    STATUSES: STATUSES, SERVICE: SERVICE, apply: apply, snapshot: snapshot,
+    STATUSES: STATUSES, SERVICE: SERVICE, apply: apply, snapshot: snapshot, isCoReq: isCoReq,
     pinHash: pinHash, serialTail: serialTail, verify: verify, publicUser: publicUser
   };
 })();
