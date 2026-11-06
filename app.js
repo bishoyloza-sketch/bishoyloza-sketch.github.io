@@ -166,8 +166,8 @@
       var roleName = { admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
       app.innerHTML =
         (DEMO ? '<div class="demo">Preview with sample data — every PIN is 1234</div>' : '') +
-        '<div class="login"><div class="login-top"><img src="logo.png" alt="Akhnaton Trading and Representation">' +
-        '<h1>Lab devices,<br>live.</h1><p>Where every device is, with whom, and since when.</p></div>' +
+        '<div class="login"><div class="login-top"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation">' +
+        '<h1><small>Akhnaton</small>Lab Devices</h1><p>Where every device is, with whom, and since when.</p></div>' +
         '<div class="login-card"><div>' +
         (!pick ?
           '<div class="sec" style="margin-top:4px"><h2>Who are you?</h2></div>' +
@@ -275,7 +275,7 @@
   /* ================= shell ================= */
   function render() {
     if (!S.session) return renderLogin();
-    if (!S.data) { $('#app').innerHTML = '<div class="loading"><div class="spin"></div></div>'; return; }
+    if (!S.data) { $('#app').innerHTML = splashHtml(); return; }
     var v = S.view, pend = myPending().length;
     var html = (DEMO ? '<div class="demo">Preview with sample data — changes stay on this phone only</div>' : '') + '<div class="shell">';
     if (v === 'home') html += viewHome();
@@ -295,11 +295,17 @@
     window.scrollTo(0, S._keepScroll ? y : 0); S._keepScroll = false;
     wire();
   }
+  function splashHtml() {
+    return '<div class="loading"><div class="lz"><div class="lz-eye">AKHNATON</div><div class="lz-t">Lab Devices</div>' +
+      '<div class="lz-rule"><i></i><b></b><i></i></div><img src="logo-en-light.png" alt="Akhnaton Trading and Representation"><div class="spin" style="margin-top:34px"></div></div></div>';
+  }
   function header(title) {
     var off = !S.online;
-    return '<header class="top"><div class="top-row"><div class="brand"><img src="logo.png" alt="Akhnaton"><b>' + esc(title || 'Lab devices') + '</b></div>' +
-      '<span class="sync' + (off ? ' off' : '') + '"><i></i>' + (off ? 'Offline' : 'Live') + '</span>' +
-      '<button class="icon-btn" data-refresh aria-label="Refresh">' + ICON.refresh + '</button></div>';
+    return '<header class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation"><span class="bdiv"></span>' +
+      '<span class="bname"><small>Akhnaton</small><b>Lab Devices</b></span></div>' +
+      '<span class="sync' + (off ? ' off' : '') + '" title="' + (off ? 'Offline' : 'Live') + '"><i></i><em>' + (off ? 'Offline' : 'Live') + '</em></span>' +
+      '<button class="icon-btn" data-refresh aria-label="Refresh">' + ICON.refresh + '</button></div>' +
+      (title && title !== 'Me' ? '<h1 class="ptitle">' + esc(title) + '</h1>' : '');
   }
 
   function counts() {
@@ -534,6 +540,10 @@
       '<button class="row" data-act="pin"><span class="t"><b>Change my PIN</b><small>4 digits, only you know it</small></span></button>' +
       '<button class="row" data-act="refresh"><span class="t"><b>Refresh now</b><small>Last update ' + (S.lastSync ? when(S.lastSync) : '—') + ' · updates every 20 seconds</small></span></button>' +
       '</div>';
+    var site = (location.protocol === 'https:' && !DEMO) ? location.origin + '/' : 'https://bishoyloza-sketch.github.io/';
+    h += '<div class="sec"><h2>Website link</h2><small>open the app on any computer</small></div><div class="box linkbox" style="margin-top:0">' +
+      '<div class="url">' + esc(site) + '</div><div class="actions" style="grid-template-columns:1fr 1fr 1fr">' +
+      '<button class="btn sm" data-link="copy">Copy link</button><button class="btn sm ghost" data-link="share">Share</button><a class="btn sm ghost" href="' + esc(site) + '" target="_blank" rel="noopener" style="text-decoration:none">Open</a></div></div>';
     if (can('admin')) {
       h += '<div class="sec"><h2>Admin</h2></div><div class="list">' +
         '<button class="row" data-act="people"><span class="t"><b>People &amp; PINs</b><small>' + S.data.users.length + ' people · roles, new staff, reset PIN</small></span></button>' +
@@ -546,6 +556,8 @@
     return h + '<div style="height:24px"></div></main>';
   }
 
+  function fallbackCopy(t) { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove(); }
+
   /* ================= wiring ================= */
   function wire() {
     $$('[data-refresh]').forEach(function (b) { b.onclick = function () { b.disabled = true; refresh().then(function () { toast('Up to date'); }); }; });
@@ -553,6 +565,15 @@
     $$('[data-goto-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.gotoFilter; S.q = ''; location.hash = '#devices'; }; });
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
     $$('[data-listpdf]').forEach(function (b) { b.onclick = listPdf; });
+    $$('[data-link]').forEach(function (b) {
+      b.onclick = function () {
+        var url = $('.linkbox .url').textContent;
+        if (b.dataset.link === 'share' && navigator.share) { navigator.share({ title: 'Akhnaton Lab Devices', text: 'Akhnaton Lab Devices', url: url }).catch(function () {}); return; }
+        var done = function () { toast('Link copied'); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { fallbackCopy(url); done(); });
+        else { fallbackCopy(url); done(); }
+      };
+    });
     $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; LS.set('sort', S.sort); S._keepScroll = false; render(); }; });
     var q = $('#q');
     if (q) {
