@@ -56,6 +56,7 @@
     return req('state').then(function (d) {
       S.data = d; S.lastSync = Date.now(); S.online = true; index(); LS.set('cache', d);
       S.me = d.users.filter(function (u) { return u.id === S.session.userId; })[0] || S.me;
+      pushLink();
       if (!S.me || S.me.active === false) { signOut(); return; }
       render();
     }).catch(function (e) {
@@ -237,7 +238,22 @@
     }, { noClose: first });
   }
 
-  function signOut() { LS.del('session'); LS.del('cache'); S.session = null; S.me = null; S.data = null; closeSheet(); renderLogin(); }
+  /* ---------- push notifications (OneSignal) ---------- */
+  function os(fn) { if (DEMO || !window.OneSignalDeferred) return; window.OneSignalDeferred.push(function (O) { try { return fn(O); } catch (e) {} }); }
+  var pushLinked = null;
+  function pushLink() {
+    if (!S.me || pushLinked === S.me.id) return; pushLinked = S.me.id;
+    os(function (O) { return O.login(S.me.id).then(function () { O.User.addTags({ role: S.me.role, name: S.me.name }); }); });
+  }
+  function pushState() {
+    if (DEMO || !('Notification' in window)) return 'na';
+    return Notification.permission;
+  }
+  function askPush() {
+    os(function (O) { return O.Notifications.requestPermission().then(function () { pushLinked = null; pushLink(); S._keepScroll = true; render(); }); });
+    setTimeout(function () { S._keepScroll = true; render(); }, 4000);
+  }
+  function signOut() { os(function (O) { return O.logout(); }); pushLinked = null; LS.del('session'); LS.del('cache'); S.session = null; S.me = null; S.data = null; closeSheet(); renderLogin(); }
 
   /* ================= shell ================= */
   function render() {
@@ -306,6 +322,9 @@
       leg('service', c.service, 'In service', '#E2A13C') + leg('expired', c.expired, 'Expired', '#F07468') +
       '</div></header><main>';
 
+    var ps = pushState();
+    if (ps === 'default') h += '<div class="pushbar"><div><b>Turn on notifications</b><small>' + (can('keep') ? 'Get an alert when someone requests devices.' : 'Get an alert when your request is approved or devices are handed to you.') + '</small></div><button class="btn sm blue" data-push>Turn on</button></div>';
+    else if (ps === 'denied') h += '<div class="pushbar off"><div><b>Notifications are blocked</b><small>Allow them for this app in your phone settings to get alerts.</small></div></div>';
     var reqs = myRequests();
     if (reqs.length) {
       h += '<div class="sec"><h2>' + (can('keep') ? 'Check-out requests to approve' : 'Your requests') + '</h2><small>' + reqs.length + '</small></div>';
@@ -530,6 +549,7 @@
     $$('[data-transfer-co]').forEach(function (b) { b.onclick = function () { transferFlow(b.dataset.transferCo); }; });
     $$('[data-pdf]').forEach(function (b) { b.onclick = function () { receiptPdf(b.dataset.pdf); }; });
     $$('[data-tr-ok]').forEach(function (b) { b.onclick = function () { decide(b.dataset.trOk, true); }; });
+    $$('[data-push]').forEach(function (b) { b.onclick = askPush; });
     $$('[data-rq-ok]').forEach(function (b) { b.onclick = function () { decideRequest(b.dataset.rqOk, true); }; });
     $$('[data-rq-no]').forEach(function (b) { b.onclick = function () { decideRequest(b.dataset.rqNo, false); }; });
     $$('[data-rq-review]').forEach(function (b) { b.onclick = function () { reviewRequest(b.dataset.rqReview); }; });
@@ -1318,7 +1338,7 @@
     timer = setInterval(function () { if (document.visibilityState === 'visible' && S.session && !sheetStack.length) { S._keepScroll = true; refresh(true); } }, 20000);
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.session) { S._keepScroll = true; refresh(true); } });
-  if ('serviceWorker' in navigator && location.protocol === 'https:' && !DEMO) navigator.serviceWorker.register('sw.js').catch(function () {});
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !DEMO) navigator.serviceWorker.register('OneSignalSDKWorker.js', { scope: '/' }).catch(function () {});
   if (S.session) boot(); else renderLogin();
   window.__app = { S: S, refresh: refresh };
 })();

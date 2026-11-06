@@ -19,6 +19,19 @@
 <div id="sheet-root"></div>
 <div id="toast" role="status"></div>
 <script src="config.js"></script>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+OneSignalDeferred.push(async function (OneSignal) {
+  await OneSignal.init({
+    appId: "2780ba25-098b-49dc-9261-5770b0bfc48c",
+    serviceWorkerPath: "OneSignalSDKWorker.js",
+    serviceWorkerParam: { scope: "/" },
+    notifyButton: { enable: false },
+    welcomeNotification: { disable: true }
+  });
+});
+</script>
 <script src="core.js"></script>
 <script src="jspdf.umd.min.js" defer></script>
 <script src="app.js"></script>
