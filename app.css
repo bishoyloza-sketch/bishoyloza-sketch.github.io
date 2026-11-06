@@ -228,3 +228,8 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .cats button.none{opacity:.55}
 .backcat{display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--blue);font-weight:600;font-size:15px;padding:4px 0 10px}
 .backcat span{color:var(--ink)}
+
+.sortbar>span{flex:1}
+.printbtn{display:inline-flex;align-items:center;gap:5px;border:1.5px solid var(--line);background:var(--surface);color:var(--navy);border-radius:10px;padding:5px 10px;font-size:13.5px;font-weight:600}
+.printbtn svg{width:16px;height:16px}
+.printbtn:active{background:var(--blue-soft)}

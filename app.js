@@ -355,9 +355,12 @@
   }
 
   /* ---------- Devices ---------- */
-  function viewDevices() {
+  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+  function bySerial(a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); }
+  function filteredDevices() {
     var f = S.filter, q = S.q;
-    var list = S.data.devices.filter(function (d) {
+    return S.data.devices.filter(function (d) {
+      if (d.active === false) return false;
       if (f === 'office' && (d.status !== 'In Office' || d.pending)) return false;
       if (f === 'out' && ((d.status === 'In Office' && !d.pending) || d.status === 'Out of Service')) return false;
       if (f === 'client' && d.status !== 'At Client') return false;
@@ -366,33 +369,44 @@
       if (f === 'expired' && cert(d).kind !== 'expired') return false;
       return matches(d, q);
     });
+  }
+  /* Where a device is right now, as a group key + title + sort rank */
+  function placeOf(d) {
+    if (d.pending) return { k: 'pending', title: 'Transfer waiting', rank: 2 };
+    if (d.status === 'In Office') return { k: 'office', title: 'In office', rank: 0 };
+    if (d.status === 'At Client') return { k: 'co:' + d.companyId, title: coName(d.companyId), rank: 1 };
+    if (d.status === 'Out of Service') return { k: 'oos', title: 'Out of service', rank: 6 };
+    if (d.status === 'Other') return { k: 'other:' + (d.note || ''), title: 'Other' + (d.note ? ' · ' + d.note : ''), rank: 5 };
+    return { k: 'st:' + d.status, title: d.status, rank: d.status === 'Maintenance' ? 3 : 4 };
+  }
+  function groupByPlace(list) {
+    var groups = {}, meta = {};
+    list.forEach(function (d) {
+      var pl = placeOf(d), k = pl.k;
+      (groups[k] = groups[k] || []).push(d);
+      if (!meta[k]) meta[k] = { title: pl.title, rank: pl.rank, people: {}, since: d.since || '' };
+      (d.holders || []).forEach(function (p) { meta[k].people[p.name || p.id] = 1; });
+      if (d.since && (!meta[k].since || d.since < meta[k].since)) meta[k].since = d.since;
+    });
+    var keys = Object.keys(groups).sort(function (a, b) { return meta[a].rank - meta[b].rank || groups[b].length - groups[a].length || meta[a].title.localeCompare(meta[b].title); });
+    keys.forEach(function (k) { groups[k].sort(bySerial); });
+    return { keys: keys, groups: groups, meta: meta };
+  }
+  function viewDevices() {
+    var f = S.filter, q = S.q;
+    var list = filteredDevices();
     var byPlace = S.sort === 'place';
-    function bySerial(a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); }
-    var fl = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+    var fl = DEV_FILTERS;
     var h = header('Devices') + '</header><main>' +
       '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Name or last digits of serial" value="' + esc(q) + '" autocomplete="off" aria-label="Search devices"></div>' +
       '<div class="filters" role="tablist">' + fl.map(function (x) { return '<button class="fbtn' + (f === x[0] ? ' on' : '') + '" data-filter="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
-      '<div class="sortbar"><span>' + list.length + ' device' + (list.length === 1 ? '' : 's') + '</span><div class="sortseg" role="radiogroup" aria-label="Group devices">' +
+      '<div class="sortbar"><span>' + list.length + ' device' + (list.length === 1 ? '' : 's') + '</span>' +
+        (list.length ? '<button class="printbtn" data-listpdf aria-label="Print or save this list as PDF">' + ICON.pdf + 'Print</button>' : '') + '<div class="sortseg" role="radiogroup" aria-label="Group devices">' +
         '<button data-sort="place" class="' + (byPlace ? 'on' : '') + '" role="radio" aria-checked="' + byPlace + '">By location</button>' +
         '<button data-sort="type" class="' + (byPlace ? '' : 'on') + '" role="radio" aria-checked="' + !byPlace + '">By type</button></div></div>';
     if (!list.length) h += '<div class="empty"><b>' + (q ? 'No device matches “' + esc(q) + '”.' : 'No devices here right now.') + '</b>' + (q ? 'Try the last 2–3 digits of the serial, or a word like “tachometer”.' : '') + '</div>';
     else if (byPlace) {
-      /* Group by where each device is right now: office first, then each client site, then service / other places */
-      var groups = {}, meta = {};
-      list.forEach(function (d) {
-        var k, title, sub = '', rank;
-        if (d.pending) { k = 'pending'; title = 'Transfer waiting'; rank = 2; }
-        else if (d.status === 'In Office') { k = 'office'; title = 'In office'; rank = 0; }
-        else if (d.status === 'At Client') { k = 'co:' + d.companyId; title = coName(d.companyId); rank = 1; }
-        else if (d.status === 'Out of Service') { k = 'oos'; title = 'Out of service'; rank = 6; }
-        else if (d.status === 'Other') { k = 'other:' + (d.note || ''); title = 'Other' + (d.note ? ' · ' + d.note : ''); rank = 5; }
-        else { k = 'st:' + d.status; title = d.status; rank = d.status === 'Maintenance' ? 3 : 4; }
-        (groups[k] = groups[k] || []).push(d);
-        if (!meta[k]) meta[k] = { title: title, rank: rank, people: {}, since: d.since || '' };
-        (d.holders || []).forEach(function (p) { meta[k].people[p.name || p.id] = 1; });
-        if (d.since && (!meta[k].since || d.since < meta[k].since)) meta[k].since = d.since;
-      });
-      var keys = Object.keys(groups).sort(function (a, b) { return meta[a].rank - meta[b].rank || groups[b].length - groups[a].length || meta[a].title.localeCompare(meta[b].title); });
+      var G = groupByPlace(list), groups = G.groups, meta = G.meta, keys = G.keys;
       var inN = list.filter(function (d) { return d.status === 'In Office' && !d.pending; }).length;
       var outsideN = list.filter(function (d) { return (d.status !== 'In Office' || d.pending) && d.status !== 'Out of Service'; }).length;
       var sites = keys.filter(function (k) { return k.indexOf('co:') === 0; }).length;
@@ -401,7 +415,7 @@
         var m = meta[k], ppl = Object.keys(m.people);
         h += '<div class="sec place"><h2>' + esc(m.title) + ' <span class="cnt">' + groups[k].length + '</span></h2>' +
           (k !== 'office' && (ppl.length || m.since) ? '<small>' + esc(ppl.join(', ')) + (ppl.length && m.since ? ' · ' : '') + (m.since ? 'since ' + esc(when(m.since)) : '') + '</small>' : '') + '</div>' +
-          '<div class="list">' + groups[k].sort(bySerial).map(function (d) { return devRow(d, true); }).join('') + '</div>';
+          '<div class="list">' + groups[k].map(function (d) { return devRow(d, true); }).join('') + '</div>';
       });
     } else {
       list.sort(function (a, b) { return a.category.localeCompare(b.category) || bySerial(a, b); });
@@ -474,6 +488,7 @@
     $$('[data-dev]').forEach(function (b) { b.onclick = function () { openDevice(b.dataset.dev); }; });
     $$('[data-goto-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.gotoFilter; S.q = ''; location.hash = '#devices'; }; });
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
+    $$('[data-listpdf]').forEach(function (b) { b.onclick = listPdf; });
     $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; LS.set('sort', S.sort); S._keepScroll = false; render(); }; });
     var q = $('#q');
     if (q) {
@@ -1083,16 +1098,112 @@
         doc.text('Akhnaton Trading and Representation · Calibration Lab · generated ' + fmtDate(new Date()) + ' ' + fmtTime(new Date()), M, 290);
         doc.text('Page ' + p + ' of ' + pages, W - M, 290, { align: 'right' });
       }
-      var fname = c.id + ' ' + (co.name || '').replace(/[^\w\- ]+/g, '').trim() + '.pdf';
+      var fname = c.id + ' ' + (co.name || '').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() + '.pdf';
       var blob = doc.output('blob');
-      var file = null; try { file = new File([blob], fname, { type: 'application/pdf' }); } catch (e) {}
-      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: 'Check-out ' + c.id, text: 'Akhnaton device check-out ' + c.id + ' – ' + co.name }).catch(function () {});
-      } else {
-        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
-        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-        toast('Receipt saved: ' + fname);
+      pdfSheet(blob, fname, 'Receipt ' + c.id, co.name || 'Receipt', c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' · ' + fmtDate(c.ts), 'Akhnaton device check-out ' + c.id + ' – ' + co.name);
+    });
+  }
+
+  /* Shared "PDF ready" sheet: download, open & view (print from the viewer), or share */
+  function pdfSheet(blob, fname, title, headline, sub, shareText) {
+    var file = null; try { file = new File([blob], fname, { type: 'application/pdf' }); } catch (e) {}
+    var canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+    var url = URL.createObjectURL(blob);
+    function download() {
+      var a = document.createElement('a'); a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+      setTimeout(function () { a.remove(); }, 1000);
+      toast('Downloaded: ' + fname);
+    }
+    openSheet(function (body, setFoot, setTitle) {
+      setTitle(title);
+      body.innerHTML = '<div class="done" style="padding-top:28px"><div class="ok" style="background:var(--blue)">' + ICON.pdf + '</div>' +
+        '<h3>' + esc(headline) + '</h3><p>' + esc(sub) + '<br><small>' + esc(fname) + '</small></p>' +
+        '<div style="display:grid;gap:10px;max-width:360px;margin:0 auto">' +
+        '<button class="btn blue wide" data-rx="dl">Download PDF</button>' +
+        '<button class="btn ghost wide" data-rx="view">Open & print</button>' +
+        (canShare ? '<button class="btn ghost wide" data-rx="share">Share (WhatsApp, email…)</button>' : '') +
+        '</div></div>';
+      setFoot('<button class="btn ghost" data-rx="close">Close</button>');
+      $$('[data-rx]').forEach(function (b) {
+        b.onclick = function () {
+          var k = b.dataset.rx;
+          if (k === 'dl') download();
+          else if (k === 'view') { var w = window.open(url, '_blank'); if (!w) download(); }
+          else if (k === 'share') navigator.share({ files: [file], title: title, text: shareText }).catch(function () {});
+          else closeSheet();
+        };
+      });
+    });
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10 * 60 * 1000);
+  }
+
+  /* Printable report of the device list exactly as filtered on the Devices screen */
+  function listPdf() {
+    if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
+    var list = filteredDevices();
+    if (!list.length) return toast('Nothing to print in this list.', true);
+    var fLabel = (DEV_FILTERS.filter(function (x) { return x[0] === S.filter; })[0] || ['', 'All'])[1];
+    var title = fLabel === 'All' ? 'All devices' : fLabel;
+    loadLogo().then(function (logo) {
+      function lat(t) { return String(t || '').replace(/\u00B5/g, 'u').replace(/[^\x20-\x7E\u00A0-\u024F\u2013\u2014]/g, '').replace(/\s+/g, ' ').trim(); }
+      var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+      var W = 297, H = 210, M = 12, y = 12, now = new Date();
+      if (logo) { var lw = 50, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75);
+      doc.text('Device Location Report', W - M, y + 6, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
+      doc.text(title + (S.q ? '  ·  search: "' + lat(S.q) + '"' : '') + '  ·  ' + list.length + ' device' + (list.length > 1 ? 's' : ''), W - M, y + 12, { align: 'right' });
+      doc.text('As of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 17, { align: 'right' });
+      y += 24; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 6;
+      var cols = [{ t: '#', w: 8 }, { t: 'Device', w: 74 }, { t: 'Serial no.', w: 33 }, { t: 'Status', w: 27 }, { t: 'Where', w: 50 }, { t: 'With', w: 39 }, { t: 'Since', w: 21 }, { t: 'Cal. due', w: 21 }];
+      function headRow() {
+        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7.5, 'F');
+        doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+        var x = M + 2; cols.forEach(function (cl) { doc.text(cl.t, x, y + 5.1); x += cl.w; }); doc.setFont('helvetica', 'normal'); y += 7.5;
       }
+      function where(d) {
+        if (d.pending) return 'Transfer waiting';
+        if (d.status === 'At Client') return coName(d.companyId);
+        if (d.status === 'In Office') return 'Lab';
+        return d.note || '';
+      }
+      function sectionTitle(t, n) {
+        if (y + 16 > H - 14) { doc.addPage(); y = 14; }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(19, 41, 75);
+        doc.text(lat(t) + '  (' + n + ')', M, y + 4); doc.setFont('helvetica', 'normal'); y += 6.5; headRow();
+      }
+      var n = 0;
+      function rows(devs) {
+        devs.forEach(function (d) {
+          n++;
+          var c = cert(d);
+          var cells = [String(n), lat(d.description) + (d.manufacturer ? ' — ' + lat([d.manufacturer, d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ')) : ''), lat(d.serial), d.pending ? 'Transfer' : d.status, lat(where(d)), lat(names(d.holders)), d.status === 'In Office' || !d.since ? '' : fmtDate(d.since), d.certStatus === 'none' ? 'Not req.' : (d.calDue ? fmtDate(d.calDue) + (c.kind === 'expired' ? ' (expired)' : '') : '')];
+          var wrapped = cells.map(function (t, k) { return doc.splitTextToSize(t || '', cols[k].w - 2.5); });
+          var h = Math.max.apply(null, wrapped.map(function (w) { return w.length; })) * 4.2 + 3;
+          if (y + h > H - 14) { doc.addPage(); y = 14; headRow(); }
+          if (n % 2 === 0) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, h, 'F'); }
+          doc.setFontSize(9.3); doc.setTextColor(23, 34, 51);
+          var x = M + 2; wrapped.forEach(function (w, k) { if (k === 7 && c.kind === 'expired') doc.setTextColor(194, 54, 43); doc.text(w, x, y + 4.6); doc.setTextColor(23, 34, 51); x += cols[k].w; });
+          y += h;
+        });
+        doc.setDrawColor(214, 221, 230); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 5;
+      }
+      if (S.sort === 'place') {
+        var G = groupByPlace(list);
+        G.keys.forEach(function (k) { sectionTitle(G.meta[k].title, G.groups[k].length); rows(G.groups[k]); });
+      } else {
+        var cats = {}; list.forEach(function (d) { (cats[d.category] = cats[d.category] || []).push(d); });
+        Object.keys(cats).sort().forEach(function (k) { sectionTitle(k, cats[k].length); rows(cats[k].sort(bySerial)); });
+      }
+      var pages = doc.internal.getNumberOfPages();
+      for (var p = 1; p <= pages; p++) {
+        doc.setPage(p); doc.setFontSize(8); doc.setTextColor(140, 150, 165);
+        doc.text('Akhnaton Trading and Representation · Calibration Lab · Device Location Report · ' + fmtDate(now) + ' ' + fmtTime(now), M, H - 6);
+        doc.text('Page ' + p + ' of ' + pages, W - M, H - 6, { align: 'right' });
+      }
+      var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
+      var fname = 'Devices ' + title.replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ' + stamp + '.pdf';
+      pdfSheet(doc.output('blob'), fname, 'Device list', title, list.length + ' device' + (list.length > 1 ? 's' : '') + ' · as of ' + fmtTime(now), 'Akhnaton devices – ' + title + ' – ' + fmtDate(now));
     });
   }
 
