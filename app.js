@@ -240,18 +240,35 @@
 
   /* ---------- push notifications (OneSignal) ---------- */
   function os(fn) { if (DEMO || !window.OneSignalDeferred) return; window.OneSignalDeferred.push(function (O) { try { return fn(O); } catch (e) {} }); }
-  var pushLinked = null;
+  var pushLinked = null, pushOpted = null;
   function pushLink() {
     if (!S.me || pushLinked === S.me.id) return; pushLinked = S.me.id;
-    os(function (O) { return O.login(S.me.id).then(function () { O.User.addTags({ role: S.me.role, name: S.me.name }); }); });
+    os(function (O) {
+      return O.login(S.me.id).then(function () {
+        O.User.addTags({ role: S.me.role, name: S.me.name });
+        var sub = O.User.PushSubscription;
+        pushOpted = !!sub.optedIn;
+        sub.addEventListener('change', function (e) { pushOpted = !!(e.current && e.current.optedIn); S._keepScroll = true; render(); });
+        /* permission already given (e.g. by Android for the app) but not subscribed yet: subscribe now */
+        if (!sub.optedIn && 'Notification' in window && Notification.permission === 'granted') return sub.optIn();
+        S._keepScroll = true; render();
+      });
+    });
   }
   function pushState() {
-    if (DEMO || !('Notification' in window)) return 'na';
-    return Notification.permission;
+    if (DEMO || !('Notification' in window) || !window.OneSignalDeferred) return 'na';
+    if (Notification.permission === 'denied') return 'denied';
+    if (pushOpted === true) return 'granted';
+    return 'default';
   }
   function askPush() {
-    os(function (O) { return O.Notifications.requestPermission().then(function () { pushLinked = null; pushLink(); S._keepScroll = true; render(); }); });
-    setTimeout(function () { S._keepScroll = true; render(); }, 4000);
+    os(function (O) {
+      var sub = O.User.PushSubscription;
+      return O.Notifications.requestPermission().then(function () { return sub.optIn(); }).then(function () {
+        pushOpted = !!sub.optedIn; S._keepScroll = true; render();
+        toast(pushOpted ? 'Notifications are on' : 'Notifications were not allowed', !pushOpted);
+      });
+    });
   }
   function signOut() { os(function (O) { return O.logout(); }); pushLinked = null; LS.del('session'); LS.del('cache'); S.session = null; S.me = null; S.data = null; closeSheet(); renderLogin(); }
 
