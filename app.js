@@ -1157,7 +1157,15 @@
         '<label class="f" style="margin:0"><span>Certificate link (SharePoint)</span><input class="inp" data-k="certUrl" value="' + esc(f.certUrl) + '" placeholder="https://evapharma.sharepoint.com/…"></label></div>';
       $$('[data-k]', body).forEach(function (i) { i.oninput = i.onchange = function () { f[i.dataset.k] = i.value; }; });
       $$('[data-cs]', body).forEach(function (b) { b.onclick = function () { f.certStatus = b.dataset.cs; $$('[data-cs]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
-      setFoot('<button class="btn" data-save>Save</button>');
+      setFoot((d ? '<button class="btn ghost" data-remove style="flex:0 0 auto;color:var(--danger)">Remove</button>' : '') + '<button class="btn" data-save>Save</button>');
+      var rm = $('[data-remove]');
+      if (rm) rm.onclick = function () {
+        if (d.status !== 'In Office' || d.pending) return toast('Check this device in first — it is ' + (d.pending ? 'reserved or being transferred' : d.status.toLowerCase()) + '.', true);
+        askConfirm('Remove “' + d.description + ' …' + d.serialTail + '” from the device list? Its history is kept.', 'Remove device', function () {
+          var g = JSON.parse(JSON.stringify(d)); g.active = false;
+          req('saveDevice', { device: g }).then(function () { return refresh(true); }).then(function () { closeAll(); toast('Device removed'); }).catch(function (e) { toast(e.message, true); });
+        }, true);
+      };
       $('[data-save]').onclick = function () {
         req('saveDevice', { device: f }).then(function () { return refresh(true); }).then(function () { closeAll(); toast('Device saved'); }).catch(function (e) { toast(e.message, true); });
       };
