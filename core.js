@@ -16,7 +16,7 @@ var Core = (function () {
     ['S01', 'Data Loggers', 'Dickson Temp/RH data logger'], ['S02', 'Data Loggers', 'Elitech data logger'], ['S03', 'Data Loggers', 'Lascar data logger'],
     ['S04', 'Data Loggers', 'High temp/RH data logger'], ['S05', 'Data Loggers', 'Stainless steel data logger'],
     ['S06', 'Validator Sensors', 'Fluke validator sensor – Type T'], ['S07', 'Validator Sensors', 'Fluke validator sensor – Type K'],
-    ['S08', 'Connections', 'Pressure connections'], ['S09', 'Connections', 'Autoclave connections'], ['S10', 'Connections', 'Gland connections'],
+    ['S08', 'Connections', 'Pressure connections'], ['S09', 'Connections', 'Autoclave connections'], ['S10', 'Connections', 'Glatt connections'],
     ['S11', 'Tools & Accessories', 'مفتاح فرنساوي', 'Adjustable wrench'], ['S12', 'Tools & Accessories', 'مفتاح عادة', 'Open-end wrench'], ['S13', 'Tools & Accessories', 'مفك عادة', 'Flat screwdriver'],
     ['S14', 'Tools & Accessories', 'مفك صليبة', 'Phillips screwdriver'], ['S15', 'Tools & Accessories', 'بنسة', 'Pliers'], ['S16', 'Tools & Accessories', 'شاحن بطاريات', 'Battery charger'],
     ['S17', 'Tools & Accessories', 'وصلة كهرباء', 'Extension cord']
