@@ -722,7 +722,12 @@
     return DEV_GROUPS.concat(other.length ? [['Other devices', other]] : []);
   }
   function devicePicker(container, selected, filterFn, onChange) {
-    var q = '', grp = S.data.devices.filter(filterFn).length > 10 ? null : '__all';
+    var q = '', grp = S.data.devices.filter(filterFn).length > 10 ? null : '__all', hasTiles = grp === null;
+    /* Inside a category (or a search) the main button returns to the category tiles, so several categories can be picked in one go */
+    var api = {
+      browsing: function () { return hasTiles && (grp !== null || !!q); },
+      back: function () { grp = null; q = ''; draw(); container.scrollTop = 0; onChange && onChange(); }
+    };
     function draw() {
       var groups = devGroups();
       var inGroup = grp === null ? null : groups.filter(function (g) { return g[0] === grp; })[0];
@@ -748,13 +753,14 @@
             (c.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
         }).join('') + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
       }
-      $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; }; });
-      $$('[data-back]', container).forEach(function (b) { b.onclick = function () { grp = null; draw(); }; });
-      var inp = $('#dq', container); inp.oninput = function () { q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} };
+      $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; onChange && onChange(); }; });
+      $$('[data-back]', container).forEach(function (b) { b.onclick = function () { api.back(); }; });
+      var inp = $('#dq', container); inp.oninput = function () { var was = !!q; q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} if (was !== !!q) onChange && onChange(); };
       $$('[data-d]', container).forEach(function (b) { b.onclick = function () { var id = b.dataset.d, i = selected.indexOf(id); if (i >= 0) selected.splice(i, 1); else selected.push(id); draw(); onChange && onChange(); }; });
       $$('[data-unpick]', container).forEach(function (b) { b.onclick = function () { selected.splice(selected.indexOf(b.dataset.unpick), 1); draw(); onChange && onChange(); }; });
     }
     draw();
+    return api;
   }
 
   /* ---------- check-out wizard ---------- */
@@ -773,7 +779,7 @@
           peoplePicker($('#pp', body), st.engineers, {}, foot);
         } else if (st.step === 3) {
           setTitle('Which devices?', 'Step 3 of ' + total);
-          devicePicker(body, st.devices, function (d) { return (d.status === 'In Office' && !d.pending) || st.devices.indexOf(d.id) >= 0; }, foot);
+          st.picker = devicePicker(body, st.devices, function (d) { return (d.status === 'In Office' && !d.pending) || st.devices.indexOf(d.id) >= 0; }, foot);
         } else {
           setTitle('Check and confirm', 'Step 4 of ' + total);
           var devs = st.devices.map(function (id) { return IDX.dev[id]; });
@@ -795,11 +801,13 @@
         foot();
       }
       function foot() {
-        var ok = st.step === 1 ? !!st.companyId : st.step === 2 ? st.engineers.length > 0 : st.step === 3 ? st.devices.length > 0 : true;
-        var label = st.step === 4 ? (can('keep') ? 'Confirm check-out' : 'Send request') : st.step === 3 ? 'Next · ' + st.devices.length + ' selected' : 'Next';
+        var browsing = st.step === 3 && st.picker && st.picker.browsing();
+        var ok = browsing ? true : st.step === 1 ? !!st.companyId : st.step === 2 ? st.engineers.length > 0 : st.step === 3 ? st.devices.length > 0 : true;
+        var label = st.step === 4 ? (can('keep') ? 'Confirm check-out' : 'Send request') : browsing ? '✓ Done · back to categories' + (st.devices.length ? ' (' + st.devices.length + ')' : '') : st.step === 3 ? 'Next · ' + st.devices.length + ' selected' : 'Next';
         setFoot((st.step > 1 ? '<button class="btn ghost" data-prev style="flex:0 0 auto">Back</button>' : '') + '<button class="btn ' + (st.step === 4 ? 'blue' : '') + '" data-next ' + (ok ? '' : 'disabled') + '>' + label + '</button>');
-        var p = $('[data-prev]'); if (p) p.onclick = function () { go(st.step - 1); };
+        var p = $('[data-prev]'); if (p) p.onclick = function () { if (browsing) return st.picker.back(); go(st.step - 1); };
         $('[data-next]').onclick = function () {
+          if (browsing) return st.picker.back();
           if (st.step < 4) return go(st.step + 1);
           var b = this; b.disabled = true; b.innerHTML = '<span class="spin"></span>';
           req('checkout', { companyId: st.companyId, engineerIds: st.engineers, deviceIds: st.devices, expectedReturn: st.expectedReturn, note: st.note })
