@@ -372,7 +372,7 @@
     var h = header('Devices') + '</header><main>' +
       '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Name or last digits of serial" value="' + esc(q) + '" autocomplete="off" aria-label="Search devices"></div>' +
       '<div class="filters" role="tablist">' + fl.map(function (x) { return '<button class="fbtn' + (f === x[0] ? ' on' : '') + '" data-filter="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
-      '<div class="sortbar"><span>' + list.length + ' device' + (list.length === 1 ? '' : 's') + '</span><div class="seg" role="radiogroup" aria-label="Group devices">' +
+      '<div class="sortbar"><span>' + list.length + ' device' + (list.length === 1 ? '' : 's') + '</span><div class="sortseg" role="radiogroup" aria-label="Group devices">' +
         '<button data-sort="place" class="' + (byPlace ? 'on' : '') + '" role="radio" aria-checked="' + byPlace + '">By location</button>' +
         '<button data-sort="type" class="' + (byPlace ? '' : 'on') + '" role="radio" aria-checked="' + !byPlace + '">By type</button></div></div>';
     if (!list.length) h += '<div class="empty"><b>' + (q ? 'No device matches “' + esc(q) + '”.' : 'No devices here right now.') + '</b>' + (q ? 'Try the last 2–3 digits of the serial, or a word like “tachometer”.' : '') + '</div>';
@@ -396,7 +396,7 @@
       var inN = list.filter(function (d) { return d.status === 'In Office' && !d.pending; }).length;
       var outsideN = list.filter(function (d) { return (d.status !== 'In Office' || d.pending) && d.status !== 'Out of Service'; }).length;
       var sites = keys.filter(function (k) { return k.indexOf('co:') === 0; }).length;
-      if (f === 'all') h += '<div class="placesum"><div><b>' + inN + '</b><span>in office</span></div><div><b>' + outsideN + '</b><span>outside</span></div><div><b>' + sites + '</b><span>client site' + (sites === 1 ? '' : 's') + '</span></div></div>';
+      if (f === 'all') h += '<div class="placesum"><button data-filter="office"><b>' + inN + '</b><span>in office</span></button><button data-filter="out"><b>' + outsideN + '</b><span>outside</span></button><button data-filter="client"><b>' + sites + '</b><span>client site' + (sites === 1 ? '' : 's') + '</span></button></div>';
       keys.forEach(function (k) {
         var m = meta[k], ppl = Object.keys(m.people);
         h += '<div class="sec place"><h2>' + esc(m.title) + ' <span class="cnt">' + groups[k].length + '</span></h2>' +
