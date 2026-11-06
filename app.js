@@ -106,6 +106,33 @@
     'Other': { c: 'var(--service)', bg: 'var(--service-soft)', short: 'Other' },
     'Out of Service': { c: 'var(--oos)', bg: 'var(--oos-soft)', short: 'Out of service' }
   };
+  /* ---------- quantity items (loggers, sensors, connections, tools) ---------- */
+  function stockList() { return (S.data && S.data.stock) || []; }
+  function holdings() { return (S.data && S.data.holdings) || []; }
+  function stockOut(sid) { var n = 0; holdings().forEach(function (h) { if (h.stockId === sid) n += +h.qty || 0; }); return n; }
+  function stockFree(st) { return st.total === '' || st.total == null ? null : Math.max(0, (+st.total || 0) - stockOut(st.id)); }
+  function itemsText(items) { return (items || []).map(function (i) { return i.qty + ' × ' + i.name; }).join(', '); }
+  function itemChips(items) { return (items || []).map(function (i) { return '<span class="dchip qchip"><span class="qn">' + i.qty + '×</span><em>' + esc(i.name) + '</em></span>'; }).join(''); }
+  function holdingsAt(coId) { return holdings().filter(function (h) { return h.companyId === coId && (+h.qty || 0) > 0; }); }
+  function countLabel(nd, items) {
+    var ni = (items || []).reduce(function (a, i) { return a + (+i.qty || 0); }, 0);
+    return [nd ? nd + ' device' + (nd === 1 ? '' : 's') : '', ni ? ni + ' item' + (ni === 1 ? '' : 's') : ''].filter(Boolean).join(' + ') || 'nothing';
+  }
+  /* − n + stepper rows for quantity items. list: [{key, name, sub, max, qty}] ; onSet(key, qty) */
+  function qtyRows(list, onSet) {
+    var html = '<div class="list">' + list.map(function (r) {
+      return '<div class="row qrow' + (r.qty ? ' sel' : '') + '"><span class="t"><b>' + esc(r.name) + '</b>' + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + '</span>' +
+        '<span class="stepper"><button data-qm="' + esc(r.key) + '" aria-label="Less">−</button><input inputmode="numeric" data-qi="' + esc(r.key) + '" value="' + (r.qty || 0) + '" aria-label="Quantity"><button data-qp="' + esc(r.key) + '" aria-label="More">+</button></span></div>';
+    }).join('') + '</div>';
+    function wire(root) {
+      var by = {}; list.forEach(function (r) { by[r.key] = r; });
+      function set(k, v) { var r = by[k]; v = Math.max(0, parseInt(v, 10) || 0); if (r.max != null) v = Math.min(v, r.max); r.qty = v; onSet(k, v); }
+      $$('[data-qm]', root).forEach(function (b) { b.onclick = function () { set(b.dataset.qm, (by[b.dataset.qm].qty || 0) - 1); }; });
+      $$('[data-qp]', root).forEach(function (b) { b.onclick = function () { set(b.dataset.qp, (by[b.dataset.qp].qty || 0) + 1); }; });
+      $$('[data-qi]', root).forEach(function (i) { i.onchange = function () { set(i.dataset.qi, i.value); }; i.onfocus = function () { i.select(); }; });
+    }
+    return { html: html, wire: wire };
+  }
   function isReq(d) { return String(d.pending || '').indexOf('CO-') === 0; }
   function reqOf(d) { return isReq(d) ? S.data.checkouts.filter(function (c) { return c.id === d.pending; })[0] : null; }
   function stOf(d) { return d.pending ? { c: 'var(--pending)', bg: 'var(--pending-soft)', short: isReq(d) ? 'Waiting approval' : 'Transfer waiting' } : (ST[d.status] || ST['Other']); }
@@ -357,8 +384,8 @@
           '<div class="meta">Requested by <b>' + esc(c.byName) + '</b> · ' + when(c.requestedTs || c.ts) + '</div>' +
           '<div class="meta">Team: <b>' + esc(names(c.engineers)) + '</b>' + (c.expectedReturn ? ' · back ' + fmtDate(c.expectedReturn) : '') + '</div>' +
           (c.note ? '<div class="meta">Note: ' + esc(c.note) + '</div>' : '') + '</div>' +
-          '<span class="cnt">' + c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + '</span></div>' +
-          '<div class="chips">' + c.deviceIds.map(function (id) { var d = IDX.dev[id]; return d ? '<button class="dchip" data-dev="' + id + '">' + tag(d, 'sm') + '<em>' + esc(devTitle(d)) + '</em></button>' : ''; }).join('') + '</div>' +
+          '<span class="cnt">' + countLabel(c.deviceIds.length, c.items) + '</span></div>' +
+          '<div class="chips">' + c.deviceIds.map(function (id) { var d = IDX.dev[id]; return d ? '<button class="dchip" data-dev="' + id + '">' + tag(d, 'sm') + '<em>' + esc(devTitle(d)) + '</em></button>' : ''; }).join('') + itemChips(c.items) + '</div>' +
           '<div class="site-f">' + (can('keep')
             ? '<button class="btn sm blue" data-rq-ok="' + c.id + '">Approve</button><button class="btn sm ghost" data-rq-review="' + c.id + '">Review</button><button class="btn sm ghost" data-rq-no="' + c.id + '">Decline</button>'
             : '<span class="meta" style="flex:1;align-self:center">⏳ Waiting for a lab keeper</span>' + (mine ? '<button class="btn sm ghost" data-rq-no="' + c.id + '">Cancel request</button>' : '')) +
@@ -378,6 +405,7 @@
 
     var groups = {};
     S.data.devices.forEach(function (d) { if (d.status === 'At Client') (groups[d.companyId] = groups[d.companyId] || []).push(d); });
+    holdings().forEach(function (hh) { if (+hh.qty > 0 && !groups[hh.companyId]) groups[hh.companyId] = []; });
     var keys = Object.keys(groups).sort(function (a, b) { return groups[b].length - groups[a].length || coName(a).localeCompare(coName(b)); });
     h += '<div class="sec"><h2>At clients today</h2><small>' + keys.length + ' compan' + (keys.length === 1 ? 'y' : 'ies') + '</small></div>';
     if (!keys.length) h += '<div class="empty"><b>Every device is home.</b>' + (can('keep') ? 'Tap “Check out” when a team leaves with devices.' : 'Nothing is out at a client right now.') + '</div>';
@@ -395,7 +423,8 @@
   function greet() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
 
   function siteCard(coId, devs) {
-    var engs = {}, since = null, exp = '', coIds = {};
+    var engs = {}, since = null, exp = '', coIds = {}, hs = holdingsAt(coId);
+    hs.forEach(function (h) { (h.holders || []).forEach(function (p) { engs[p.name] = 1; }); if (!since || h.since < since) since = h.since; if (h.checkoutId) coIds[h.checkoutId] = 1; });
     devs.forEach(function (d) { (d.holders || []).forEach(function (p) { engs[p.name] = 1; }); if (!since || d.since < since) since = d.since; if (d.expectedReturn && (!exp || d.expectedReturn < exp)) exp = d.expectedReturn; if (d.checkoutId) coIds[d.checkoutId] = 1; });
     var late = exp && daysUntil(exp) < 0;
     var days = since ? daysSince(since) : 0;
@@ -403,8 +432,8 @@
       '<div class="meta">With <b>' + esc(Object.keys(engs).join(', ') || '—') + '</b></div>' +
       '<div class="meta">Out since ' + when(since) + (days > 0 ? ' · ' + days + ' day' + (days > 1 ? 's' : '') : '') +
       (exp ? ' · back <span class="' + (late ? 'late' : '') + '">' + (late ? 'overdue, was ' : '') + fmtDate(exp) + '</span>' : '') + '</div></div>' +
-      '<span class="cnt">' + devs.length + ' device' + (devs.length > 1 ? 's' : '') + '</span></div>' +
-      '<div class="chips">' + devs.map(function (d) { return '<button class="dchip" data-dev="' + d.id + '">' + tag(d, 'sm') + '<em>' + esc(devTitle(d)) + '</em></button>'; }).join('') + '</div>' +
+      '<span class="cnt">' + countLabel(devs.length, hs) + '</span></div>' +
+      '<div class="chips">' + devs.map(function (d) { return '<button class="dchip" data-dev="' + d.id + '">' + tag(d, 'sm') + '<em>' + esc(devTitle(d)) + '</em></button>'; }).join('') + itemChips(hs) + '</div>' +
       '<div class="site-f">' + (can('keep') ? '<button class="btn sm" data-checkin="' + coId + '">Check in</button>' : '') +
       '<button class="btn sm ghost" data-transfer-co="' + coId + '">Move to…</button>' +
       (Object.keys(coIds).length === 1 ? '<button class="btn sm ghost" data-pdf="' + Object.keys(coIds)[0] + '" aria-label="Receipt PDF">' + ICON.pdf + '</button>' : '') +
@@ -424,7 +453,24 @@
   }
 
   /* ---------- Devices ---------- */
-  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['kits', 'Loggers & kits'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+  function kitsView() {
+    var h = '';
+    Core.STOCK_GROUPS.forEach(function (g) {
+      var sts = stockList().filter(function (x) { return x.group === g; });
+      var extra = holdings().filter(function (x) { return !x.stockId && x.group === g && +x.qty > 0; });
+      if (!sts.length && !extra.length) return;
+      h += '<div class="sec"><h2>' + esc(g) + '</h2></div><div class="list">';
+      sts.forEach(function (st) {
+        var out = stockOut(st.id), free = stockFree(st), hs = holdings().filter(function (x) { return x.stockId === st.id && +x.qty > 0; });
+        h += '<div class="row kitrow"><span class="t"><b>' + esc(st.name) + '</b><small>' + (st.total === '' ? 'Total not set' : st.total + ' total · ' + free + ' in the lab') + ' · <span style="color:' + (out ? 'var(--client)' : 'var(--muted)') + ';font-weight:600">' + out + ' out</span></small>' +
+          hs.map(function (x) { return '<small class="kitwhere">' + x.qty + ' at ' + esc(coName(x.companyId)) + ' · ' + esc(names(x.holders)) + ' · since ' + esc(when(x.since)) + '</small>'; }).join('') + '</span></div>';
+      });
+      extra.forEach(function (x) { h += '<div class="row kitrow"><span class="t"><b>' + esc(x.name) + '</b><small class="kitwhere">' + x.qty + ' at ' + esc(coName(x.companyId)) + ' · ' + esc(names(x.holders)) + '</small></span></div>'; });
+      h += '</div>';
+    });
+    return h || '<div class="empty"><b>Nothing here yet.</b>The admin adds loggers and kits from Me › Loggers, sensors &amp; kits.</div>';
+  }
   function bySerial(a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); }
   function filteredDevices() {
     var f = S.filter, q = S.q;
@@ -474,6 +520,7 @@
         (list.length ? '<button class="printbtn" data-listpdf aria-label="Print or save this list as PDF">' + ICON.pdf + 'Print</button>' : '') + '<div class="sortseg" role="radiogroup" aria-label="Group devices">' +
         '<button data-sort="place" class="' + (byPlace ? 'on' : '') + '" role="radio" aria-checked="' + byPlace + '">By location</button>' +
         '<button data-sort="type" class="' + (byPlace ? '' : 'on') + '" role="radio" aria-checked="' + !byPlace + '">By type</button></div></div>';
+    if (f === 'kits') return h.replace(/<div class="sortbar">[\s\S]*$/, '') + kitsView() + '<div style="height:24px"></div></main>';
     if (!list.length) h += '<div class="empty"><b>' + (q ? 'No device matches “' + esc(q) + '”.' : 'No devices here right now.') + '</b>' + (q ? 'Try the last 2–3 digits of the serial, or a word like “tachometer”.' : '') + '</div>';
     else if (byPlace) {
       var G = groupByPlace(list), groups = G.groups, meta = G.meta, keys = G.keys;
@@ -549,6 +596,7 @@
         '<button class="row" data-act="people"><span class="t"><b>People &amp; PINs</b><small>' + S.data.users.length + ' people · roles, new staff, reset PIN</small></span></button>' +
         '<button class="row" data-act="companies"><span class="t"><b>Companies</b><small>' + S.data.companies.filter(function (c) { return c.active !== false; }).length + ' active · add or rename</small></span></button>' +
         '<button class="row" data-act="devlist"><span class="t"><b>Devices &amp; certificates</b><small>Add devices, due dates, certificate links</small></span></button>' +
+        '<button class="row" data-act="stock"><span class="t"><b>Loggers, sensors &amp; kits</b><small>' + stockList().length + ' types counted by quantity · set how many you have</small></span></button>' +
         '</div>';
     }
     h += '<div class="sec"><h2>About</h2></div><div class="box" style="margin-top:0"><dl class="kv"><dt>Company</dt><dd>Akhnaton Trading and Representation</dd><dt>Devices</dt><dd>' + S.data.devices.length + '</dd><dt>Version</dt><dd>1.0' + (DEMO ? ' (preview)' : '') + '</dd></dl></div>';
@@ -601,6 +649,7 @@
         if (a === 'people') adminPeople();
         if (a === 'companies') adminCompanies();
         if (a === 'devlist') adminDevices();
+        if (a === 'stock') adminStock();
       };
     });
   }
@@ -779,8 +828,10 @@
     var other = Object.keys(cats).sort();
     return DEV_GROUPS.concat(other.length ? [['Other devices', other]] : []);
   }
-  function devicePicker(container, selected, filterFn, onChange) {
-    var q = '', grp = S.data.devices.filter(filterFn).length > 10 ? null : '__all', hasTiles = grp === null;
+  function devicePicker(container, selected, filterFn, onChange, opts) {
+    opts = opts || {};
+    var items = opts.items || null; /* array of {stockId, name, group, qty} when quantity items can be picked */
+    var q = '', grp = (items || S.data.devices.filter(filterFn).length > 10) ? null : '__all', hasTiles = grp === null;
     /* Inside a category (or a search) the main button returns to the category tiles, so several categories can be picked in one go */
     var api = {
       browsing: function () { return hasTiles && (grp !== null || !!q); },
@@ -792,8 +843,10 @@
       var list = S.data.devices.filter(function (d) { return filterFn(d) && matches(d, q) && (q || !inGroup || inGroup[1].indexOf(d.category) >= 0); });
       list.sort(function (a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); });
       var picked = selected.map(function (id) { return IDX.dev[id]; }).filter(Boolean);
+      var isStock = items && grp && grp.indexOf('stock:') === 0;
       var head = '<div class="selbar"><div class="search" style="margin-bottom:8px">' + ICON.search + '<input id="dq" type="search" placeholder="Search all: name or last digits of serial" value="' + esc(q) + '" autocomplete="off"></div>' +
-        '<div class="picked">' + picked.map(function (d) { return '<button data-unpick="' + d.id + '" aria-label="Remove">' + esc(d.serialTail) + ' · ' + esc(d.description.split(' ').slice(0, 2).join(' ')) + ' ✕</button>'; }).join('') + '</div></div>';
+        '<div class="picked">' + picked.map(function (d) { return '<button data-unpick="' + d.id + '" aria-label="Remove">' + esc(d.serialTail) + ' · ' + esc(d.description.split(' ').slice(0, 2).join(' ')) + ' ✕</button>'; }).join('') +
+        (items || []).map(function (it, i) { return '<button data-unitem="' + i + '" aria-label="Remove">' + it.qty + ' × ' + esc(it.name.split(' ').slice(0, 2).join(' ')) + ' ✕</button>'; }).join('') + '</div></div>';
       if (!q && grp === null) {
         /* Step A: choose a category, like the people screen */
         container.innerHTML = head + '<div class="sec" style="margin-top:4px"><h2>Choose a category</h2></div><div class="cats">' + groups.map(function (g) {
@@ -802,7 +855,33 @@
           var free = all.filter(filterFn).length;
           var chosen = all.filter(function (d) { return selected.indexOf(d.id) >= 0; }).length;
           return '<button data-grp="' + esc(g[0]) + '"' + (free ? '' : ' class="none"') + '><b>' + esc(g[0]) + '</b><small>' + free + ' available' + (all.length !== free ? ' of ' + all.length : '') + '</small>' + (chosen ? '<i>' + chosen + ' picked</i>' : '') + '</button>';
-        }).join('') + '<button data-grp="__all"><b>All devices</b><small>' + S.data.devices.filter(filterFn).length + ' available</small></button></div>';
+        }).join('') + (items ? Core.STOCK_GROUPS.map(function (g) {
+          var sts = stockList().filter(function (x) { return x.group === g; });
+          var n = items.filter(function (it) { return it.group === g; }).reduce(function (a, it) { return a + it.qty; }, 0);
+          return '<button data-grp="stock:' + esc(g) + '" class="qtile"><b>' + esc(g) + '</b><small>' + sts.length + ' type' + (sts.length === 1 ? '' : 's') + ' · by quantity</small>' + (n ? '<i>' + n + ' picked</i>' : '') + '</button>';
+        }).join('') : '') + '<button data-grp="__all"><b>All devices</b><small>' + S.data.devices.filter(filterFn).length + ' available</small></button></div>';
+      } else if (isStock && !q) {
+        var g = grp.slice(6);
+        var rows = stockList().filter(function (x) { return x.group === g; }).map(function (st) {
+          var free = stockFree(st), cur = items.filter(function (it) { return it.stockId === st.id; })[0];
+          return { key: st.id, name: st.name, sub: free == null ? 'Count not set' : free + ' in the lab', max: free, qty: cur ? cur.qty : 0 };
+        });
+        var others = items.filter(function (it) { return !it.stockId && it.group === g; });
+        var qr = qtyRows(rows, function (k, v) {
+          var st = stockList().filter(function (x) { return x.id === k; })[0], i;
+          for (i = items.length - 1; i >= 0; i--) if (items[i].stockId === k) items.splice(i, 1);
+          if (v > 0) items.push({ stockId: k, name: st.name, group: st.group, qty: v });
+          draw(); onChange && onChange();
+        });
+        container.innerHTML = head + '<button class="backcat" data-back="1">‹ Categories <span>' + esc(g) + '</span></button>' + qr.html +
+          (others.length ? '<div class="list" style="margin-top:10px">' + others.map(function (it) { return '<div class="row qrow sel"><span class="t"><b>' + esc(it.name) + '</b><small>Other</small></span><span class="qn big">' + it.qty + '×</span><button class="icon-btn" data-unitem="' + items.indexOf(it) + '" aria-label="Remove" style="color:var(--danger)">✕</button></div>'; }).join('') + '</div>' : '') +
+          '<div class="box otherbox"><h4>Something else?</h4><div class="orow"><input class="inp" id="oname" placeholder="e.g. Hose 1/4&quot;, spare battery"><input class="inp" id="oqty" inputmode="numeric" value="1" style="width:70px;text-align:center"><button class="btn sm" data-oadd>Add</button></div></div>';
+        qr.wire(container);
+        var oa = $('[data-oadd]', container); if (oa) oa.onclick = function () {
+          var n = $('#oname', container).value.trim(), k = Math.max(1, parseInt($('#oqty', container).value, 10) || 1);
+          if (!n) return toast('Write the name first', true);
+          items.push({ stockId: '', name: n, group: g, qty: k }); draw(); onChange && onChange();
+        };
       } else {
         container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
         (list.length ? '<div class="list">' + list.map(function (d) {
@@ -816,6 +895,7 @@
       var inp = $('#dq', container); inp.oninput = function () { var was = !!q; q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} if (was !== !!q) onChange && onChange(); };
       $$('[data-d]', container).forEach(function (b) { b.onclick = function () { var id = b.dataset.d, i = selected.indexOf(id); if (i >= 0) selected.splice(i, 1); else selected.push(id); draw(); onChange && onChange(); }; });
       $$('[data-unpick]', container).forEach(function (b) { b.onclick = function () { selected.splice(selected.indexOf(b.dataset.unpick), 1); draw(); onChange && onChange(); }; });
+      $$('[data-unitem]', container).forEach(function (b) { b.onclick = function () { items.splice(+b.dataset.unitem, 1); draw(); onChange && onChange(); }; });
     }
     draw();
     return api;
@@ -823,7 +903,7 @@
 
   /* ---------- check-out wizard ---------- */
   function checkoutFlow(preDevices) {
-    var st = { step: 1, companyId: '', engineers: can('keep') ? [] : [S.me.id], devices: (preDevices || []).slice(), expectedReturn: '', note: '' };
+    var st = { step: 1, companyId: '', engineers: can('keep') ? [] : [S.me.id], devices: (preDevices || []).slice(), items: [], expectedReturn: '', note: '' };
     openSheet(function (body, setFoot, setTitle) {
       function go(n) { st.step = n; draw(); }
       function draw() {
@@ -837,18 +917,21 @@
           peoplePicker($('#pp', body), st.engineers, {}, foot);
         } else if (st.step === 3) {
           setTitle('Which devices?', 'Step 3 of ' + total);
-          st.picker = devicePicker(body, st.devices, function (d) { return (d.status === 'In Office' && !d.pending) || st.devices.indexOf(d.id) >= 0; }, foot);
+          st.picker = devicePicker(body, st.devices, function (d) { return (d.status === 'In Office' && (!d.pending || Core.isPortion(d))) || st.devices.indexOf(d.id) >= 0; }, foot, { items: st.items });
         } else {
           setTitle('Check and confirm', 'Step 4 of ' + total);
           var devs = st.devices.map(function (id) { return IDX.dev[id]; });
           var expired = devs.filter(function (d) { return cert(d).kind === 'expired'; });
           var notIn = devs.filter(function (d) { return d.status !== 'In Office'; });
+          var portions = devs.filter(function (d) { return Core.isPortion(d); });
           var quick = [1, 2, 3, 7].map(function (n) { var x = new Date(); x.setDate(x.getDate() + n); return { n: n, v: isoDay(x) }; });
           body.innerHTML =
             (expired.length ? '<div class="note warnbox"><b>' + expired.length + ' device' + (expired.length > 1 ? 's have' : ' has') + ' an expired calibration:</b> ' + expired.map(function (d) { return esc(d.description) + ' …' + esc(d.serialTail); }).join(', ') + '. You can still check out.</div>' : '') +
             (notIn.length ? '<div class="note warnbox">' + notIn.map(function (d) { return esc(d.description) + ' …' + esc(d.serialTail); }).join(', ') + ' is not marked in the office. Checking out will move it here.</div>' : '') +
             '<div class="box" style="margin-top:0"><h4>Going to</h4><div class="where">' + esc(coName(st.companyId)) + '</div><div class="meta">With <b>' + esc(st.engineers.map(function (id) { return IDX.user[id].name; }).join(', ')) + '</b></div></div>' +
-            '<div class="box"><h4>' + devs.length + ' device' + (devs.length > 1 ? 's' : '') + '</h4><div class="chips" style="margin-top:0">' + devs.map(function (d) { return '<span class="dchip">' + tag(d, 'sm') + '<em>' + esc(d.description) + '</em></span>'; }).join('') + '</div></div>' +
+            (devs.length ? '<div class="box"><h4>' + devs.length + ' device' + (devs.length > 1 ? 's' : '') + '</h4><div class="chips" style="margin-top:0">' + devs.map(function (d) { return '<span class="dchip">' + tag(d, 'sm') + '<em>' + esc(d.description) + '</em></span>'; }).join('') + '</div>' +
+              (portions.length ? '<div class="meta" style="margin-top:8px">💧 ' + portions.length + ' buffer' + (portions.length > 1 ? 's' : '') + ' — only a portion goes out, the bottle stays in the lab.</div>' : '') + '</div>' : '') +
+            (st.items.length ? '<div class="box"><h4>Loggers, sensors &amp; kits</h4><div class="chips" style="margin-top:0">' + itemChips(st.items) + '</div></div>' : '') +
             '<div class="box"><h4>Expected back (optional)</h4><div class="seg" style="margin-bottom:10px">' + quick.map(function (q) { return '<button data-rd="' + q.v + '" class="' + (st.expectedReturn === q.v ? 'on' : '') + '">' + (q.n === 1 ? 'Tomorrow' : 'In ' + q.n + ' days') + '</button>'; }).join('') + '</div>' +
             '<input class="inp" type="date" id="rd" value="' + esc(st.expectedReturn) + '" min="' + isoDay(new Date()) + '" aria-label="Expected return date"></div>' +
             '<div class="box"><h4>Note (optional)</h4><textarea class="inp" id="nt" placeholder="e.g. Autoclave mapping, building 3">' + esc(st.note) + '</textarea></div>';
@@ -860,15 +943,16 @@
       }
       function foot() {
         var browsing = st.step === 3 && st.picker && st.picker.browsing();
-        var ok = browsing ? true : st.step === 1 ? !!st.companyId : st.step === 2 ? st.engineers.length > 0 : st.step === 3 ? st.devices.length > 0 : true;
-        var label = st.step === 4 ? (can('keep') ? 'Confirm check-out' : 'Send request') : browsing ? '✓ Done · back to categories' + (st.devices.length ? ' (' + st.devices.length + ')' : '') : st.step === 3 ? 'Next · ' + st.devices.length + ' selected' : 'Next';
+        var nSel = st.devices.length + st.items.length;
+        var ok = browsing ? true : st.step === 1 ? !!st.companyId : st.step === 2 ? st.engineers.length > 0 : st.step === 3 ? nSel > 0 : true;
+        var label = st.step === 4 ? (can('keep') ? 'Confirm check-out' : 'Send request') : browsing ? '✓ Done · back to categories' + (nSel ? ' (' + nSel + ')' : '') : st.step === 3 ? 'Next · ' + nSel + ' selected' : 'Next';
         setFoot((st.step > 1 ? '<button class="btn ghost" data-prev style="flex:0 0 auto">Back</button>' : '') + '<button class="btn ' + (st.step === 4 ? 'blue' : '') + '" data-next ' + (ok ? '' : 'disabled') + '>' + label + '</button>');
         var p = $('[data-prev]'); if (p) p.onclick = function () { if (browsing) return st.picker.back(); go(st.step - 1); };
         $('[data-next]').onclick = function () {
           if (browsing) return st.picker.back();
           if (st.step < 4) return go(st.step + 1);
           var b = this; b.disabled = true; b.innerHTML = '<span class="spin"></span>';
-          req('checkout', { companyId: st.companyId, engineerIds: st.engineers, deviceIds: st.devices, expectedReturn: st.expectedReturn, note: st.note })
+          req('checkout', { companyId: st.companyId, engineerIds: st.engineers, deviceIds: st.devices, items: st.items, expectedReturn: st.expectedReturn, note: st.note })
             .then(function (r) { return refresh(true).then(function () { return r; }); })
             .then(function (r) { if (r.pending) requestSent(body, setFoot, setTitle, r.checkoutId); else doneScreen(body, setFoot, setTitle, r.checkoutId); })
             .catch(function (e) { toast(e.message, true); b.disabled = false; b.textContent = can('keep') ? 'Confirm check-out' : 'Send request'; });
@@ -881,7 +965,7 @@
     setTitle('Request sent', '');
     var c = S.data.checkouts.filter(function (x) { return x.id === coId; })[0] || { companyId: '', deviceIds: [], engineers: [] };
     body.innerHTML = '<div class="done"><div class="ok" style="background:var(--pending)">' + ICON.bigtick + '</div><h3>Waiting for a lab keeper</h3><p>' +
-      c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' for ' + esc(coName(c.companyId)) + ' are reserved for you.<br>Ahmed, Sara or Mohamed will review and approve the list.</p></div>';
+      countLabel(c.deviceIds.length, c.items) + ' for ' + esc(coName(c.companyId)) + ' — reserved for you.<br>Ahmed, Sara or Mohamed will review and approve the list.</p></div>';
     setFoot('<button class="btn ghost" data-close>Done</button>');
     $('[data-close]').onclick = function () { closeAll(); };
   }
@@ -900,9 +984,10 @@
             var d = IDX.dev[id]; if (!d) return ''; var on = keep.indexOf(id) >= 0, k = cert(d);
             return '<button class="row' + (on ? ' sel' : '') + '" data-k="' + id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
               (k.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
-          }).join('') + '</div>';
+          }).join('') + '</div>' + ((c.items || []).length ? '<div class="box"><h4>Loggers, sensors &amp; kits</h4><div class="chips" style="margin-top:0">' + itemChips(c.items) + '</div></div>' : '');
         $$('[data-k]', body).forEach(function (b) { b.onclick = function () { var i = keep.indexOf(b.dataset.k); if (i >= 0) keep.splice(i, 1); else keep.push(b.dataset.k); draw(); }; });
-        setFoot('<button class="btn ghost" data-no style="flex:0 0 auto">Decline</button><button class="btn blue" data-yes ' + (keep.length ? '' : 'disabled') + '>Approve ' + keep.length + ' device' + (keep.length === 1 ? '' : 's') + '</button>');
+        var okN = keep.length + (c.items || []).length;
+        setFoot('<button class="btn ghost" data-no style="flex:0 0 auto">Decline</button><button class="btn blue" data-yes ' + (okN ? '' : 'disabled') + '>Approve ' + countLabel(keep.length, c.items) + '</button>');
         $('[data-no]').onclick = function () { closeSheet(); decideRequest(coId, false); };
         $('[data-yes]').onclick = function () { closeSheet(); decideRequest(coId, true, keep); };
       }
@@ -924,7 +1009,7 @@
   function doneScreen(body, setFoot, setTitle, coId) {
     setTitle('Checked out', '');
     var c = S.data.checkouts.filter(function (x) { return x.id === coId; })[0];
-    body.innerHTML = '<div class="done"><div class="ok">' + ICON.bigtick + '</div><h3>' + esc(coName(c.companyId)) + '</h3><p>' + c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' with ' + esc(names(c.engineers)) + '<br>Receipt ' + esc(coId) + '</p>' +
+    body.innerHTML = '<div class="done"><div class="ok">' + ICON.bigtick + '</div><h3>' + esc(coName(c.companyId)) + '</h3><p>' + countLabel(c.deviceIds.length, c.items) + ' with ' + esc(names(c.engineers)) + '<br>Receipt ' + esc(coId) + '</p>' +
       '<button class="btn blue wide" data-pdf-now>' + ICON.pdf + 'Receipt PDF</button></div>';
     setFoot('<button class="btn ghost" data-close>Done</button>');
     $('[data-pdf-now]', body).onclick = function () { receiptPdf(coId); };
@@ -935,16 +1020,24 @@
   function checkinFlow(coId) {
     var devs = S.data.devices.filter(function (d) { return d.status === 'At Client' && d.companyId === coId; });
     var sel = devs.map(function (d) { return d.id; });
+    var hs = holdingsAt(coId), back = {}; hs.forEach(function (h) { back[h.id] = +h.qty; });
     openSheet(function (body, setFoot, setTitle) {
       setTitle('Back from ' + coName(coId));
       function draw() {
-        body.innerHTML = '<div class="note">Untick anything that is still at the client.</div><div id="dp"></div>';
-        devicePicker($('#dp', body), sel, function (d) { return d.status === 'At Client' && d.companyId === coId; }, foot);
+        body.innerHTML = '<div class="note">Untick anything that is still at the client.</div><div id="dp"></div>' +
+          (hs.length ? '<div class="sec"><h2>Loggers, sensors &amp; kits</h2><small>how many came back?</small></div><div id="qp"></div>' : '');
+        if (devs.length) devicePicker($('#dp', body), sel, function (d) { return d.status === 'At Client' && d.companyId === coId; }, foot);
+        if (hs.length) {
+          var qr = qtyRows(hs.map(function (h) { return { key: h.id, name: h.name, sub: h.qty + ' out with ' + names(h.holders), max: +h.qty, qty: back[h.id] }; }), function (k, v) { back[k] = v; draw(); });
+          $('#qp', body).innerHTML = qr.html; qr.wire($('#qp', body));
+        }
         foot();
       }
+      function itemsBack() { return hs.filter(function (h) { return back[h.id] > 0; }).map(function (h) { return { holdingId: h.id, qty: back[h.id] }; }); }
       function foot() {
-        setFoot('<button class="btn" data-ok ' + (sel.length ? '' : 'disabled') + '>Check in ' + sel.length + ' device' + (sel.length === 1 ? '' : 's') + '</button>');
-        $('[data-ok]').onclick = function () { submitCheckin(sel.slice(), this); };
+        var ib = itemsBack(), n = sel.length + ib.length;
+        setFoot('<button class="btn" data-ok ' + (n ? '' : 'disabled') + '>Check in ' + countLabel(sel.length, ib) + '</button>');
+        $('[data-ok]').onclick = function () { submitCheckin(sel.slice(), this, ib); };
       }
       draw();
     });
@@ -953,10 +1046,10 @@
     var d = IDX.dev[ids[0]];
     askConfirm('Mark ' + d.description + ' …' + d.serialTail + ' as back in the office?', 'Back in office', function () { submitCheckin(ids); });
   }
-  function submitCheckin(ids, btn) {
+  function submitCheckin(ids, btn, items) {
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
-    req('checkin', { deviceIds: ids }).then(function () { return refresh(true); })
-      .then(function () { closeAll(); toast(ids.length + ' device' + (ids.length > 1 ? 's' : '') + ' back in the office'); })
+    req('checkin', { deviceIds: ids, items: items || [] }).then(function () { return refresh(true); })
+      .then(function () { closeAll(); toast(countLabel(ids.length, items) + ' back in the office'); })
       .catch(function (e) { toast(e.message, true); if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } });
   }
 
@@ -997,13 +1090,20 @@
 
   /* ---------- transfer between companies ---------- */
   function transferFlow(fromCo, preIds) {
-    var st = { step: preIds ? 2 : 1, devices: (preIds || []).slice(), to: [], companyId: '', note: '' };
+    var st = { step: preIds ? 2 : 1, devices: (preIds || []).slice(), to: [], companyId: '', note: '', move: {} };
+    var hs = preIds ? [] : holdingsAt(fromCo); hs.forEach(function (h) { st.move[h.id] = +h.qty; });
+    function movingItems() { return hs.filter(function (h) { return st.move[h.id] > 0; }).map(function (h) { return { holdingId: h.id, qty: st.move[h.id], name: h.name }; }); }
     if (!preIds) st.devices = S.data.devices.filter(function (d) { return d.status === 'At Client' && d.companyId === fromCo && !d.pending; }).map(function (d) { return d.id; });
     openSheet(function (body, setFoot, setTitle) {
       function draw() {
         if (st.step === 1) {
           setTitle('Which devices move?', 'Step 1 of 4');
-          devicePicker(body, st.devices, function (d) { return d.status === 'At Client' && d.companyId === fromCo && !d.pending; }, foot);
+          body.innerHTML = '<div id="dp"></div>' + (hs.length ? '<div class="sec"><h2>Loggers, sensors &amp; kits</h2><small>how many move?</small></div><div id="qp"></div>' : '');
+          devicePicker($('#dp', body), st.devices, function (d) { return d.status === 'At Client' && d.companyId === fromCo && !d.pending; }, foot);
+          if (hs.length) {
+            var qr = qtyRows(hs.map(function (h) { return { key: h.id, name: h.name, sub: h.qty + ' here', max: +h.qty, qty: st.move[h.id] }; }), function (k, v) { st.move[k] = v; foot(); });
+            $('#qp', body).innerHTML = qr.html; qr.wire($('#qp', body));
+          }
         } else if (st.step === 2) {
           setTitle('Who takes them?', 'Step 2 of 4');
           body.innerHTML = '<div class="note">This person confirms on their phone that they received the devices.</div><div id="pp"></div>';
@@ -1016,7 +1116,7 @@
           var devs = st.devices.map(function (id) { return IDX.dev[id]; });
           body.innerHTML = '<div class="box" style="margin-top:0"><h4>From</h4><div class="where">' + esc(coName(fromCo)) + '</div></div>' +
             '<div class="box"><h4>To</h4><div class="where">' + esc(coName(st.companyId)) + '</div><div class="meta">With <b>' + esc(IDX.user[st.to[0]].name) + '</b></div></div>' +
-            '<div class="box"><h4>' + devs.length + ' device' + (devs.length > 1 ? 's' : '') + '</h4><div class="chips" style="margin-top:0">' + devs.map(function (d) { return '<span class="dchip">' + tag(d, 'sm') + '<em>' + esc(d.description) + '</em></span>'; }).join('') + '</div></div>' +
+            '<div class="box"><h4>' + countLabel(devs.length, movingItems()) + '</h4><div class="chips" style="margin-top:0">' + devs.map(function (d) { return '<span class="dchip">' + tag(d, 'sm') + '<em>' + esc(d.description) + '</em></span>'; }).join('') + itemChips(movingItems()) + '</div></div>' +
             '<div class="box"><h4>Note (optional)</h4><textarea class="inp" id="nt">' + esc(st.note) + '</textarea></div>' +
             (st.to[0] === S.me.id ? '<div class="note">You are taking them yourself, so the move is confirmed right away.</div>' : '');
           $('#nt', body).oninput = function (e) { st.note = e.target.value; };
@@ -1024,14 +1124,14 @@
         foot();
       }
       function foot() {
-        var ok = st.step === 1 ? st.devices.length : st.step === 2 ? st.to.length : st.step === 3 ? st.companyId : 1;
+        var ok = st.step === 1 ? st.devices.length + movingItems().length : st.step === 2 ? st.to.length : st.step === 3 ? st.companyId : 1;
         var first = preIds ? 2 : 1;
         setFoot((st.step > first ? '<button class="btn ghost" data-prev style="flex:0 0 auto">Back</button>' : '') + '<button class="btn ' + (st.step === 4 ? 'blue' : '') + '" data-next ' + (ok ? '' : 'disabled') + '>' + (st.step === 4 ? 'Send transfer' : 'Next') + '</button>');
         var p = $('[data-prev]'); if (p) p.onclick = function () { st.step--; draw(); };
         $('[data-next]').onclick = function () {
           if (st.step < 4) { st.step++; return draw(); }
           var b = this; b.disabled = true; b.innerHTML = '<span class="spin"></span>';
-          req('transferRequest', { deviceIds: st.devices, toEngineerId: st.to[0], toCompanyId: st.companyId, note: st.note })
+          req('transferRequest', { deviceIds: st.devices, items: movingItems(), toEngineerId: st.to[0], toCompanyId: st.companyId, note: st.note })
             .then(function (r) { if (st.to[0] === S.me.id) return req('transferDecide', { transferId: r.transferId, accept: true }); })
             .then(function () { return refresh(true); })
             .then(function () { closeAll(); toast(st.to[0] === S.me.id ? 'Moved to ' + coName(st.companyId) : 'Sent — waiting for ' + IDX.user[st.to[0]].name + ' to confirm'); })
@@ -1146,6 +1246,48 @@
       $('[data-add]').onclick = function () { editDevice(null, draw); };
     });
   }
+  function adminStock() {
+    openSheet(function (body, setFoot, setTitle) {
+      setTitle('Loggers, sensors & kits');
+      function draw() {
+        body.innerHTML = '<div class="note">These are counted by quantity, not by serial. Set the total you own — the app shows how many are in the lab and who has the rest.</div>' +
+          Core.STOCK_GROUPS.map(function (g) {
+            var sts = stockList().filter(function (x) { return x.group === g; });
+            return '<div class="sec"><h2>' + esc(g) + '</h2></div><div class="list">' + sts.map(function (st) {
+              return '<button class="row" data-st="' + st.id + '"><span class="t"><b>' + esc(st.name) + '</b><small>' + (st.total === '' ? 'Total not set' : st.total + ' total') + ' · ' + stockOut(st.id) + ' out</small></span></button>';
+            }).join('') + '</div>';
+          }).join('');
+        $$('[data-st]', body).forEach(function (b) { b.onclick = function () { editStock(stockList().filter(function (x) { return x.id === b.dataset.st; })[0]); }; });
+      }
+      draw();
+      setFoot('<button class="btn blue" data-add>Add a type</button>');
+      $('[data-add]').onclick = function () { editStock(null); };
+    });
+  }
+  function editStock(st) {
+    var f = st ? JSON.parse(JSON.stringify(st)) : { name: '', group: 'Data Loggers', total: '' };
+    openSheet(function (body, setFoot, setTitle) {
+      setTitle(st ? 'Edit type' : 'Add a type');
+      body.innerHTML = '<label class="f"><span>Name (e.g. Dickson Temp/RH data logger)</span><input class="inp" id="sn" value="' + esc(f.name) + '"></label>' +
+        '<div class="box" style="margin:4px 0 14px"><h4>Group</h4><div class="seg">' + Core.STOCK_GROUPS.map(function (g) { return '<button data-g="' + esc(g) + '" class="' + (f.group === g ? 'on' : '') + '">' + esc(g) + '</button>'; }).join('') + '</div></div>' +
+        '<label class="f"><span>How many do you own? (leave empty if not counted)</span><input class="inp" id="tt" inputmode="numeric" value="' + esc(f.total) + '"></label>' +
+        (st ? '<div class="meta">' + stockOut(st.id) + ' are out right now.</div>' : '');
+      $('#sn', body).oninput = function (e) { f.name = e.target.value; };
+      $('#tt', body).oninput = function (e) { f.total = e.target.value.replace(/[^0-9]/g, ''); };
+      $$('[data-g]', body).forEach(function (b) { b.onclick = function () { f.group = b.dataset.g; $$('[data-g]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
+      setFoot((st ? '<button class="btn ghost" data-remove style="flex:0 0 auto;color:var(--danger)">Remove</button>' : '') + '<button class="btn" data-save>Save</button>');
+      var rm = $('[data-remove]');
+      if (rm) rm.onclick = function () {
+        askConfirm('Remove “' + st.name + '” from the list?', 'Remove', function () {
+          var g = JSON.parse(JSON.stringify(st)); g.active = false;
+          req('saveStock', { item: g }).then(function () { return refresh(true); }).then(function () { closeAll(); adminStock(); toast('Removed'); }).catch(function (e) { toast(e.message, true); });
+        }, true);
+      };
+      $('[data-save]').onclick = function () {
+        req('saveStock', { item: f }).then(function () { return refresh(true); }).then(function () { closeAll(); adminStock(); toast('Saved'); }).catch(function (e) { toast(e.message, true); });
+      };
+    });
+  }
   function editDevice(d, after) {
     var f = d ? JSON.parse(JSON.stringify(d)) : { category: '', manufacturer: '', description: '', model: '', serial: '', range: '', accuracy: '', calDue: '', certUrl: '', certStatus: 'dated' };
     openSheet(function (body, setFoot, setTitle) {
@@ -1234,9 +1376,22 @@
         var x = M + 2; wrapped.forEach(function (w, k) { doc.text(w, x, y + 5); x += cols[k].w; });
         y += h;
       });
+      var n0 = c.deviceIds.length;
+      (c.items || []).forEach(function (it, j) {
+        var stx = it.stockId ? stockList().filter(function (x) { return x.id === it.stockId; })[0] : null;
+        var nm = lat(it.name) || (stx && stx.note) || 'Other item';
+        var cells = [String(n0 + j + 1), nm, it.group || '', 'Qty ' + it.qty, ''];
+        var wrapped = cells.map(function (t, k) { return doc.splitTextToSize(lat(t) || '', cols[k].w - 3); });
+        var h = Math.max.apply(null, wrapped.map(function (w) { return w.length; })) * 4.6 + 3.4;
+        if (y + h > 262) { doc.addPage(); y = 18; headRow(); }
+        if ((n0 + j) % 2) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, h, 'F'); }
+        doc.setFontSize(10); doc.setTextColor(23, 34, 51);
+        var x = M + 2; wrapped.forEach(function (w, k) { if (k === 3) doc.setFont('helvetica', 'bold'); doc.text(w, x, y + 5); doc.setFont('helvetica', 'normal'); x += cols[k].w; });
+        y += h;
+      });
       doc.setDrawColor(214, 221, 230); doc.setLineWidth(0.3); doc.line(M, y, W - M, y);
       y += 6; doc.setFontSize(10); doc.setTextColor(90, 104, 121);
-      doc.text(c.deviceIds.length + ' device' + (c.deviceIds.length > 1 ? 's' : '') + ' in total. ' + (c.decidedByName && c.decidedByName !== c.byName ? 'Requested by ' + lat(c.byName) + ', approved by ' + lat(c.decidedByName) + '.' : 'Checked out by ' + lat(c.byName) + '.'), M, y);
+      doc.text(countLabel(c.deviceIds.length, c.items) + ' in total. ' + (c.decidedByName && c.decidedByName !== c.byName ? 'Requested by ' + lat(c.byName) + ', approved by ' + lat(c.decidedByName) + '.' : 'Checked out by ' + lat(c.byName) + '.'), M, y);
       if (y > 236) { doc.addPage(); y = 20; }
       y = Math.max(y + 16, 238);
       [['Received by (engineer)', M], ['Handed over by (lab keeper)', 118]].forEach(function (s) {

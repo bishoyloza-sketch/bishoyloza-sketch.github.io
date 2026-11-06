@@ -9,6 +9,30 @@ var Core = (function () {
   var STATUSES = ['In Office', 'At Client', 'Maintenance', 'External Calibration', 'Out of Service', 'Other'];
   var SERVICE = ['Maintenance', 'External Calibration', 'Other'];
 
+  /* Items counted by quantity (no serial): data loggers, validator sensors, connections, tools.
+   * total '' = not counted yet (no availability limit). Admin edits them in the app. */
+  var STOCK_GROUPS = ['Data Loggers', 'Validator Sensors', 'Connections', 'Tools & Accessories'];
+  var DEFAULT_STOCK = [
+    ['S01', 'Data Loggers', 'Dickson Temp/RH data logger'], ['S02', 'Data Loggers', 'Elitech data logger'], ['S03', 'Data Loggers', 'Lascar data logger'],
+    ['S04', 'Data Loggers', 'High temp/RH data logger'], ['S05', 'Data Loggers', 'Stainless steel data logger'],
+    ['S06', 'Validator Sensors', 'Fluke validator sensor – Type T'], ['S07', 'Validator Sensors', 'Fluke validator sensor – Type K'],
+    ['S08', 'Connections', 'Pressure connections'], ['S09', 'Connections', 'Autoclave connections'], ['S10', 'Connections', 'Gland connections'],
+    ['S11', 'Tools & Accessories', 'مفتاح فرنساوي', 'Adjustable wrench'], ['S12', 'Tools & Accessories', 'مفتاح عادة', 'Open-end wrench'], ['S13', 'Tools & Accessories', 'مفك عادة', 'Flat screwdriver'],
+    ['S14', 'Tools & Accessories', 'مفك صليبة', 'Phillips screwdriver'], ['S15', 'Tools & Accessories', 'بنسة', 'Pliers'], ['S16', 'Tools & Accessories', 'شاحن بطاريات', 'Battery charger'],
+    ['S17', 'Tools & Accessories', 'وصلة كهرباء', 'Extension cord']
+  ];
+  function ensureStock(db) {
+    if (!db.stock) db.stock = [];
+    if (!db.holdings) db.holdings = [];
+    if (db.stock.length) return false;
+    DEFAULT_STOCK.forEach(function (x) { db.stock.push({ id: x[0], group: x[1], name: x[2], total: '', active: true, note: x[3] || '' }); });
+    return true;
+  }
+  /* Buffers / solutions: a portion is poured out, the bottle stays in the lab */
+  function isPortion(d) {
+    return /^(pH Solution|Redox)$/.test(d.category || '') || (d.category === 'Conductivity' && /buffer|solution/i.test(d.description || ''));
+  }
+
   /* ---------- tiny SHA-256 (sync, works in browser + Apps Script) ---------- */
   function sha256(ascii) {
     function rr(v, a) { return (v >>> a) | (v << (32 - a)); }
@@ -92,6 +116,36 @@ var Core = (function () {
     d.pending = '';
   }
 
+  function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+  function outQty(db, stockId) { var n = 0; db.holdings.forEach(function (h) { if (h.stockId === stockId) n += num(h.qty); }); return n; }
+  function cleanItems(db, items) {
+    return (items || []).map(function (it) {
+      var q = num(it.qty); need(q > 0, 'Quantity must be at least 1.');
+      var st = it.stockId ? byId(db.stock, it.stockId) : null;
+      if (it.stockId) need(st && st.active !== false, 'Unknown item.');
+      var name = st ? st.name : String(it.name || '').trim(); need(name, 'Write the name of the item.');
+      return { stockId: st ? st.id : '', name: name, group: st ? st.group : (it.group || 'Other'), qty: q };
+    });
+  }
+  function checkAvailable(db, items) {
+    var want = {};
+    items.forEach(function (it) { if (it.stockId) want[it.stockId] = (want[it.stockId] || 0) + it.qty; });
+    Object.keys(want).forEach(function (sid) {
+      var st = byId(db.stock, sid); if (st.total === '' || st.total == null) return;
+      var free = num(st.total) - outQty(db, sid);
+      need(want[sid] <= free, st.name + ': only ' + Math.max(free, 0) + ' in the lab.');
+    });
+  }
+  function giveItems(db, now, actor, rec, co) {
+    (rec.items || []).forEach(function (it, i) {
+      db.holdings.push({ id: 'H' + now + '-' + i + '-' + db.holdings.length, stockId: it.stockId, name: it.name, group: it.group, qty: it.qty,
+        companyId: co.id, holders: rec.engineers, since: iso(now), checkoutId: rec.id });
+      db.movements.push({ id: 'M' + now + '-I' + i + '-' + db.movements.length, ts: iso(now), deviceId: 'ITEM:' + (it.stockId || it.name), action: 'Checked out',
+        status: 'At Client', companyId: co.id, holders: rec.engineers, byId: actor.id, byName: actor.name, checkoutId: rec.id, note: it.qty + ' × ' + it.name });
+    });
+    if ((rec.items || []).length) { touch(db, 'holdings'); touch(db, 'movements'); }
+  }
+
   function nextCheckoutId(db, now) {
     var y = new Date(now).getFullYear(), n = 0, pre = 'CO-' + y + '-';
     db.checkouts.forEach(function (c) { if (c.id.indexOf(pre) === 0) n = Math.max(n, parseInt(c.id.slice(pre.length), 10) || 0); });
@@ -100,11 +154,13 @@ var Core = (function () {
 
   function releaseCheckout(db, now, actor, rec, devs, co) {
     devs.forEach(function (d) {
+      if (isPortion(d)) { log(db, now, actor, d, 'Portion taken', { checkoutId: rec.id, note: 'to ' + co.name + ' — bottle stays in the lab' }); return; }
       if (d.pending !== rec.id) cancelPendingFor(db, now, actor, d); else d.pending = '';
       d.status = 'At Client'; d.companyId = co.id; d.holders = rec.engineers; d.since = iso(now);
       d.expectedReturn = rec.expectedReturn || ''; d.checkoutId = rec.id; d.note = rec.note || '';
       log(db, now, actor, d, 'Checked out', { checkoutId: rec.id, note: rec.note });
     });
+    giveItems(db, now, actor, rec, co);
     touch(db, 'devices'); co.lastUsed = iso(now); touch(db, 'companies');
   }
 
@@ -132,26 +188,29 @@ var Core = (function () {
     checkout: function (db, actor, p, now) {
       var co = byId(db.companies, p.companyId); need(co, 'Choose the company.');
       need(p.engineerIds && p.engineerIds.length, 'Choose at least one engineer.');
-      need(p.deviceIds && p.deviceIds.length, 'Choose at least one device.');
+      p.deviceIds = p.deviceIds || [];
+      var items = cleanItems(db, p.items);
+      need(p.deviceIds.length || items.length, 'Choose at least one device or item.');
       var eng = p.engineerIds.map(function (id) { var u = byId(db.users, id); need(u, 'Unknown engineer.'); return personRef(u); });
       var keeper = canKeep(actor);
       var devs = p.deviceIds.map(function (id) {
         var d = byId(db.devices, id); need(d, 'Unknown device.');
         need(d.status === 'In Office' || isAdmin(actor), devName(d) + ' is not in the office (' + d.status + ').');
-        if (!keeper) need(!d.pending, devName(d) + ' is already reserved in another request.');
+        if (!keeper && !isPortion(d)) need(!d.pending, devName(d) + ' is already reserved in another request.');
         return d;
       });
+      checkAvailable(db, items);
       var id = nextCheckoutId(db, now);
       var rec = {
         id: id, ts: iso(now), companyId: co.id, engineers: eng, deviceIds: p.deviceIds.slice(),
-        expectedReturn: p.expectedReturn || '', note: p.note || '', byId: actor.id, byName: actor.name,
+        expectedReturn: p.expectedReturn || '', note: p.note || '', byId: actor.id, byName: actor.name, items: items,
         status: keeper ? 'Approved' : 'Pending', requestedTs: iso(now),
         decidedById: keeper ? actor.id : '', decidedByName: keeper ? actor.name : '', decidedTs: keeper ? iso(now) : ''
       };
       db.checkouts.push(rec);
       touch(db, 'checkouts');
       if (!keeper) {
-        devs.forEach(function (d) { d.pending = id; log(db, now, actor, d, 'Check-out requested', { checkoutId: id, note: 'for ' + co.name }); });
+        devs.forEach(function (d) { if (!isPortion(d)) d.pending = id; log(db, now, actor, d, 'Check-out requested', { checkoutId: id, note: 'for ' + co.name }); });
         touch(db, 'devices');
         return { checkoutId: id, pending: true };
       }
@@ -165,14 +224,16 @@ var Core = (function () {
       var own = c.byId === actor.id;
       need(canKeep(actor) || (own && !p.accept), 'Only a lab keeper can approve this request.');
       var co = byId(db.companies, c.companyId);
-      var keep = p.accept ? (p.deviceIds && p.deviceIds.length ? p.deviceIds : c.deviceIds) : [];
-      if (p.accept) need(keep.length, 'Keep at least one device, or decline the request.');
+      var keep = p.accept ? (p.deviceIds ? p.deviceIds : c.deviceIds) : [];
+      if (p.accept && p.items) c.items = cleanItems(db, p.items);
+      if (p.accept) need(keep.length || (c.items || []).length, 'Keep at least one device, or decline the request.');
       c.deviceIds.forEach(function (id) {
         var d = byId(db.devices, id); if (!d || d.pending !== c.id) return;
         if (keep.indexOf(id) < 0) { d.pending = ''; log(db, now, actor, d, p.accept ? 'Removed from request' : (own && !canKeep(actor) ? 'Request cancelled' : 'Request declined'), { checkoutId: c.id, note: p.note || '' }); }
       });
       c.decidedById = actor.id; c.decidedByName = actor.name; c.decidedTs = iso(now);
       if (!p.accept) { c.status = own && !canKeep(actor) ? 'Cancelled' : 'Declined'; touch(db, 'checkouts'); touch(db, 'devices'); return { ok: true }; }
+      checkAvailable(db, c.items || []);
       var devs = keep.map(function (id) {
         var d = byId(db.devices, id); need(d && (d.pending === c.id || d.status === 'In Office'), 'A device in this request is no longer available.');
         need(d.status === 'In Office' || isAdmin(actor), devName(d) + ' is not in the office (' + d.status + ').');
@@ -187,7 +248,17 @@ var Core = (function () {
 
     checkin: function (db, actor, p, now) {
       need(canKeep(actor), 'Only lab keepers can check devices in.');
-      need(p.deviceIds && p.deviceIds.length, 'Choose the devices that came back.');
+      p.deviceIds = p.deviceIds || [];
+      need(p.deviceIds.length || (p.items || []).length, 'Choose what came back.');
+      (p.items || []).forEach(function (it) {
+        var h = byId(db.holdings, it.holdingId); need(h, 'This item is no longer out.');
+        var q = Math.min(num(it.qty), num(h.qty)); if (q <= 0) return;
+        h.qty = num(h.qty) - q;
+        db.movements.push({ id: 'M' + now + '-R' + db.movements.length, ts: iso(now), deviceId: 'ITEM:' + (h.stockId || h.name), action: 'Returned to office',
+          status: 'In Office', companyId: h.companyId, holders: h.holders, byId: actor.id, byName: actor.name, checkoutId: h.checkoutId, note: q + ' × ' + h.name });
+        touch(db, 'movements');
+      });
+      if ((p.items || []).length) { db.holdings = db.holdings.filter(function (h) { return num(h.qty) > 0; }); touch(db, 'holdings'); }
       p.deviceIds.forEach(function (id) {
         var d = byId(db.devices, id); need(d, 'Unknown device.');
         cancelPendingFor(db, now, actor, d);
@@ -219,7 +290,13 @@ var Core = (function () {
     transferRequest: function (db, actor, p, now) {
       var to = byId(db.users, p.toEngineerId); need(to, 'Choose who takes the devices.');
       var co = byId(db.companies, p.toCompanyId); need(co, 'Choose the company the devices go to.');
-      need(p.deviceIds && p.deviceIds.length, 'Choose the devices.');
+      p.deviceIds = p.deviceIds || [];
+      var tItems = (p.items || []).map(function (it) {
+        var h = byId(db.holdings, it.holdingId); need(h, 'This item is no longer out.');
+        var q = num(it.qty); need(q > 0 && q <= num(h.qty), h.name + ': choose between 1 and ' + h.qty + '.');
+        return { holdingId: h.id, stockId: h.stockId, name: h.name, group: h.group, qty: q };
+      });
+      need(p.deviceIds.length || tItems.length, 'Choose the devices.');
       var from = null;
       p.deviceIds.forEach(function (id) {
         var d = byId(db.devices, id); need(d, 'Unknown device.');
@@ -227,8 +304,9 @@ var Core = (function () {
         need(!d.pending, devName(d) + ' already has a transfer waiting.');
         from = from || d;
       });
+      if (!from) { var h0 = byId(db.holdings, tItems[0].holdingId); from = { companyId: h0.companyId, holders: h0.holders }; }
       var t = {
-        id: 'TR' + now, ts: iso(now), deviceIds: p.deviceIds.slice(),
+        id: 'TR' + now, ts: iso(now), deviceIds: p.deviceIds.slice(), items: tItems,
         fromCompanyId: from.companyId, fromHolders: from.holders,
         toCompanyId: co.id, toEngineer: personRef(to),
         requestedById: actor.id, requestedByName: actor.name, note: p.note || '',
@@ -256,6 +334,17 @@ var Core = (function () {
         } else {
           log(db, now, actor, d, 'Transfer declined', { note: 'by ' + actor.name });
         }
+      });
+      if (p.accept) (t.items || []).forEach(function (it) {
+        var h = byId(db.holdings, it.holdingId); if (!h) return;
+        var q = Math.min(num(it.qty), num(h.qty)); if (q <= 0) return;
+        h.qty = num(h.qty) - q;
+        db.holdings.push({ id: 'H' + now + '-T' + db.holdings.length, stockId: h.stockId, name: h.name, group: h.group, qty: q,
+          companyId: t.toCompanyId, holders: [t.toEngineer], since: iso(now), checkoutId: h.checkoutId });
+        db.movements.push({ id: 'M' + now + '-T' + db.movements.length, ts: iso(now), deviceId: 'ITEM:' + (h.stockId || h.name), action: 'Transferred',
+          status: 'At Client', companyId: t.toCompanyId, holders: [t.toEngineer], byId: actor.id, byName: actor.name, checkoutId: h.checkoutId, note: q + ' × ' + h.name + ' to ' + t.toEngineer.name });
+        db.holdings = db.holdings.filter(function (x) { return num(x.qty) > 0; });
+        touch(db, 'holdings'); touch(db, 'movements');
       });
       if (co && p.accept) { co.lastUsed = iso(now); touch(db, 'companies'); }
       touch(db, 'devices');
@@ -299,6 +388,19 @@ var Core = (function () {
       return { pin: pin };
     },
 
+    saveStock: function (db, actor, p, now) {
+      need(isAdmin(actor), 'Only the admin can edit loggers, sensors and kits.');
+      var it = p.item || {}; need(String(it.name || '').trim(), 'Write the item name.');
+      var ex = it.id ? byId(db.stock, it.id) : null;
+      if (!ex) { ex = { id: 'S' + now, note: '' }; db.stock.push(ex); }
+      ex.name = String(it.name).trim(); ex.group = STOCK_GROUPS.indexOf(it.group) >= 0 ? it.group : 'Tools & Accessories';
+      ex.total = it.total === '' || it.total == null ? '' : String(Math.max(0, num(it.total)));
+      if (it.active === false) need(outQty(db, ex.id) === 0, 'Some of these are still out. Check them in first.');
+      ex.active = it.active !== false;
+      touch(db, 'stock');
+      return { id: ex.id };
+    },
+
     saveDevice: function (db, actor, p, now) {
       need(isAdmin(actor), 'Only the admin can add or edit devices.');
       var d = p.device || {}; need(d.description && d.serial, 'Description and serial number are required.');
@@ -328,6 +430,7 @@ var Core = (function () {
   /* Apply one request. Returns { result, touched } ; throws userFacing errors. */
   function apply(db, req, now) {
     db._touched = {};
+    if (ensureStock(db)) db._touched.stock = true;
     var op = ops[req.action];
     need(op, 'Unknown action.');
     var actor = verify(db, req.userId, req.pin);
@@ -339,6 +442,7 @@ var Core = (function () {
   /* Read model for the app. */
   function snapshot(db, opts) {
     opts = opts || {};
+    ensureStock(db);
     var openTransfers = db.transfers.filter(function (t) { return t.status === 'Pending'; });
     var recentCheckouts = db.checkouts.slice(-300);
     var moves = db.movements.slice(-(opts.movements || 250));
@@ -348,13 +452,15 @@ var Core = (function () {
       users: db.users.map(publicUser),
       transfers: openTransfers,
       checkouts: recentCheckouts,
+      stock: db.stock.filter(function (x) { return x.active !== false; }),
+      holdings: db.holdings,
       movements: moves,
       serverTime: opts.now ? iso(opts.now) : ''
     };
   }
 
   return {
-    STATUSES: STATUSES, SERVICE: SERVICE, apply: apply, snapshot: snapshot, isCoReq: isCoReq,
+    STATUSES: STATUSES, SERVICE: SERVICE, apply: apply, snapshot: snapshot, isCoReq: isCoReq, isPortion: isPortion, STOCK_GROUPS: STOCK_GROUPS,
     pinHash: pinHash, serialTail: serialTail, verify: verify, publicUser: publicUser
   };
 })();

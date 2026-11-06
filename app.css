@@ -256,3 +256,16 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .pushbar{display:flex;align-items:center;gap:12px;background:var(--blue-soft);border:1px solid #bcdcf3;border-radius:var(--r-md);padding:12px 14px;margin-top:4px}
 .pushbar div{flex:1}.pushbar b{display:block;color:var(--navy);font-size:15px}.pushbar small{display:block;color:var(--muted);font-size:13px}
 .pushbar.off{background:var(--bg);border-color:var(--line)}
+
+/* quantity items */
+.qrow{cursor:default}
+.stepper{display:inline-flex;align-items:center;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);flex:none}
+.stepper button{width:40px;height:40px;border:0;background:var(--bg);font-size:22px;font-weight:600;color:var(--navy)}
+.stepper button:active{background:var(--blue-soft)}
+.stepper input{width:48px;height:40px;border:0;text-align:center;font-family:var(--cond);font-size:18px;font-weight:600;color:var(--navy);background:var(--surface)}
+.qn{font-family:var(--cond);font-weight:700;color:var(--blue);font-size:14px;padding-left:5px}
+.qn.big{font-size:18px;padding:0 6px}
+.qchip{padding:4px 10px 4px 6px}
+.cats button.qtile{background:linear-gradient(180deg,#F4F9FE,#fff);border-style:dashed}
+.otherbox{margin-top:14px}.orow{display:flex;gap:8px;align-items:center}.orow .inp{height:42px}.orow .btn{flex:none}
+.kitrow{display:block}.kitrow .kitwhere{color:var(--client)!important;font-weight:500;white-space:normal!important}
