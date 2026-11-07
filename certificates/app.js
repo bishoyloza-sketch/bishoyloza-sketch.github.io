@@ -66,7 +66,7 @@ function saveProjects() { LS.set('projects', S.projects); }
 var isAdmin = function () { return S.me && S.me.role === 'admin'; };
 
 /* ================= Microsoft / SharePoint ================= */
-var SCOPES = ['User.Read', 'Files.Read.All', 'Sites.Read.All'];
+var SCOPES = ['User.Read', 'Files.ReadWrite.All', 'Sites.Read.All'];
 var MS = { app: null, account: null, ready: null, error: '' };
 MS.ready = (function () {
   if (!CFG.MS_CLIENT_ID) { MS.error = 'not-configured'; return Promise.resolve(); }
@@ -296,11 +296,12 @@ function wType(p) {
 /* ---- 4. order document from SharePoint ---- */
 var TYPE_WORDS = { contract: ['contract', 'عقد', 'agreement'], po: ['PO', 'purchase order', 'أمر توريد'], offer: ['offer', 'quotation', 'عرض سعر'], approval: ['approval', 'موافقة'], visit: ['visit', 'زيارة'] };
 var DOC_EXT = /\.(pdf|docx?|xlsx?|jpe?g|png|msg|eml)$/i;
+var ORDER_FOLDER = 'General/Certificates/Orders'; /* where an attached PO / document is saved on SharePoint (can be changed) */
 function findOrderFiles(p) {
   var terms = companyTerms(p.company).slice(0, 2), words = TYPE_WORDS[p.orderType] || [], qs = [];
   terms.forEach(function (t) { words.slice(0, 2).forEach(function (w) { qs.push('"' + t.replace(/"/g, '') + '" ' + (w.indexOf(' ') > 0 ? '"' + w + '"' : w)); }); });
   var toks = terms.map(function (t) { return t.toLowerCase().split(/[^a-z0-9؀-ۿ]+/).filter(function (w) { return w.length > 2 && !/pharma|company|egypt|for|the|and/.test(w); }); });
-  return Promise.all([Promise.all(qs.map(function (q) { return spSearch(q, 25).catch(function () { return []; }); })), calibrationOrders().catch(function () { return []; })]).then(function (r) {
+  return Promise.all([Promise.all(qs.map(function (q) { return spSearch(q, 25).catch(function () { return []; }); })), p.orderType === 'po' || p.orderType === 'offer' ? calibrationOrders().catch(function () { return []; }) : Promise.resolve([])]).then(function (r) {
     var seen = {}, files = [].concat.apply([], r[0]).filter(function (f) { if (seen[f.id] || !DOC_EXT.test(f.name) || /cal\.?\s*cert|cover page/i.test(f.name)) return false; seen[f.id] = 1; return true; });
     var score = function (f) { var s = 0, nm = f.name.toLowerCase(), pa = pathOf(f).toLowerCase(); words.forEach(function (w) { if (nm.indexOf(w.toLowerCase()) >= 0) s += 3; if (pa.indexOf(w.toLowerCase()) >= 0) s += 1; });
       toks.forEach(function (ws) { ws.forEach(function (w) { if (nm.indexOf(w) >= 0) s += 2; else if (pa.indexOf(w) >= 0) s += 1; }); }); return s; };
@@ -308,56 +309,91 @@ function findOrderFiles(p) {
     files.sort(function (a, b) { return b.score - a.score || String(b.mod).localeCompare(String(a.mod)); });
     var cn = norm(p.company.official), cn2 = norm(p.company.name);
     var nums = (r[1] || []).filter(function (o) { var x = norm(o.customer); return x && (x === cn || x === cn2 || (cn && (x.indexOf(cn) >= 0 || cn.indexOf(x) >= 0)) || x.indexOf(cn2) >= 0); });
-    p.orderFiles = { at: Date.now(), list: files.slice(0, 20).map(function (f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, mod: f.mod, by: f.by, folder: pathOf(f).replace(/^https:\/\/[^/]+/, '').split('/').slice(-2, -1)[0] || '' }; }), nums: nums };
+    /* a PO number from Calibration Orders that appears in a file name → that file is the PO */
+    files.forEach(function (f) { nums.forEach(function (n) { if (n.number && n.number.length > 3 && f.name.indexOf(n.number) >= 0) { f.score += 10; f.number = n.number; f.value = n.value; f.date = n.date; } }); });
+    files.sort(function (a, b) { return b.score - a.score || String(b.mod).localeCompare(String(a.mod)); });
+    p.orderFiles = { at: Date.now(), list: files.slice(0, 20).map(function (f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, mod: f.mod, by: f.by, number: f.number || '', value: f.value || '', date: f.date || '', folder: pathOf(f).replace(/^https:\/\/[^/]+/, '').split('/').slice(-2, -1)[0] || '' }; }), nums: nums };
+    /* contract / offer / approval: pre-select the best match so you only confirm */
+    if (p.orderType !== 'po' && files[0] && files[0].score >= 4 && !(p.order && (p.order.fileId || p.order.skipped))) p.order = { fileId: files[0].id, driveId: files[0].driveId, fileName: files[0].name, webUrl: files[0].webUrl, auto: true };
     saveProjects(); return p.orderFiles; }); }
+var SITE = null;
+function siteDrive() { if (SITE) return Promise.resolve(SITE); var u = new URL(CFG.SP_SITE_URL);
+  return graph('GET', '/sites/' + u.hostname + ':' + u.pathname + '?$select=id').then(function (s) { return graph('GET', '/sites/' + s.id + '/drive?$select=id'); }).then(function (d) { SITE = d.id; return SITE; }); }
+function uploadOrder(p, file) { /* saves the attached document in SharePoint: <ORDER_FOLDER>/<company>/<file> */
+  var safe = function (s) { return String(s).replace(/["*:<>?\/\\|#%]/g, ' ').replace(/\s+/g, ' ').trim(); };
+  var path = ORDER_FOLDER + '/' + safe(p.company.name) + '/' + safe(file.name);
+  return siteDrive().then(function (drive) { return msToken().then(function (tk) {
+    return fetch('https://graph.microsoft.com/v1.0/drives/' + drive + '/root:/' + path.split('/').map(encodeURIComponent).join('/') + ':/content?@microsoft.graph.conflictBehavior=rename', { method: 'PUT', headers: { Authorization: 'Bearer ' + tk }, body: file })
+      .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error('Upload failed ' + r.status + ': ' + t.slice(0, 120)); }); return r.json(); }); }); }); }
 function wOrder(p) {
-  var of = p.orderFiles, o = p.order || {}, tname = TYPES[p.orderType][0];
+  var of = p.orderFiles, o = p.order || {}, tname = TYPES[p.orderType][0], isPO = p.orderType === 'po';
   if (!of && spOn() && !W.busy) { W.busy = true; findOrderFiles(p).catch(function (e) { toast(e.message, true); p.orderFiles = { list: [], nums: [], err: e.message }; }).then(function () { W.busy = false; if (p.stage === 'order') render(); }); }
-  var numLabel = { po: 'PO number', offer: 'Offer number', contract: 'Contract number', approval: 'Approval reference', visit: 'Visit reference' }[p.orderType];
-  $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3><div class="meta">' + esc(tname) + (p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></div>' +
-    (o.fileName || o.number || o.photo ? '<div class="note okbox"><b>Chosen:</b> ' + esc([o.fileName, o.number && numLabel + ' ' + o.number, o.photo && 'photo on this phone'].filter(Boolean).join(' · ')) + '</div>' : '') +
-    (!spOn() ? '<div class="note">Connect SharePoint on the home screen to pick the ' + esc(tname) + ' file from SharePoint.</div>'
-      : !of ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking for ' + esc(tname) + ' files of this company…</b></div>'
+  var chosen = o.fileName ? '<div class="card bar" style="--c:var(--office)"><h3>' + (o.auto ? 'Found – please confirm' : 'Chosen') + '</h3><div class="meta" style="word-break:break-word"><b>' + esc(o.fileName) + '</b>' + (o.number ? ' · No. ' + esc(o.number) : '') + (o.attached ? ' · attached by you' + (o.uploaded ? ' · saved on SharePoint' : ' · on this phone') : '') + '</div>' +
+      '<div class="cf">' + (o.webUrl ? '<a class="btn ghost sm" href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + (o.auto ? '<button class="btn sm" id="oConf">Yes, this one</button>' : '') + '<button class="btn ghost sm" id="oClr">Choose another</button></div></div>' : '';
+  $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3><div class="meta">' + esc(tname) + (p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></div>' + chosen +
+    (!spOn() ? '<div class="note warnbox">SharePoint is not connected yet, so the ' + esc(tname) + ' can\'t be found on the share. ' + (isPO ? 'You can attach it below.' : 'You can skip this for now.') + '</div>'
+      : !of ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking on SharePoint for the ' + esc(tname) + ' of this company…</b></div>'
       : (of.err ? '<div class="note warnbox">' + esc(of.err) + '</div>' : '') +
-        (of.nums && of.nums.length ? '<div class="sec" style="margin-top:4px"><h2>From Calibration Orders</h2><small>' + of.nums.length + '</small></div><div class="list">' + of.nums.map(function (n, i) { var on = o.number && o.number === n.number;
-          return '<button class="row' + (on ? ' sel' : '') + '" data-n="' + i + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(n.number || '(no number)') + '</b><small>' + esc([n.job, n.value && 'EGP ' + n.value, n.date].filter(Boolean).join(' · ')) + '</small></span></button>'; }).join('') + '</div>' : '') +
-        '<div class="sec"><h2>Files on SharePoint</h2><small>' + of.list.length + '</small></div>' +
+        (o.fileName && !o.auto ? '' : '<div class="sec" style="margin-top:4px"><h2>On SharePoint</h2><small>' + of.list.length + ' files</small></div>' +
         (of.list.length ? '<div class="list">' + of.list.map(function (f, i) { var on = o.fileId === f.id;
-          return '<div class="row' + (on ? ' sel' : '') + '"><button class="check" data-f="' + i + '" style="' + (on ? 'background:var(--blue);border-color:var(--blue)' : '') + '">' + (on ? '✓' : '') + '</button><span class="t" data-f2="' + i + '"><b>' + esc(f.name) + '</b><small>' + esc([f.folder, fmtDate(f.mod), f.by].filter(Boolean).join(' · ')) + '</small></span><a class="btn ghost sm" href="' + esc(f.webUrl) + '" target="_blank" rel="noopener" style="flex:none">Open</a></div>'; }).join('') + '</div>'
-          : '<div class="empty"><b>Nothing found on SharePoint</b>Use one of the options below.</div>') +
-        '<div class="cf"><button class="btn ghost sm" id="reF" style="flex:none">Search again</button></div>') +
-    '<div class="sec"><h2>Not on SharePoint?</h2></div>' +
-    '<div class="box" style="margin-top:0"><label class="f"><span>' + esc(numLabel) + '</span><input class="inp" id="onum" value="' + esc(o.number || '') + '"></label>' +
-    '<div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Date</span><input class="inp" type="date" id="odate" value="' + esc(o.date || '') + '"></label><label class="f" style="margin-bottom:0"><span>Value (EGP)</span><input class="inp" id="oval" inputmode="decimal" value="' + esc(o.value || '') + '"></label></div>' +
-    '<div class="cf"><button class="btn ghost" id="oph">' + I.cam.replace(/28/g, '20') + (o.photo ? ' Change photo' : ' Take a photo of it') + '</button></div>' +
-    (o.photo ? '<div class="small" style="margin-top:8px">The photo is kept on this phone for now. Saving it to SharePoint comes in the next step – we\'ll decide the folder together.</div>' : '') + '</div>';
-  var setO = function (x) { p.order = Object.assign({}, p.order || {}, x); saveProjects(); };
-  $$('[data-n]').forEach(function (b) { b.onclick = function () { var n = of.nums[+b.dataset.n]; setO({ number: n.number, value: n.value, dateText: n.date, source: n.file }); wOrder(p); }; });
-  var pickF = function (i) { var f = of.list[i]; if (o.fileId === f.id) setO({ fileId: '', fileName: '', webUrl: '' }); else setO({ fileId: f.id, driveId: f.driveId, fileName: f.name, webUrl: f.webUrl }); wOrder(p); };
+          return '<div class="row' + (on ? ' sel' : '') + '"><button class="check" data-f="' + i + '" style="' + (on ? 'background:var(--blue);border-color:var(--blue)' : '') + '">' + (on ? '✓' : '') + '</button><span class="t" data-f2="' + i + '"><b>' + esc(f.name) + '</b><small>' + esc([f.number && 'No. ' + f.number, f.folder, fmtDate(f.mod)].filter(Boolean).join(' · ')) + '</small></span><a class="btn ghost sm" href="' + esc(f.webUrl) + '" target="_blank" rel="noopener" style="flex:none">Open</a></div>'; }).join('') + '</div>'
+          : '<div class="empty"><b>No ' + esc(tname) + ' found on SharePoint</b>' + (isPO ? 'Attach it below.' : 'You can skip this for now.') + '</div>'))) +
+    (isPO || p.orderType === 'offer' ? '<div class="sec"><h2>Not on SharePoint?</h2></div><div class="cf" style="margin-top:0"><button class="btn ghost" id="oAtt">Attach the ' + (isPO ? 'PO' : 'document') + ' (PDF or photo)</button></div>' +
+      '<div class="small" style="margin-top:6px">It will be saved on SharePoint in <b>' + esc(ORDER_FOLDER + '/' + p.company.name) + '</b>.</div>' : '') +
+    (spOn() && of ? '<div class="cf"><button class="btn ghost sm" id="reF" style="flex:none">Search again</button></div>' : '');
+  var setO = function (x) { p.order = x; saveProjects(); wOrder(p); okNext(); };
+  var pickF = function (i) { var f = of.list[i]; if (o.fileId === f.id && !o.auto) return setO(null); setO({ fileId: f.id, driveId: f.driveId, fileName: f.name, webUrl: f.webUrl, number: f.number, value: f.value, date: f.date }); };
   $$('[data-f]').forEach(function (b) { b.onclick = function () { pickF(+b.dataset.f); }; }); $$('[data-f2]').forEach(function (b) { b.onclick = function () { pickF(+b.dataset.f2); }; });
-  var rf = $('#reF'); if (rf) rf.onclick = function () { p.orderFiles = null; wOrder(p); };
-  $('#onum').oninput = function (e) { setO({ number: e.target.value.trim() }); okNext(); }; $('#odate').oninput = function (e) { setO({ date: e.target.value }); }; $('#oval').oninput = function (e) { setO({ value: e.target.value }); };
-  $('#oph').onclick = function () { pickFiles('image/*').then(function (fs) { if (!fs.length) return; shrink(fs[0], 1600, 0.82).then(function (d) { if (!d) return toast('Could not read the photo', true); var key = 'order-' + p.id; IDB.put(key, d).then(function () { setO({ photo: key }); wOrder(p); toast('Photo kept'); }); }); }); };
-  var has = function () { var x = p.order || {}; return !!(x.fileName || x.number || x.photo); };
-  var optional = p.orderType === 'visit' || p.orderType === 'approval';
-  foot(p, has() ? 'Next' : (optional ? 'Next without a document' : 'Next'), has() || optional, function () { go(p, 'items'); });
-  function okNext() { var b = $('#wn'); if (b) { b.disabled = !(has() || optional); b.textContent = has() ? 'Next' : (optional ? 'Next without a document' : 'Next'); } }
+  var cf = $('#oConf'); if (cf) cf.onclick = function () { o.auto = false; setO(o); };
+  var cl = $('#oClr'); if (cl) cl.onclick = function () { setO(null); };
+  var rf = $('#reF'); if (rf) rf.onclick = function () { p.orderFiles = null; if (p.order && p.order.auto) p.order = null; W.busy = false; wOrder(p); };
+  var at = $('#oAtt'); if (at) at.onclick = function () { pickFiles('application/pdf,image/*').then(function (fs) { if (!fs.length) return; var f = fs[0];
+    var keep = (/^image\//.test(f.type) ? shrink(f, 2000, 0.85) : new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(f); }));
+    keep.then(function (d) { var key = 'order-' + p.id; return IDB.put(key, d).then(function () { return key; }); }).then(function (key) {
+      var rec = { attached: true, photo: key, fileName: f.name, number: '' };
+      if (!spOn()) { setO(rec); return toast('Attached – it will be saved on SharePoint once it is connected'); }
+      toast('Saving on SharePoint…'); return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; setO(rec); toast('Saved on SharePoint'); })
+        .catch(function (e) { setO(rec); toast(e.message + ' – kept on this phone', true); }); }); }); };
+  var must = isPO; /* a PO is needed; contract / offer / approval / visit can be skipped for now */
+  var has = function () { var x = p.order || {}; return !!(x.fileName && !x.auto); };
+  foot(p, 'Next', has() || !must, function () { if (!has() && p.order && p.order.auto) { p.order.auto = false; } if (!has() && !(p.order && p.order.fileName)) p.order = { skipped: true }; go(p, 'items'); }, must ? '' : '<button class="btn ghost" id="wSkip">Skip</button>');
+  var sk = $('#wSkip'); if (sk) sk.onclick = function () { p.order = { skipped: true }; go(p, 'items'); };
+  function okNext() { var b = $('#wn'); if (b) b.disabled = !(has() || !must); }
 }
 
 /* ---- 5. items: photo / Excel / unit or machine ---- */
-function newItem(o) { return Object.assign({ id: uid(), kind: 'unit', machineId: '', code: '', description: '', manufacturer: '', model: '', serial: '', range: '', dept: '', photo: '', ocr: '', src: 'form' }, o); }
+var UNITS = ['°C', '°F', '%RH', 'bar', 'mbar', 'psi', 'kPa', 'MPa', 'Pa', 'inH2O', 'mmH2O', 'mmHg', 'g', 'mg', 'kg', 'rpm', 's', 'min', 'h', 'lux', 'm/s', 'm³/h', 'CFM', 'V', 'mV', 'A', 'mA', 'Ω', 'mm', 'µm', 'L', 'mL', 'µL', 'pH', 'µS/cm', '%'];
+function newItem(o) { return Object.assign({ id: uid(), kind: 'unit', machineId: '', code: '', description: '', manufacturer: '', model: '', serial: '', rMin: '', rMax: '', unit: '', cMin: '', cMax: '', res: '', resUnit: '', dept: '', photo: '', ocr: '', src: 'form' }, o); }
+var isNum = function (v) { return v !== '' && v != null && /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(String(v).trim().replace(',', '.')); };
+var numv = function (v) { return parseFloat(String(v).trim().replace(',', '.')); };
+function hasData(it) { return !!(it.description || it.code || it.rMin || it.rMax || it.res); }
+function itemIssues(it) { /* empty list = complete */
+  if (!hasData(it)) return it.photo ? ['Photo only – add the data later'] : ['No data'];
+  var e = [];
+  if (!String(it.description).trim()) e.push('Description');
+  if (!isNum(it.rMin) || !isNum(it.rMax)) e.push('Range (numbers)'); else if (numv(it.rMin) >= numv(it.rMax)) e.push('Range: min must be less than max');
+  if (!it.unit) e.push('Range unit');
+  if (it.cMin !== '' || it.cMax !== '') { if (!isNum(it.cMin) || !isNum(it.cMax)) e.push('Calibration range (numbers)');
+    else if (isNum(it.rMin) && isNum(it.rMax) && (numv(it.cMin) < numv(it.rMin) || numv(it.cMax) > numv(it.rMax) || numv(it.cMin) >= numv(it.cMax))) e.push('Calibration range must be inside the range'); }
+  if (!isNum(it.res) || numv(it.res) <= 0) e.push('Resolution (number)');
+  if (!(it.resUnit || it.unit)) e.push('Resolution unit');
+  return e; }
+function rangeText(it) { if (!isNum(it.rMin) || !isNum(it.rMax)) return ''; return '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || ''); }
+function calText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + it.cMin + ' : ' + it.cMax + ') ' + (it.unit || ''); return rangeText(it) ? 'Full range' : ''; }
 function wItems(p) {
   p.items = p.items || []; p.machines = p.machines || [];
-  var loose = p.items.filter(function (i) { return !i.machineId; });
-  var irow = function (it) { return '<button class="row" data-it="' + it.id + '">' + (it.photo ? '<img class="thumb" data-ph="' + it.photo + '" alt="">' : '') + '<span class="t"><b>' + esc(it.description || '(no description)') + '</b><small>' + esc([it.code, it.manufacturer, it.model, it.serial && 'S/N ' + it.serial].filter(Boolean).join(' · ') || 'Tap to fill in') + '</small></span>' + (it.check ? '<span class="warn">Check</span>' : '') + '</button>'; };
+  var loose = p.items.filter(function (i) { return !i.machineId; }), need = p.items.filter(function (i) { return itemIssues(i).length; }).length;
+  var irow = function (it) { var iss = itemIssues(it); return '<button class="row" data-it="' + it.id + '">' + (it.photo ? '<img class="thumb" data-ph="' + it.photo + '" alt="">' : '') + '<span class="t"><b>' + esc(it.description || it.code || 'Photo') + '</b><small>' + esc([it.code && it.description ? it.code : '', rangeText(it), it.res && 'res ' + it.res + ' ' + (it.resUnit || it.unit)].filter(Boolean).join(' · ') || 'Tap to add the data') + '</small></span>' +
+    (iss.length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '</button>'; };
   $('#wm').innerHTML = '<div class="cats">' +
-    '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Code list or nameplates</small></button>' +
+    '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Nameplates or a code list</small></button>' +
     '<button data-a="excel">' + I.xls + '<b>Excel</b><small>Fixed template</small></button></div>' +
     '<div class="cats one" style="margin-top:8px"><button data-a="add">' + I.plus.replace(/22/g, '28') + '<b>Add an item</b><small>A unit (one instrument) or a machine with instruments under it</small></button></div>' +
-    '<div class="sec"><h2>Items</h2><small>' + p.items.length + '</small></div>' +
+    '<div class="sec"><h2>Items</h2><small>' + p.items.length + (need ? ' · ' + need + ' need data' : '') + '</small></div>' +
     (p.machines.map(function (m) { var its = p.items.filter(function (i) { return i.machineId === m.id; });
       return '<div class="mach"><div class="mach-h"><span class="kind m">Machine</span><b>' + esc(m.name) + (m.code ? ' · ' + esc(m.code) : '') + '</b><button class="btn ghost sm" data-m="' + m.id + '">Open</button></div>' + (its.length ? its.map(irow).join('') : '<div class="row"><span class="t"><small>No instruments yet</small></span></div>') + '</div>'; }).join('')) +
-    (loose.length ? '<div class="list">' + loose.map(irow).join('') + '</div>' : (!p.machines.length ? '<div class="empty"><b>No items yet</b>Use one of the three ways above.</div>' : ''));
+    (loose.length ? '<div class="list">' + loose.map(irow).join('') + '</div>' : (!p.machines.length ? '<div class="empty"><b>No items yet</b>Use one of the three ways above.</div>' : '')) +
+    (need ? '<div class="small" style="margin-top:10px">Items with “Photo only” or “Missing data” can be completed later – before the readings.</div>' : '');
   $$('[data-ph]').forEach(function (im) { IDB.get(im.dataset.ph).then(function (d) { if (d) im.src = d; }); });
   $$('[data-a]').forEach(function (b) { b.onclick = function () { ({ photo: photoChoice, excel: excelSheet, add: addChoice })[b.dataset.a](p); }; });
   $$('[data-it]').forEach(function (b) { b.onclick = function () { itemSheet(p, b.dataset.it); }; });
@@ -370,30 +406,48 @@ function addChoice(p) {
     '<button id="chM">' + I.mach + '<b>Machine</b><small>Has several instruments – e.g. an autoclave. You write the machine, then add what is under it.</small></button></div>' +
     '<div class="cf"><button class="btn ghost" id="chX">Cancel</button></div></div></div>';
   $('#chX').onclick = function () { $('#dlg-root').innerHTML = ''; };
-  $('#chU').onclick = function () { $('#dlg-root').innerHTML = ''; var it = newItem({ dept: p.depts[0] || '' }); itemSheet(p, null, it); };
-  $('#chM').onclick = function () { $('#dlg-root').innerHTML = ''; var m = { id: uid(), name: '', code: '', dept: p.depts[0] || '' }; machineSheet(p, null, m); };
+  $('#chU').onclick = function () { $('#dlg-root').innerHTML = ''; itemSheet(p, null, newItem({ dept: p.depts[0] || '' })); };
+  $('#chM').onclick = function () { $('#dlg-root').innerHTML = ''; machineSheet(p, null, { id: uid(), name: '', code: '', dept: p.depts[0] || '' }); };
 }
 function deptField(p, val, attr) { if (!p.depts.length) return '';
   return '<label class="f"><span>Department</span><div class="seg">' + p.depts.map(function (d) { return '<button ' + attr + '="' + esc(d) + '" class="' + (val === d ? 'on' : '') + '">' + esc(d) + '</button>'; }).join('') + '</div></label>'; }
+function unitSelect(id, val, ph) { var known = UNITS.indexOf(val) >= 0 || !val;
+  return '<select class="inp" id="' + id + '"><option value="">' + (ph || 'Unit') + '</option>' + UNITS.map(function (u) { return '<option' + (u === val ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '<option value="__other"' + (!known ? ' selected' : '') + '>Other…</option></select>' +
+    (!known ? '<input class="inp" id="' + id + 'O" value="' + esc(val) + '" placeholder="Type the unit" style="margin-top:6px">' : ''); }
 function itemSheet(p, id, fresh) {
-  var it = fresh || p.items.filter(function (x) { return x.id === id; })[0]; if (!it) return; var isNew = !!fresh, photoData = null;
-  if (it.photo) IDB.get(it.photo).then(function (d) { photoData = d; var im = $('#itImg'); if (im && d) im.src = d; });
+  var it = fresh || p.items.filter(function (x) { return x.id === id; })[0]; if (!it) return; var isNew = !!fresh, tried = false;
   var m = it.machineId ? p.machines.filter(function (x) { return x.id === it.machineId; })[0] : null;
-  openSheet(function () { var F = function (k, l, ph) { return '<label class="f"><span>' + l + '</span><input class="inp" data-k="' + k + '" value="' + esc(it[k]) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></label>'; };
+  openSheet(function () { var iss = tried ? itemIssues(it) : [], bad = function (k) { return iss.some(function (x) { return x.indexOf(k) === 0; }) ? ' bad' : ''; };
+    var F = function (k, l, ph, cls, mode) { return '<label class="f"><span>' + l + '</span><input class="inp' + (cls || '') + '" data-k="' + k + '" value="' + esc(it[k]) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (mode ? ' inputmode="' + mode + '"' : '') + '></label>'; };
     return { title: isNew ? (m ? 'Add instrument' : 'Add a unit') : 'Item', body:
       (m ? '<div class="note">Under machine <b>' + esc(m.name) + '</b></div>' : '') +
       (it.photo ? '<img id="itImg" alt="" style="width:100%;border-radius:14px;margin-bottom:12px;background:#ddd;min-height:80px">' : '') +
-      (it.ocr ? '<details class="box" style="margin:0 0 12px"><summary>Text read from the photo</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">' + esc(it.ocr) + '</div></details>' : '') +
-      F('description', 'Description', 'e.g. Pressure gauge, Temperature sensor') + F('code', 'Code', 'Equipment code on the sticker') +
-      '<div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('manufacturer', 'Manufacturer') + F('model', 'Model') + F('serial', 'Serial no.') + F('range', 'Range') + '</div>' +
-      (m ? '' : deptField(p, it.dept, 'data-dp')) +
-      '<div class="cf" style="margin-top:0"><button class="btn ghost" id="itPh">' + I.cam.replace(/28/g, '20') + (it.photo ? ' Change nameplate photo' : ' Add nameplate photo') + '</button></div>',
-      foot: (isNew ? '' : '<button class="btn danger" id="itDel">Delete</button>') + '<button class="btn" id="itOk">' + (isNew ? 'Add' : 'Done') + '</button>',
-      mount: function () { $$('[data-k]').forEach(function (e) { e.oninput = function () { it[e.dataset.k] = e.value; }; });
+      '<div class="cf" style="margin:0 0 14px"><button class="btn ghost" id="itPh">' + I.cam.replace(/28/g, '20') + (it.photo ? ' Change photo' : ' Photo of the nameplate') + '</button></div>' +
+      (iss.length ? '<div class="note warnbox"><b>Missing:</b> ' + esc(iss.join(' · ')) + (it.photo ? '<br>Or save it as photo only and fill the data later.' : '') + '</div>' : '') +
+      F('description', 'Description', 'e.g. Pressure gauge, Temperature sensor', bad('Description')) + F('code', 'Code', 'Equipment code on the sticker') +
+      '<div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('manufacturer', 'Manufacturer') + F('model', 'Model') + '</div>' + F('serial', 'Serial no.') +
+      '<div class="sec" style="margin:4px 0 8px"><h2 style="font-size:16px">Range</h2><small>numbers + unit</small></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">' + '<input class="inp' + bad('Range') + '" data-k="rMin" inputmode="decimal" placeholder="From" value="' + esc(it.rMin) + '"><input class="inp' + bad('Range') + '" data-k="rMax" inputmode="decimal" placeholder="To" value="' + esc(it.rMax) + '"><div>' + unitSelect('uSel', it.unit) + '</div></div>' +
+      '<div class="sec" style="margin:14px 0 8px"><h2 style="font-size:16px">Calibration range</h2><small>empty = full range</small></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center">' + '<input class="inp' + bad('Calibration') + '" data-k="cMin" inputmode="decimal" placeholder="' + esc(it.rMin || 'From') + '" value="' + esc(it.cMin) + '"><input class="inp' + bad('Calibration') + '" data-k="cMax" inputmode="decimal" placeholder="' + esc(it.rMax || 'To') + '" value="' + esc(it.cMax) + '"><span class="small">' + esc(it.unit || '') + '</span></div>' +
+      '<div class="sec" style="margin:14px 0 8px"><h2 style="font-size:16px">Resolution</h2><small>required</small></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + '<input class="inp' + bad('Resolution (') + '" data-k="res" inputmode="decimal" placeholder="e.g. 0.1" value="' + esc(it.res) + '"><div>' + unitSelect('ruSel', it.resUnit || it.unit, 'Same unit') + '</div></div>' +
+      '<div style="height:14px"></div>' + (m ? '' : deptField(p, it.dept, 'data-dp')),
+      foot: (isNew ? '' : '<button class="btn danger" id="itDel">Delete</button>') + (it.photo && !hasData(it) ? '<button class="btn ghost" id="itPhOnly">Photo only</button>' : '') + '<button class="btn" id="itOk">' + (isNew ? 'Add' : 'Save') + '</button>',
+      mount: function () {
+        if (it.photo) IDB.get(it.photo).then(function (d) { var im = $('#itImg'); if (im && d) im.src = d; });
+        $$('[data-k]').forEach(function (e) { e.oninput = function () { it[e.dataset.k] = e.value.trim(); }; });
+        var us = function (sel, key) { var s = $('#' + sel); s.onchange = function () { if (s.value === '__other') { it[key] = ' '; renderSheet(); var o = $('#' + sel + 'O'); if (o) { o.value = ''; o.focus(); } } else { it[key] = s.value; if (key === 'unit' && !it.resUnit) {} renderSheet(); } };
+          var o = $('#' + sel + 'O'); if (o) o.oninput = function () { it[key] = o.value.trim() || ' '; }; };
+        us('uSel', 'unit'); us('ruSel', 'resUnit');
         $$('[data-dp]').forEach(function (b) { b.onclick = function () { it.dept = b.dataset.dp; renderSheet(); }; });
-        $('#itPh').onclick = function () { pickFiles('image/*').then(function (fs) { if (!fs.length) return; shrink(fs[0], 1400, 0.8).then(function (d) { if (!d) return; it.photo = it.photo || 'it-' + it.id; IDB.put(it.photo, d).then(function () { renderSheet(); IDB.get(it.photo).then(function (x) { var im = $('#itImg'); if (im) im.src = x; }); }); }); }); };
+        $('#itPh').onclick = function () { pickFiles('image/*').then(function (fs) { if (!fs.length) return; shrink(fs[0], 1400, 0.8).then(function (d) { if (!d) return; it.photo = it.photo || 'it-' + it.id; IDB.put(it.photo, d).then(function () { if (isNew && p.items.indexOf(it) < 0) { /* keep it until saved */ } renderSheet(); }); }); }); };
         var del = $('#itDel'); if (del) del.onclick = function () { p.items = p.items.filter(function (x) { return x.id !== it.id; }); saveProjects(); back(); };
-        $('#itOk').onclick = function () { if (!it.description.trim() && !it.code.trim()) return toast('Write at least the description or the code', true); it.check = false; if (isNew) p.items.push(it); saveProjects(); back(); }; } }; });
+        var po = $('#itPhOnly'); if (po) po.onclick = function () { if (isNew) p.items.push(it); saveProjects(); back(); };
+        $('#itOk').onclick = function () { it.unit = String(it.unit || '').trim(); it.resUnit = String(it.resUnit || '').trim();
+          if (it.photo && !hasData(it)) { if (isNew) p.items.push(it); saveProjects(); return back(); }
+          var e = itemIssues(it); if (e.length) { tried = true; renderSheet(); return toast('Missing: ' + e[0], true); }
+          if (!it.resUnit) it.resUnit = it.unit; if (isNew) p.items.push(it); saveProjects(); back(); }; } }; });
   function back() { if (m) machineSheet(p, m.id); else closeSheet(); }
 }
 function machineSheet(p, id, fresh) {
@@ -403,7 +457,7 @@ function machineSheet(p, id, fresh) {
       '<label class="f"><span>Machine</span><input class="inp" id="mn" value="' + esc(m.name) + '" placeholder="e.g. Autoclave Fedegari"></label>' +
       '<label class="f"><span>Machine code</span><input class="inp" id="mc" value="' + esc(m.code) + '"></label>' + deptField(p, m.dept, 'data-md') +
       '<div class="sec"><h2>Instruments under it</h2><small>' + its.length + '</small></div>' +
-      (its.length ? '<div class="list">' + its.map(function (it) { return '<button class="row" data-mi="' + it.id + '"><span class="t"><b>' + esc(it.description || '(no description)') + '</b><small>' + esc([it.code, it.manufacturer, it.model, it.range].filter(Boolean).join(' · ') || 'Tap to fill in') + '</small></span></button>'; }).join('') + '</div>' : '<div class="empty">Add the gauges, sensors, timers… of this machine.</div>') +
+      (its.length ? '<div class="list">' + its.map(function (it) { return '<button class="row" data-mi="' + it.id + '"><span class="t"><b>' + esc(it.description || '(no description)') + '</b><small>' + esc([it.code, rangeText(it), it.res && 'res ' + it.res].filter(Boolean).join(' · ') || 'Tap to add the data') + '</small></span>' + (itemIssues(it).length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '<small style="display:none">' + '</small></span></button>'; }).join('') + '</div>' : '<div class="empty">Add the gauges, sensors, timers… of this machine.</div>') +
       '<div class="cf"><button class="btn ghost" id="mAdd">' + I.plus + ' Add instrument</button></div>',
       foot: (isNew ? '' : '<button class="btn danger" id="mDel">Delete</button>') + '<button class="btn" id="mOk">Done</button>',
       mount: function () { $('#mn').oninput = function (e) { m.name = e.target.value; }; $('#mc').oninput = function (e) { m.code = e.target.value; };
@@ -457,21 +511,26 @@ function nameplates(p, files) {
 }
 
 /* Excel: fixed template (proposal – we can change the columns together) */
-var XL_COLS = ['Type (Unit / Machine item)', 'Machine', 'Machine code', 'Code', 'Description', 'Manufacturer', 'Model', 'Serial no.', 'Range', 'Department'];
+var XL_COLS = ['Type (Unit / Machine item)', 'Machine', 'Machine code', 'Code', 'Description', 'Manufacturer', 'Model', 'Serial no.', 'Range from', 'Range to', 'Unit', 'Cal. range from', 'Cal. range to', 'Resolution', 'Resolution unit', 'Department'];
 function excelSheet(p) {
   openSheet(function () { return { title: 'Items from Excel', body:
-    '<div class="note">1. Download the template. 2. Fill one row per instrument. For a machine, write the machine name in <b>Machine</b> on every instrument under it. 3. Upload it here.</div>' +
-    '<div class="box" style="margin-top:0"><h4>Columns</h4><div class="small">' + XL_COLS.map(esc).join(' · ') + '</div><div class="small" style="margin-top:8px">This is a first proposal – tell me if you want other columns.</div></div>' +
+    '<div class="note">1. Download the template. 2. One row per instrument. For a machine, write its name in <b>Machine</b> on every instrument under it. 3. Upload it here.</div>' +
+    '<div class="box" style="margin-top:0"><h4>Rules</h4><div class="small">Range from / to and Resolution are <b>numbers</b>, with their unit. Leave Cal. range empty to use the full range. Rows with missing data are added as “Missing data” so you can finish them in the app.</div>' +
+    '<div class="small" style="margin-top:8px">Columns: ' + XL_COLS.map(esc).join(' · ') + '</div></div>' +
     '<div class="cf"><button class="btn ghost" id="xT">Download template</button></div><div class="cf"><button class="btn" id="xU">Upload filled Excel</button></div><div id="xMsg" style="margin-top:12px"></div>',
     mount: function () { $('#xT').onclick = function () { xlTemplate(p); }; $('#xU').onclick = function () { pickFiles('.xlsx').then(function (fs) { if (fs.length) xlImport(p, fs[0]); }); }; } }; }); }
 function needExcel() { return window.ExcelJS ? Promise.resolve() : loadScript('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'); }
 function xlTemplate(p) { needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Items', { views: [{ state: 'frozen', ySplit: 1 }] });
   ws.addRow(XL_COLS).eachCell(function (c) { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Arial', size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF13294B' } }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
-  [['Unit', '', '', 'TH-05', 'Digital thermometer', 'Testo', '110', '45012', '(-50 : 150) °C', p.depts[0] || ''], ['Machine item', 'Autoclave Fedegari', 'AC-01', 'AC-01-PG1', 'Pressure gauge', 'Wika', '', '', '(0 : 4) bar', p.depts[0] || ''], ['Machine item', 'Autoclave Fedegari', 'AC-01', 'AC-01-T1', 'Chamber temperature sensor', 'Fedegari', '', '', '(0 : 150) °C', p.depts[0] || '']]
+  var d0 = p.depts[0] || '';
+  [['Unit', '', '', 'TH-05', 'Digital thermometer', 'Testo', '110', '45012', -50, 150, '°C', 0, 100, 0.1, '°C', d0],
+   ['Machine item', 'Autoclave Fedegari', 'AC-01', 'AC-01-PG1', 'Pressure gauge', 'Wika', '', '', 0, 4, 'bar', '', '', 0.05, 'bar', d0],
+   ['Machine item', 'Autoclave Fedegari', 'AC-01', 'AC-01-T1', 'Chamber temperature sensor', 'Fedegari', '', '', 0, 150, '°C', 100, 135, 0.1, '°C', d0]]
     .forEach(function (r) { ws.addRow(r).eachCell(function (c) { c.font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF7D8796' } }; }); });
-  for (var r = 2; r <= 300; r++) ws.getCell('A' + r).dataValidation = { type: 'list', allowBlank: true, formulae: ['"Unit,Machine item"'] };
-  if (p.depts.length) for (var r2 = 2; r2 <= 300; r2++) ws.getCell('J' + r2).dataValidation = { type: 'list', allowBlank: true, formulae: ['"' + p.depts.join(',').replace(/"/g, '') + '"'] };
-  [18, 24, 14, 16, 28, 16, 14, 14, 18, 16].forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
+  var list = function (col, vals) { for (var r = 2; r <= 400; r++) ws.getCell(col + r).dataValidation = { type: 'list', allowBlank: true, formulae: ['"' + vals.join(',').replace(/"/g, '') + '"'] }; };
+  var nums = function (col) { for (var r = 2; r <= 400; r++) ws.getCell(col + r).dataValidation = { type: 'decimal', operator: 'between', allowBlank: true, formulae: [-1e9, 1e9], showErrorMessage: true, errorTitle: 'Number only', error: 'Type a number (the unit goes in its own column)' }; };
+  list('A', ['Unit', 'Machine item']); list('K', UNITS); list('O', UNITS); if (p.depts.length) list('P', p.depts); ['I', 'J', 'L', 'M', 'N'].forEach(nums);
+  [16, 22, 12, 14, 26, 14, 12, 12, 10, 10, 9, 12, 12, 11, 11, 14].forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
   ws.addRow([]); ws.addRow(['(Grey rows are examples – delete them)']).getCell(1).font = { italic: true, color: { argb: 'FFB26F12' } };
   return wb.xlsx.writeBuffer(); }).then(function (buf) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'Items template - ' + (p.company ? p.company.name : 'project') + '.xlsx'; document.body.appendChild(a); a.click(); a.remove(); })
   .catch(function (e) { toast(e.message, true); }); }
@@ -479,17 +538,19 @@ function cellStr(v) { if (v == null) return ''; if (typeof v === 'object') { if 
 function xlImport(p, file) { needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) {
   var ws = wb.getWorksheet('Items') || wb.worksheets[0], hd = ws.getRow(1).values.map(function (v) { return cellStr(v).trim().toLowerCase(); });
   var col = function (re) { for (var i = 1; i < hd.length; i++) if (re.test(hd[i] || '')) return i; return -1; };
-  var c = { type: col(/^type/), mach: col(/^machine$/), mcode: col(/machine code/), code: col(/^code/), desc: col(/desc/), man: col(/manuf/), model: col(/model/), ser: col(/serial/), rng: col(/range/), dept: col(/dep/) };
+  var c = { mach: col(/^machine$/), mcode: col(/machine code/), code: col(/^code/), desc: col(/desc/), man: col(/manuf/), model: col(/model/), ser: col(/serial/), rMin: col(/^range from/), rMax: col(/^range to/), unit: col(/^unit$/), cMin: col(/cal.*from/), cMax: col(/cal.*to/), res: col(/^resolution$/), resUnit: col(/resolution unit/), dept: col(/dep/) };
   if (c.code < 0 && c.desc < 0) throw new Error('This is not the items template (no Code / Description column)');
-  var get = function (row, k) { return c[k] > 0 ? cellStr(row.getCell(c[k]).value).trim() : ''; }, n = 0, skipped = 0, have = {};
+  var get = function (row, k) { return c[k] > 0 ? cellStr(row.getCell(c[k]).value).trim() : ''; }, n = 0, skipped = 0, incomplete = 0, have = {};
   p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; });
   ws.eachRow(function (row, r) { if (r === 1) return; var code = get(row, 'code'), desc = get(row, 'desc'); if (!code && !desc) return;
-    if (row.getCell(1).font && row.getCell(1).font.italic && /TH-05|AC-01/.test(code)) return; /* template examples */
+    if (/^(TH-05|AC-01-PG1|AC-01-T1)$/.test(code) && row.getCell(c.code).font && row.getCell(c.code).font.italic) return; /* template examples */
     if (code && have[norm(code)]) { skipped++; return; } if (code) have[norm(code)] = 1;
     var mname = get(row, 'mach'), mid = '';
     if (mname) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(mname); })[0]; if (!m) { m = { id: uid(), name: mname, code: get(row, 'mcode'), dept: get(row, 'dept') }; p.machines.push(m); } mid = m.id; }
-    p.items.push(newItem({ machineId: mid, kind: mid ? 'machine-item' : 'unit', code: code, description: desc, manufacturer: get(row, 'man'), model: get(row, 'model'), serial: get(row, 'ser'), range: get(row, 'rng'), dept: get(row, 'dept') || p.depts[0] || '', src: 'excel' })); n++; });
-  saveProjects(); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>';
+    var it = newItem({ machineId: mid, kind: mid ? 'machine-item' : 'unit', code: code, description: desc, manufacturer: get(row, 'man'), model: get(row, 'model'), serial: get(row, 'ser'),
+      rMin: get(row, 'rMin'), rMax: get(row, 'rMax'), unit: get(row, 'unit'), cMin: get(row, 'cMin'), cMax: get(row, 'cMax'), res: get(row, 'res'), resUnit: get(row, 'resUnit') || get(row, 'unit'), dept: get(row, 'dept') || p.depts[0] || '', src: 'excel' });
+    if (itemIssues(it).length) incomplete++; p.items.push(it); n++; });
+  saveProjects(); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>' + (incomplete ? '<div class="note amber">' + incomplete + ' of them have missing or wrong data (range, unit or resolution) – they are marked “Missing data”.</div>' : '');
 }).catch(function (e) { var x = $('#xMsg'); if (x) x.innerHTML = '<div class="note warnbox">' + esc(e.message || e) + '</div>'; }); }
 
 /* ================= project overview ================= */
@@ -497,7 +558,7 @@ function renderOverview(p) {
   var o = p.order || {};
   $('#app').innerHTML = '<div class="shell">' + top(esc(p.company.name), esc([p.depts.join(', '), TYPES[p.orderType][0]].filter(Boolean).join(' · '))) + '<main>' +
     '<div class="card bar"><h3>Order</h3><dl class="kv" style="margin-top:8px"><dt>Type</dt><dd>' + esc(TYPES[p.orderType][0]) + '</dd>' + (o.number ? '<dt>Number</dt><dd>' + esc(o.number) + '</dd>' : '') + (o.value ? '<dt>Value</dt><dd>EGP ' + esc(o.value) + '</dd>' : '') +
-      (o.fileName ? '<dt>File</dt><dd><a href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">' + esc(o.fileName) + '</a></dd>' : '') + (o.photo ? '<dt>Photo</dt><dd>On this phone</dd>' : '') + '</dl>' +
+      (o.fileName ? '<dt>File</dt><dd><a href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">' + esc(o.fileName) + '</a></dd>' : '') + (o.attached && !o.uploaded ? '<dt>Attached</dt><dd>On this phone – not on SharePoint yet</dd>' : '') + (o.skipped ? '<dt>Document</dt><dd>Skipped for now</dd>' : '') + '</dl>' +
       '<div class="cf"><button class="btn ghost sm" data-g="company">Company</button><button class="btn ghost sm" data-g="dept">Department</button><button class="btn ghost sm" data-g="order">Order</button></div></div>' +
     '<div class="sec"><h2>Items</h2><small>' + p.items.length + (p.machines.length ? ' · ' + p.machines.length + ' machines' : '') + '</small></div>' +
     '<div class="list">' + p.items.slice(0, 12).map(function (it) { var m = it.machineId ? p.machines.filter(function (x) { return x.id === it.machineId; })[0] : null;
