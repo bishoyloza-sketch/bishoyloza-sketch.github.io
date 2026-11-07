@@ -60,7 +60,7 @@ var Api = { call: function (req) {
 } };
 var S = { session: LS.get('session', null), me: null, people: LS.get('people', null), data: LS.get('cache', null), projects: LS.get('projects', []), cur: null, view: 'home' };
 function req(action, payload) { return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
-function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, at: Date.now() }; LS.set('cache', S.data);
+function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
   S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; return d; }); }
 function saveProjects() { LS.set('projects', S.projects); }
 var isAdmin = function () { return S.me && S.me.role === 'admin'; };
@@ -553,23 +553,303 @@ function xlImport(p, file) { needExcel().then(function () { return file.arrayBuf
   saveProjects(); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>' + (incomplete ? '<div class="note amber">' + incomplete + ' of them have missing or wrong data (range, unit or resolution) – they are marked “Missing data”.</div>' : '');
 }).catch(function (e) { var x = $('#xMsg'); if (x) x.innerHTML = '<div class="note warnbox">' + esc(e.message || e) + '</div>'; }); }
 
-/* ================= project overview ================= */
+/* ================= project (after setup): Overview · Old certs · Readings · Details ================= */
+var PT = { tab: 'over' };
+var NAVI = {
+  over: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
+  certs: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h4"/></svg>',
+  read: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-3M12 5V3"/></svg>',
+  det: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'
+};
 function renderOverview(p) {
-  var o = p.order || {};
-  $('#app').innerHTML = '<div class="shell">' + top(esc(p.company.name), esc([p.depts.join(', '), TYPES[p.orderType][0]].filter(Boolean).join(' · '))) + '<main>' +
-    '<div class="card bar"><h3>Order</h3><dl class="kv" style="margin-top:8px"><dt>Type</dt><dd>' + esc(TYPES[p.orderType][0]) + '</dd>' + (o.number ? '<dt>Number</dt><dd>' + esc(o.number) + '</dd>' : '') + (o.value ? '<dt>Value</dt><dd>EGP ' + esc(o.value) + '</dd>' : '') +
-      (o.fileName ? '<dt>File</dt><dd><a href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">' + esc(o.fileName) + '</a></dd>' : '') + (o.attached && !o.uploaded ? '<dt>Attached</dt><dd>On this phone – not on SharePoint yet</dd>' : '') + (o.skipped ? '<dt>Document</dt><dd>Skipped for now</dd>' : '') + '</dl>' +
-      '<div class="cf"><button class="btn ghost sm" data-g="company">Company</button><button class="btn ghost sm" data-g="dept">Department</button><button class="btn ghost sm" data-g="order">Order</button></div></div>' +
-    '<div class="sec"><h2>Items</h2><small>' + p.items.length + (p.machines.length ? ' · ' + p.machines.length + ' machines' : '') + '</small></div>' +
-    '<div class="list">' + p.items.slice(0, 12).map(function (it) { var m = it.machineId ? p.machines.filter(function (x) { return x.id === it.machineId; })[0] : null;
-      return '<div class="row"><span class="t"><b>' + esc(it.description || it.code) + '</b><small>' + esc([it.code, m && m.name, it.manufacturer].filter(Boolean).join(' · ')) + '</small></span></div>'; }).join('') + (p.items.length > 12 ? '<div class="row"><span class="t"><small>+ ' + (p.items.length - 12) + ' more</small></span></div>' : '') + '</div>' +
-    '<div class="cf"><button class="btn ghost" data-g="items">Edit items</button></div>' +
-    '<div class="card" style="margin-top:18px"><h3>Next: old certificates & readings</h3><div class="meta">Finding last year\'s certificate of every item, the readings next to last year\'s, the prices and the certificates come in the next versions.</div></div>' +
-    '<div class="cf"><button class="btn ghost" id="home">All projects</button><button class="btn danger" id="delP">Delete project</button></div></main></div>';
+  p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String(p.company.code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '', eH: '', eLoc: 'On Site', refs: [] };
+  var titles = { over: [p.company.name, [p.depts.join(', '), TYPES[p.orderType][0]].filter(Boolean).join(' · ')], certs: ['Old certificates', 'Last year\'s certificate of every item'], read: ['Readings', 'New readings next to last year\'s'], det: ['Project details', 'Dates, technician, references, conditions'] }[PT.tab];
+  var extra = '';
+  if (PT.tab === 'over' || PT.tab === 'certs') { var n = p.items.length || 1, c = certCounts(p);
+    extra = '<div class="strip">' + [['found', 'var(--office)'], ['similar', 'var(--pending)'], ['missing', 'var(--danger)'], ['todo', 'var(--oos)']].map(function (x) { return '<span style="width:' + (c[x[0]] / n * 100) + '%;background:' + x[1] + '"></span>'; }).join('') + '</div>' +
+      '<div class="legend">' + [['found', 'Found', 'var(--office)'], ['similar', 'Similar', 'var(--pending)'], ['missing', 'Missing', 'var(--danger)'], ['todo', 'To search', 'var(--oos)']].map(function (x) { return '<button data-lf="' + x[0] + '"><div class="n">' + c[x[0]] + '</div><div class="l"><i class="dot" style="background:' + x[2] + '"></i>' + x[1] + '</div></button>'; }).join('') + '</div>'; }
+  $('#app').innerHTML = '<div class="shell">' + top(esc(titles[0]), esc(titles[1]), extra) + '<main id="pm"></main></div>' +
+    '<nav class="nav"><div>' + [['over', 'Overview'], ['certs', 'Old certs'], ['read', 'Readings'], ['det', 'Details']].map(function (x) { return '<a href="#" data-tab="' + x[0] + '" class="' + (PT.tab === x[0] ? 'on' : '') + '">' + NAVI[x[0]] + x[1] + '</a>'; }).join('') + '</div></nav>';
+  $$('[data-tab]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); PT.tab = a.dataset.tab; render(); window.scrollTo(0, 0); }; });
+  $$('[data-lf]').forEach(function (b) { b.onclick = function () { PT.tab = 'certs'; render(); }; });
+  ({ over: tOver, certs: tCerts, read: tRead, det: tDet })[PT.tab](p);
+}
+function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; p.items.forEach(function (it) { var s = (it.old || {}).status; if (s === 'found') c.found++; else if (s === 'similar') c.similar++; else if (s === 'missing' || s === 'error') c.missing++; else c.todo++; }); return c; }
+
+/* ---- overview ---- */
+function tOver(p) {
+  var o = p.order || {}, inf = p.info, c = certCounts(p), pr = readProgress(p), warn = dateWarns(inf).concat(refWarns(p));
+  var step = function (n, done, title, sub, btn, tab) { return '<div class="card"><div style="display:flex;gap:12px;align-items:center"><span style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:18px;flex:none;' + (done ? 'background:var(--office);color:#fff' : 'background:var(--blue-soft);color:var(--navy)') + '">' + (done ? '✓' : n) + '</span><div style="flex:1;min-width:0"><h3>' + title + '</h3><div class="meta">' + sub + '</div></div></div><div class="cf"><button class="btn ' + (done ? 'ghost' : '') + '" data-go="' + tab + '">' + btn + '</button></div></div>'; };
+  $('#pm').innerHTML = warn.map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') +
+    '<div class="card bar"><h3>Order</h3><dl class="kv" style="margin-top:8px"><dt>Type</dt><dd>' + esc(TYPES[p.orderType][0]) + '</dd>' + (o.number ? '<dt>Number</dt><dd>' + esc(o.number) + '</dd>' : '') +
+      (o.fileName ? '<dt>File</dt><dd>' + (o.webUrl ? '<a href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">' + esc(o.fileName) + '</a>' : esc(o.fileName)) + (o.attached && !o.uploaded ? ' · on this phone' : '') + '</dd>' : '') + (o.skipped ? '<dt>Document</dt><dd>Skipped for now</dd>' : '') +
+      '<dt>Items</dt><dd>' + p.items.length + (p.machines.length ? ' · ' + p.machines.length + ' machines' : '') + '</dd></dl>' +
+      '<div class="cf"><button class="btn ghost sm" data-g="company">Company</button><button class="btn ghost sm" data-g="dept">Department</button><button class="btn ghost sm" data-g="order">Order</button><button class="btn ghost sm" data-g="items">Items</button></div></div>' +
+    '<div class="sec"><h2>Steps</h2></div>' +
+    step(1, !!(inf.cal && inf.tech), 'Project details', inf.cal ? 'Calibration ' + dmy(inf.cal) + ' · ' + esc(inf.tech || 'no technician yet') : 'Dates, technician, references', 'Details', 'det') +
+    step(2, p.items.length && !c.todo, 'Old certificates', (c.found + c.similar) + ' of ' + p.items.length + ' have last year\'s data', 'Old certificates', 'certs') +
+    step(3, pr.tot && pr.fil === pr.tot, 'New readings', pr.tot ? pr.fil + ' of ' + pr.tot + ' points' + (pr.out ? ' · <span class="warn">' + pr.out + ' OUT</span>' : '') : 'After the old certificates', 'Readings', 'read') +
+    '<div class="note" style="margin-top:6px">Certificates, covers and the receipt letter (Word + PDF) are the next version.</div>' +
+    '<div class="cf"><button class="btn ghost" id="home">All projects</button><button class="btn danger" id="delP">Delete project</button></div>';
   $$('[data-g]').forEach(function (b) { b.onclick = function () { go(p, b.dataset.g); }; });
-  $('#home').onclick = function () { S.cur = null; render(); };
+  $$('[data-go]').forEach(function (b) { b.onclick = function () { PT.tab = b.dataset.go; render(); window.scrollTo(0, 0); }; });
+  $('#home').onclick = function () { S.cur = null; PT.tab = 'over'; render(); };
   $('#delP').onclick = function () { dialog('Delete this project?', 'Only this project on this phone is deleted.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); S.cur = null; render(); }); };
 }
+
+/* ---- details: dates, technician, references, conditions ---- */
+function d2s(d) { if (!d) return ''; var z = function (n) { return String(n).padStart(2, '0'); }; return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); }
+function s2d(s) { if (!s) return null; var a = String(s).split('-').map(Number); return new Date(a[0], a[1] - 1, a[2]); }
+var isWork = function (d) { return d.getDay() <= 4; }; /* Sun–Thu */
+function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function prevWork(d) { var x = new Date(d); while (!isWork(x)) x = addDays(x, -1); return x; }
+function addWork(d, n) { var x = new Date(d), c = 0; while (c < n) { x = addDays(x, 1); if (isWork(x)) c++; } return x; }
+function dmy(s) { var d = s2d(s); if (!d) return '—'; var z = function (n) { return String(n).padStart(2, '0'); }; return z(d.getDate()) + '/' + z(d.getMonth() + 1) + '/' + d.getFullYear(); }
+function calcDates(inf) { var c = s2d(inf.cal); if (!c) return; inf.wo = d2s(prevWork(addDays(c, -7)));
+  var iss = addWork(c, 3); if (iss.getMonth() !== c.getMonth()) { iss = prevWork(new Date(c.getFullYear(), c.getMonth() + 1, 0)); if (iss < c) iss = c; }
+  inf.iss = d2s(iss); inf.rec = d2s(prevWork(addDays(iss, -7))); var du = new Date(c); du.setFullYear(du.getFullYear() + 1); inf.due = d2s(du); }
+function woNo(inf) { return inf.wo ? (inf.woPre ? inf.woPre + '/' : '') + dmy(inf.wo) : ''; }
+function dateWarns(inf) { var w = [], yr = new Date().getFullYear(), nm = { wo: 'Work order', iss: 'Date of issue', rec: 'Date received', cal: 'Calibration date' };
+  ['wo', 'iss', 'rec', 'cal'].forEach(function (k) { var d = s2d(inf[k]); if (d && d.getFullYear() < yr) w.push(nm[k] + ' is from an old year (' + d.getFullYear() + ')'); if (d && !isWork(d) && k !== 'cal') w.push(nm[k] + ' is not a working day'); });
+  var c = s2d(inf.cal), i = s2d(inf.iss); if (c && i && i.getMonth() !== c.getMonth()) w.push('Date of issue is not in the calibration month'); if (c && i && i < c) w.push('Date of issue is before the calibration date'); return w; }
+function labDevices() { return ((S.data && S.data.devices) || []).filter(function (d) { return d.active !== false; }); }
+function refExpired(d, inf) { if (!d.calDue) return null; return s2d(String(d.calDue).slice(0, 10)) < (s2d(inf.cal) || new Date()); }
+function refWarns(p) { var inf = p.info, ds = labDevices(); return (inf.refs || []).map(function (id) { var d = ds.filter(function (x) { return x.id === id; })[0]; return d && refExpired(d, inf) ? 'Reference ' + d.manufacturer + ' ' + d.description + ' (S/N ' + d.serial + ') certificate expired on ' + dmy(String(d.calDue).slice(0, 10)) : ''; }).filter(Boolean); }
+function tDet(p) {
+  var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin'; }), ds = labDevices(), q = norm(PT.rq || '');
+  var cats = {}; ds.forEach(function (d) { (cats[d.category || 'Other'] = cats[d.category || 'Other'] || []).push(d); });
+  $('#pm').innerHTML = '<div class="sec" style="margin-top:4px"><h2>Calibrated by</h2></div><div class="chips">' + people.map(function (u) { return '<button class="chip' + (inf.techId === u.id ? ' on' : '') + '" data-tech="' + u.id + '">' + esc(u.name) + '</button>'; }).join('') + '</div>' +
+    '<div class="sec"><h2>Dates</h2><small>Sun – Thu</small></div>' +
+    '<label class="f"><span>Calibration date</span><input class="inp" type="date" data-i="cal" value="' + esc(inf.cal) + '"></label>' +
+    '<div class="note">Work order ≈ 1 week before · Date of issue = 3 working days after (same month) · Received ≈ issue − 7 · Due = +1 year. You can change any of them.</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Work order date</span><input class="inp" type="date" data-i="wo" value="' + esc(inf.wo) + '"></label><label class="f"><span>WO prefix</span><input class="inp" data-i="woPre" value="' + esc(inf.woPre) + '"></label>' +
+    '<label class="f"><span>Date of issue</span><input class="inp" type="date" data-i="iss" value="' + esc(inf.iss) + '"></label><label class="f"><span>Date received</span><input class="inp" type="date" data-i="rec" value="' + esc(inf.rec) + '"></label>' +
+    '<label class="f"><span>Due date</span><input class="inp" type="date" data-i="due" value="' + esc(inf.due) + '"></label></div>' +
+    '<div class="note" id="woShow" style="background:var(--office-soft);color:#14603C">WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b></div><div id="dw">' + dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') + '</div>' +
+    '<div class="sec"><h2>Environmental conditions</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Temperature (°C)</span><input class="inp" inputmode="decimal" data-i="eT" value="' + esc(inf.eT) + '"></label><label class="f"><span>Humidity (%RH)</span><input class="inp" inputmode="decimal" data-i="eH" value="' + esc(inf.eH) + '"></label></div>' +
+    '<label class="f"><span>Location</span><input class="inp" data-i="eLoc" value="' + esc(inf.eLoc) + '"></label>' +
+    '<div class="sec"><h2>Reference standards</h2><small>' + (inf.refs || []).length + ' chosen</small></div>' +
+    '<div class="small" style="margin-bottom:8px">From the Akhnaton Devices list – the expiry comes from each device\'s calibration due date.</div>' +
+    refWarns(p).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') +
+    '<div class="search">' + I.search + '<input id="rq" placeholder="Search reference (name, model, serial)" value="' + esc(PT.rq || '') + '"></div>' +
+    (ds.length ? Object.keys(cats).sort().map(function (k) { var L = cats[k].filter(function (d) { return !q || norm(d.manufacturer + d.description + d.model + d.serial).indexOf(q) >= 0 || (inf.refs || []).indexOf(d.id) >= 0; }); if (!L.length) return '';
+      return '<div class="sec" style="margin:12px 0 6px"><h2 style="font-size:15px">' + esc(k) + '</h2></div><div class="list">' + L.map(function (d) { var on = (inf.refs || []).indexOf(d.id) >= 0, ex = refExpired(d, inf);
+        return '<button class="row' + (on ? ' sel' : '') + '" data-ref="' + d.id + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(d.manufacturer + ' ' + d.description) + '</b><small>' + esc([d.model, 'S/N ' + d.serial, d.range].filter(Boolean).join(' · ')) + '</small></span>' +
+          (d.calDue ? '<span class="pill" style="--s-fg:' + (ex ? 'var(--danger)' : 'var(--office)') + ';--s-bg:' + (ex ? 'var(--danger-soft)' : 'var(--office-soft)') + '">' + (ex ? 'Expired ' : 'Due ') + dmy(String(d.calDue).slice(0, 10)) + '</span>' : '') + '</button>'; }).join('') + '</div>'; }).join('')
+      : '<div class="empty">Loading the device list…</div>');
+  $$('[data-tech]').forEach(function (b) { b.onclick = function () { var u = people.filter(function (x) { return x.id === b.dataset.tech; })[0]; inf.techId = u.id; inf.tech = u.name; saveProjects(); tDet(p); }; });
+  $$('[data-i]').forEach(function (e) { e.oninput = function () { inf[e.dataset.i] = e.value; if (e.dataset.i === 'cal') { calcDates(inf); ['wo', 'iss', 'rec', 'due'].forEach(function (k) { $('[data-i="' + k + '"]').value = inf[k]; }); }
+    $('#woShow').innerHTML = 'WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b>'; $('#dw').innerHTML = dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join(''); saveProjects(); }; });
+  var rq = $('#rq'); rq.oninput = function () { PT.rq = rq.value; var pos = rq.selectionStart; tDet(p); var n = $('#rq'); n.focus(); n.setSelectionRange(pos, pos); };
+  $$('[data-ref]').forEach(function (b) { b.onclick = function () { var id = b.dataset.ref, a = inf.refs || (inf.refs = []), i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else { a.push(id); var d = ds.filter(function (x) { return x.id === id; })[0]; if (d && refExpired(d, inf)) toast('This reference\'s certificate is expired!', true); } saveProjects(); tDet(p); }; });
+}
+
+/* ---- old certificates: find last year's certificate on SharePoint and read it ---- */
+var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+function needPdf() { return window.pdfjsLib ? Promise.resolve() : loadScript(PDFJS + 'pdf.min.js').then(function () { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; }); }
+function pdfPages(driveId, id) { /* SharePoint converts the Word file to PDF; we read its text line by line */
+  return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + driveId + '/items/' + id + '/content?format=pdf', { headers: { Authorization: 'Bearer ' + r[1] } }); })
+    .then(function (res) { if (!res.ok) throw new Error('Could not open the file (' + res.status + ')'); return res.arrayBuffer(); })
+    .then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; })
+    .then(function (doc) { var out = [], chain = Promise.resolve();
+      for (var i = 1; i <= Math.min(doc.numPages, 150); i++) (function (n) { chain = chain.then(function () { return doc.getPage(n).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
+        var rows = []; tc.items.forEach(function (t) { if (!t.str || !t.str.trim()) return; var x = t.transform[4], y = t.transform[5], row = rows.filter(function (r) { return Math.abs(r.y - y) < 3; })[0]; if (!row) { row = { y: y, it: [] }; rows.push(row); } row.it.push({ x: x, w: t.width, s: t.str }); });
+        rows.sort(function (a, b) { return b.y - a.y; });
+        out.push(rows.map(function (r) { r.it.sort(function (a, b) { return a.x - b.x; }); var s = '', end = null; r.it.forEach(function (t) { if (end != null) s += (t.x - end > 6 ? ' | ' : (t.x - end > 1 ? ' ' : '')); s += t.s; end = t.x + t.w; }); return s.replace(/\s+/g, ' ').trim(); })); }); }); })(i);
+      return chain.then(function () { return out; }); }); }
+var LABELS = ['Manufacturer', 'Calibration Date', 'Description', 'Calibration interval', 'Code', 'Calibration Due Date', 'Range', 'Environmental Condition', 'Temperature & Humidity', 'Cal. Range', 'Resolution', 'Procedure No.', 'Accepted Limits', 'Received status', 'Data Sheet Ref.', 'Delivered status', 'Model', 'Serial No.', 'Serial', 'Location', 'Type', 'Accuracy'];
+function tidy(s) { return String(s || '').replace(/\*+/g, '').replace(/^[\s:|]+|[\s:|]+$/g, '').replace(/\s*\|\s*/g, ' ').replace(/(\d)\s+(\d)/g, '$1$2').replace(/-\s+(\d)/g, '-$1').replace(/(\d)\s+\.\s*(\d)/g, '$1.$2').replace(/\s+/g, ' ').trim(); }
+function parseFields(text) { /* "Data of item" table → fields */
+  var t = text.replace(/\s+/g, ' '), found = [];
+  LABELS.forEach(function (l) { var re = new RegExp('(^|[\\s|])' + l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s*') + '(?=[\\s|:*])', 'gi'), m; while ((m = re.exec(t))) found.push({ l: l, i: m.index + m[1].length, e: m.index + m[0].length }); });
+  found.sort(function (a, b) { return a.i - b.i || b.e - a.e; }); var f = {};
+  found = found.filter(function (x, k) { return !found.some(function (y, j) { return j !== k && y.i <= x.i && y.e >= x.e && (y.e - y.i) > (x.e - x.i); }); });
+  found.forEach(function (x, k) { var nx = found[k + 1]; var v = tidy(t.slice(x.e, nx ? nx.i : x.e + 80)); var key = x.l.toLowerCase(); if (!(key in f) && v && v.length < 120) f[key] = v; });
+  var cn = t.match(/CERTI\s*FICATE\s*NO\.?\s*:?\s*([0-9A-Z][0-9A-Z \/\-]{2,30}?\d{4})/i);
+  return { certNo: cn ? tidy(cn[1]).replace(/\s/g, '') : '', manufacturer: f.manufacturer || '', description: f.description || '', code: f.code || '', range: f.range || '', calRange: f['cal. range'] || '', resolution: f.resolution || '', limits: f['accepted limits'] || '', calDate: f['calibration date'] || '', dataSheetRef: f['data sheet ref.'] || '', model: f.model || '', serial: f['serial no.'] || f.serial || '', procedure: f['procedure no.'] || '' }; }
+var NUM = /^[-+±]?\d+(?:\.\d+)?$/;
+function parseResults(lines) { /* rows of numbers after the results header → points */
+  var start = lines.findIndex(function (l) { return /result|reading|deviation|standard|nominal|set ?point|load/i.test(l) && !/data of item/i.test(l); }); if (start < 0) return { points: [], dirs: 1 };
+  var head = lines.slice(start, start + 4).join(' '), dirs = /ascend|descend|\bup\b.*\bdown\b/i.test(head) || (head.match(/reading/gi) || []).length >= 2 ? 2 : 1, pts = [];
+  for (var i = start + 1; i < lines.length; i++) { var l = lines[i]; if (/not be duplicated|remarks|calibrated by|repeatab|eccentric|uncertainty|page \d/i.test(l)) break;
+    var toks = l.replace(/±\s*/g, '±').replace(/-\s+(\d)/g, '-$1').split(/[|\s]+/).filter(Boolean), nums = toks.filter(function (x) { return NUM.test(x); }); if (nums.length < 2) continue;
+    var lim = nums.filter(function (x) { return x[0] === '±'; }).pop() || ''; var v = nums.filter(function (x) { return x[0] !== '±'; });
+    var pt = { point: v[0], ref: v[0], reading: v[1] || '', deviation: v[2] || '', reading2: dirs === 2 ? (v[3] || '') : '', deviation2: dirs === 2 ? (v[4] || '') : '', limit: lim };
+    if (dirs === 1 && v.length >= 4) { pt.ref = v[1]; pt.reading = v[2]; pt.deviation = v[3]; } /* point | standard | UUT | deviation */
+    pts.push(pt); }
+  return { points: pts, dirs: dirs }; }
+function certSection(pages, code) { var nc = norm(code), at = -1;
+  for (var i = 0; i < pages.length; i++) { var j = norm(pages[i].join(' ')); if (j.indexOf(nc) >= 0 && /dataofitem/.test(j)) { at = i; break; } }
+  if (at < 0) for (var k = 0; k < pages.length; k++) if (norm(pages[k].join(' ')).indexOf(nc) >= 0) { at = k; break; }
+  if (at < 0) return null; var sec = [pages[at]];
+  for (var n = at + 1; n < pages.length && sec.length < 5; n++) { var t = pages[n].join(' '); if (/data\s*of\s*item/i.test(t)) break; if (/continue/i.test(t)) sec.push(pages[n]); else break; }
+  return sec; }
+var yearOf = function (f) { var m = pathOf(f).match(/Cert\s*(20\d\d)/i) || f.name.match(/-(20\d\d)/); return m ? +m[1] : 0; };
+function findOldCert(p, it) {
+  if (!it.code) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
+  var mine = (p.deptSug && p.deptSug.certFolders) || [];
+  return spSearch('"' + it.code + '"', 30).then(function (fs) {
+    fs = fs.filter(function (f) { return /cal\.?\s*cert/i.test(f.name) && !/cover/i.test(f.name) && /\.(docx?|pdf)$/i.test(f.name); });
+    fs.forEach(function (f) { f.yr = yearOf(f); f.mine = mine.some(function (m) { return pathOf(f).indexOf(m) >= 0; }) ? 1 : 0; });
+    fs.sort(function (a, b) { return b.mine - a.mine || b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
+    if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
+    var tryN = function (k) { if (k >= Math.min(3, fs.length)) return { status: 'missing', note: 'Files found, but the code is not clearly inside them', files: fs.slice(0, 6).map(fileRef) };
+      var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = certSection(pages, it.code); if (!sec) return tryN(k + 1);
+        var fl = parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), rs = parseResults([].concat.apply([], sec));
+        return { status: 'found', file: fileRef(f), fields: fl, points: rs.points, dirs: rs.dirs, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); };
+    return tryN(0); }); }
+function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
+function findSimilar(p, it) { var q = [it.description, it.manufacturer, it.model].filter(Boolean).join(' ');
+  if (!q) return Promise.reject(new Error('Write the description first'));
+  return spSearch(q, 30).then(function (fs) { return fs.filter(function (f) { return /cal\.?\s*cert/i.test(f.name) && !/cover/i.test(f.name); }).slice(0, 6).map(function (f) { var r = fileRef(f); r.snip = f.summary; return r; }); }); }
+var CRUN = { on: false, stop: false, d: 0, n: 0 };
+function runCerts(p, only) { if (CRUN.on) return; if (!spOn()) return toast('Connect SharePoint first (home screen)', true);
+  var list = only ? [only] : p.items.filter(function (i) { return !i.old || i.old.status === 'error'; }); if (!list.length) return toast('All items were searched');
+  CRUN = { on: true, stop: false, d: 0, n: list.length }; render(); var i = 0;
+  var next = function () { if (CRUN.stop || i >= list.length) { CRUN.on = false; saveProjects(); render(); toast(CRUN.stop ? 'Stopped' : 'Search finished'); return; }
+    var it = list[i++]; it.old = { status: 'searching' }; if (!sheetFn) render();
+    findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; CRUN.d++; saveProjects(); if (!sheetFn) render(); next(); }); };
+  next(); }
+var OST = { found: ['Found', 'var(--office)', 'var(--office-soft)'], similar: ['Similar', 'var(--pending)', 'var(--pending-soft)'], missing: ['Missing', 'var(--danger)', 'var(--danger-soft)'], error: ['Error', 'var(--danger)', 'var(--danger-soft)'], searching: ['Searching…', 'var(--blue)', 'var(--blue-soft)'] };
+function opill(it) { var s = OST[(it.old || {}).status] || ['To search', 'var(--oos)', 'var(--oos-soft)']; return '<span class="pill" style="--s-fg:' + s[1] + ';--s-bg:' + s[2] + '">' + s[0] + '</span>'; }
+function tCerts(p) {
+  $('#pm').innerHTML = (!spOn() ? '<div class="note warnbox">SharePoint is not connected – connect it on the home screen to find the old certificates.</div>' : '') +
+    (CRUN.on ? '<div class="card"><div style="display:flex;gap:10px;align-items:center"><span class="spin dark"></span><b style="flex:1">Searching SharePoint… ' + CRUN.d + ' of ' + CRUN.n + '</b><button class="btn ghost sm" id="cStop">Stop</button></div></div>' : '') +
+    '<div class="list">' + p.items.map(function (it) { var o = it.old || {}, f = o.fields || {};
+      return '<button class="row" data-oc="' + it.id + '"><span class="t"><b>' + esc(it.code || '(no code)') + ' · ' + esc(it.description || f.description || '') + '</b><small>' + esc(o.status === 'found' || o.status === 'similar' ? [f.certNo, o.file && o.file.folder, (o.points || []).length + ' points'].filter(Boolean).join(' · ') : (o.note || '')) + '</small></span>' + (o.status === 'searching' ? '<span class="spin dark"></span>' : opill(it)) + '</button>'; }).join('') + '</div>' +
+    (!CRUN.on && spOn() && p.items.some(function (i) { return !i.old || i.old.status === 'error'; }) ? '' : '');
+  var st = $('#cStop'); if (st) st.onclick = function () { CRUN.stop = true; };
+  $$('[data-oc]').forEach(function (b) { b.onclick = function () { oldSheet(p, b.dataset.oc); }; });
+  var fab = document.createElement('button'); fab.className = 'btn fab'; fab.innerHTML = I.search + ' Search SharePoint'; fab.style.bottom = '84px';
+  if (!CRUN.on && p.items.some(function (i) { return !i.old || i.old.status === 'error'; })) { fab.onclick = function () { runCerts(p); }; $('#app').appendChild(fab); }
+}
+function oldSheet(p, id) { var it = p.items.filter(function (x) { return x.id === id; })[0]; if (!it) return;
+  openSheet(function () { var o = it.old || {}, f = o.fields || {}, pts = o.points || [];
+    var kv = [['Old cert no.', f.certNo], ['Manufacturer', f.manufacturer], ['Description', f.description], ['Model', f.model], ['Serial', f.serial], ['Range', f.range], ['Cal. range', f.calRange], ['Resolution', f.resolution], ['Accepted limits', f.limits], ['Calibration date', f.calDate], ['Data sheet ref.', f.dataSheetRef]].filter(function (x) { return x[1]; });
+    return { title: esc(it.code || it.description || 'Item'), body:
+      '<div class="hero"><h3 style="margin-top:0">' + esc(it.description || f.description || '—') + '</h3><div class="sub">' + opill(it) + '</div>' + (o.note ? '<div class="small" style="margin-top:8px">' + esc(o.note) + '</div>' : '') + '</div>' +
+      (o.status === 'similar' ? '<div class="note" style="margin-top:12px;background:var(--pending-soft);color:var(--pending)">Old readings are from a <b>similar device</b>: ' + esc(f.certNo || o.file.name) + ' – ' + esc(o.file.folder) + '</div>' : '') +
+      (kv.length ? '<div class="box"><h4>Last year\'s certificate</h4><dl class="kv">' + kv.map(function (x) { return '<dt>' + x[0] + '</dt><dd>' + esc(x[1]) + '</dd>'; }).join('') + '</dl>' + (o.file && o.file.webUrl ? '<div class="cf"><a class="btn ghost" href="' + esc(o.file.webUrl) + '" target="_blank" rel="noopener">Open the Word file</a></div>' : '') + '</div>' : '') +
+      (pts.length ? '<div class="box"><h4>Readings (' + pts.length + ' points)</h4><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">' +
+        '<tr>' + ['Point', 'Ref', 'Reading', 'Dev'].concat(o.dirs === 2 ? ['Reading ↓', 'Dev ↓'] : []).concat(['Limit']).map(function (x) { return '<th style="text-align:center;padding:6px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px">' + x + '</th>'; }).join('') + '</tr>' +
+        pts.map(function (q, i) { return '<tr>' + ['point', 'ref', 'reading', 'deviation'].concat(o.dirs === 2 ? ['reading2', 'deviation2'] : []).concat(['limit']).map(function (k) { return '<td style="padding:2px;border-bottom:1px solid var(--line)"><input class="inp" data-pt="' + i + '|' + k + '" value="' + esc(q[k]) + '" style="height:36px;text-align:center;padding:0 4px;min-width:64px"></td>'; }).join('') + '</tr>'; }).join('') + '</table></div>' +
+        '<div class="small" style="margin-top:8px">Read automatically from the Word file – check them against the file and fix anything wrong.</div></div>' : '') +
+      (o.status === 'found' || o.status === 'similar' ? fillFromOld(it) : '') +
+      (o.status === 'missing' || o.status === 'error' || o.status === 'similar' ? '<div class="box"><h4>Use a similar device</h4><button class="btn wide" id="simB">' + (it.simBusy ? '<span class="spin"></span> Searching…' : 'Suggest a similar device') + '</button>' +
+        (it.simList ? (it.simList.length ? '<div class="list" style="margin-top:12px">' + it.simList.map(function (s, i) { return '<button class="row" data-sim="' + i + '"><span class="t"><b>' + esc(s.name) + '</b><small>' + esc(s.folder) + '</small><small>' + esc(s.snip || '') + '</small></span></button>'; }).join('') + '</div>' : '<div class="small" style="margin-top:8px">Nothing similar found.</div>') : '') + '</div>' : '') +
+      (o.files && o.files.length > 1 ? '<details class="box"><summary>Other files with this code (' + o.files.length + ')</summary><div class="list" style="margin-top:10px">' + o.files.map(function (x, i) { return '<button class="row" data-use="' + i + '"><span class="t"><b>' + esc(x.name) + '</b><small>' + esc(x.folder) + '</small></span></button>'; }).join('') + '</div></details>' : ''),
+      foot: '<button class="btn ghost" id="again">Search again</button><button class="btn" id="okS">Done</button>',
+      mount: function () { $('#okS').onclick = function () { saveProjects(); closeSheet(); }; $('#again').onclick = function () { closeSheet(); runCerts(p, it); };
+        $$('[data-pt]').forEach(function (e) { e.oninput = function () { var a = e.dataset.pt.split('|'); pts[+a[0]][a[1]] = e.value.trim(); saveProjects(); }; });
+        var fb = $('#fillB'); if (fb) fb.onclick = function () { applyOld(it); };
+        var sb = $('#simB'); if (sb) sb.onclick = function () { it.simBusy = true; renderSheet(); findSimilar(p, it).then(function (l) { it.simList = l; }).catch(function (e) { toast(e.message, true); }).then(function () { it.simBusy = false; renderSheet(); }); };
+        $$('[data-sim]').forEach(function (b) { b.onclick = function () { var s = it.simList[+b.dataset.sim];
+          dialog('Compare with this one?', 'Last year\'s readings for <b>' + esc(it.code || it.description) + '</b> will come from<br><b>' + esc(s.name) + '</b><br>' + esc(s.folder), 'Yes, use it').then(function (y) { if (!y) return;
+            pdfPages(s.driveId, s.id).then(function (pages) { var toks = String(it.description + ' ' + it.manufacturer).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = 0, bs = -1;
+              pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (sc > bs) { bs = sc; best = i; } });
+              var sec = [pages[best]]; for (var n = best + 1; n < pages.length && sec.length < 5 && /continue/i.test(pages[n].join(' ')); n++) sec.push(pages[n]);
+              var rs = parseResults([].concat.apply([], sec)); it.old = { status: 'similar', file: s, fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs, at: Date.now() }; saveProjects(); renderSheet(); })
+              .catch(function (e) { toast(e.message, true); }); }); }; });
+        $$('[data-use]').forEach(function (b) { b.onclick = function () { var x = o.files[+b.dataset.use]; pdfPages(x.driveId, x.id).then(function (pages) { var sec = certSection(pages, it.code); if (!sec) return toast('The code is not inside this file', true);
+          var rs = parseResults([].concat.apply([], sec)); it.old = { status: 'found', file: x, files: o.files, fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs, at: Date.now() }; saveProjects(); renderSheet(); }).catch(function (e) { toast(e.message, true); }); }; }); } }; }); }
+/* fill the item's missing range / resolution from the old certificate */
+function oldNums(f) { var rg = tidy(f.calRange || f.range).match(/(-?\d+(?:\.\d+)?)\s*(?::|to|~|-)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?$/i), mx = !rg && tidy(f.range).match(/max\.?\s*(-?\d+(?:\.\d+)?)\s*(\S+)?/i), rs = tidy(f.resolution).match(/(\d*\.?\d+)\s*(\S+)?/);
+  return { rMin: rg ? rg[1] : (mx ? '0' : ''), rMax: rg ? rg[2] : (mx ? mx[1] : ''), unit: rg && rg[3] ? rg[3].trim() : (mx && mx[2] ? mx[2] : ''), res: rs ? rs[1] : '', resUnit: rs && rs[2] ? rs[2] : '' }; }
+function fillFromOld(it) { var n = oldNums((it.old || {}).fields || {}), diff = [];
+  if (n.rMin && (it.rMin !== n.rMin || it.rMax !== n.rMax)) diff.push('Range ' + n.rMin + ' : ' + n.rMax + ' ' + n.unit); if (n.res && it.res !== n.res) diff.push('Resolution ' + n.res + ' ' + n.resUnit);
+  if (!diff.length) return ''; return '<div class="box"><h4>Use last year\'s data for this item?</h4><div class="small">' + esc(diff.join(' · ')) + (hasData(it) ? '<br>Your item has: ' + esc([rangeText(it), it.res && 'res ' + it.res + ' ' + (it.resUnit || it.unit)].filter(Boolean).join(' · ') || '—') : '') + '</div><div class="cf"><button class="btn" id="fillB">Use it</button></div></div>'; }
+function applyOld(it) { var n = oldNums(it.old.fields || {}), was = hasData(it) && (it.rMin || it.res);
+  var doIt = function () { if (n.rMin) { it.rMin = n.rMin; it.rMax = n.rMax; if (n.unit) it.unit = n.unit; } if (n.res) { it.res = n.res; it.resUnit = n.resUnit || it.unit; } var f = it.old.fields; if (!it.description) it.description = f.description; if (!it.manufacturer) it.manufacturer = f.manufacturer; if (!it.model) it.model = f.model; if (!it.serial) it.serial = f.serial; saveProjects(); renderSheet(); toast('Item updated from last year'); };
+  if (!was) return doIt(); dialog('Are you sure?', 'This changes the item\'s range / resolution to last year\'s values.', 'Yes, I\'m sure').then(function (y) { if (y) doIt(); }); }
+
+/* ---- readings ---- */
+function decOf(s) { var c = String(s == null ? '' : s).replace(',', '.').match(/-?\d*\.?\d+/); if (!c) return 0; var q = c[0].split('.'); return q[1] ? q[1].length : 0; }
+function limitVal(lim, ref, rd) { var l = String(lim || '').replace(/\s+/g, ''); if (!l) return null; var pm = l.match(/(\d*\.?\d+)%/); if (pm) return parseFloat(pm[1]) / 100 * Math.abs(/rdg|reading/i.test(lim) ? (rd != null ? rd : ref) : (ref != null ? ref : rd)); var m = l.match(/(\d*\.?\d+)/); return m ? parseFloat(m[1]) : null; }
+function ptLimit(it, q) { return q.limit || ((it.old || {}).fields || {}).limits || ''; }
+function resDec(it) { return isNum(it.res) ? decOf(it.res) : (it.old && it.old.fields && it.old.fields.resolution ? decOf(it.old.fields.resolution) : null); }
+function evalPt(it, i, dir) { var q = it.old.points[i], v = (it.nv || {})[i + (dir === 2 ? 'd' : '')] || {}, d = resDec(it);
+  var ref = isNum(v.ref) ? numv(v.ref) : null, rd = isNum(v.reading) ? numv(v.reading) : null, o = { ref: ref, rd: rd, dev: null, lim: null, res: '', warn: [] };
+  if (ref == null || rd == null) return o; o.dev = +(rd - ref).toFixed(Math.max(d == null ? 6 : d, decOf(v.ref), decOf(v.reading))); o.lim = limitVal(ptLimit(it, q), ref, rd);
+  if (o.lim != null) o.res = Math.abs(o.dev) <= o.lim + 1e-12 ? 'OK' : 'OUT';
+  if (d != null && decOf(v.reading) !== d) o.warn.push('Reading should have ' + d + ' decimal' + (d === 1 ? '' : 's') + ' (resolution ' + (it.res || it.old.fields.resolution) + ')');
+  var lo = isNum(it.cMin) ? numv(it.cMin) : (isNum(it.rMin) ? numv(it.rMin) : null), hi = isNum(it.cMax) ? numv(it.cMax) : (isNum(it.rMax) ? numv(it.rMax) : null);
+  if (lo != null && hi != null && (ref < lo - 1e-9 || ref > hi + 1e-9)) o.warn.push('Point is outside the calibration range (' + lo + ' : ' + hi + ')');
+  return o; }
+function withPts(p) { return p.items.filter(function (it) { return it.old && (it.old.points || []).length; }); }
+function itemProg(it) { var t = 0, f = 0, out = 0; it.old.points.forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { t++; var r = evalPt(it, i, dr); if (r.rd != null && r.ref != null) f++; if (r.res === 'OUT') out++; }); }); return { tot: t, fil: f, out: out }; }
+function readProgress(p) { var a = { tot: 0, fil: 0, out: 0 }; withPts(p).forEach(function (it) { var x = itemProg(it); a.tot += x.tot; a.fil += x.fil; a.out += x.out; }); return a; }
+function tRead(p) { var L = withPts(p), pr = readProgress(p);
+  $('#pm').innerHTML = '<div class="cf" style="margin-top:0"><button class="btn ghost" id="xd">Download Excel</button><button class="btn ghost" id="xu">Upload Excel</button></div>' +
+    '<div class="small" style="margin:8px 2px 0">The Excel has last year\'s readings filled in – fill the yellow cells and upload it back. Or enter them here.</div><div id="upMsg" style="margin-top:12px"></div>' +
+    (pr.out ? '<div class="note warnbox"><b>' + pr.out + ' points OUT.</b> Their certificates will use last year\'s readings as placeholders until re-measured, and must be replaced before going to the customer. <a href="#" id="outR" style="color:inherit;font-weight:700">See the report</a></div>' : '') +
+    '<div class="sec"><h2>Items</h2><small>' + L.length + '</small></div>' +
+    (L.length ? '<div class="list">' + L.map(function (it) { var x = itemProg(it); return '<button class="row" data-r="' + it.id + '"><span class="t"><b>' + esc((it.code ? it.code + ' · ' : '') + (it.description || it.old.fields.description)) + '</b><small>Resolution ' + esc((it.res ? it.res + ' ' + (it.resUnit || it.unit) : it.old.fields.resolution) || '—') + ' · ' + x.tot + ' points</small></span>' +
+      (x.out ? '<span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">' + x.out + ' OUT</span>' : x.fil === x.tot ? '<span class="pill">Done</span>' : '<span class="pill" style="--s-fg:var(--muted);--s-bg:var(--oos-soft)">' + x.fil + '/' + x.tot + '</span>') + '</button>'; }).join('') + '</div>'
+      : '<div class="empty"><b>No items with old readings yet</b>Find the old certificates first.</div>');
+  $('#xd').onclick = function () { xlReadings(p); }; $('#xu').onclick = function () { pickFiles('.xlsx').then(function (fs) { if (fs.length) xlReadUp(p, fs[0]); }); };
+  var o = $('#outR'); if (o) o.onclick = function (e) { e.preventDefault(); outSheet(p); };
+  $$('[data-r]').forEach(function (b) { b.onclick = function () { readSheet(p, b.dataset.r); }; }); }
+function readSheet(p, id) { var it = p.items.filter(function (x) { return x.id === id; })[0]; it.nv = it.nv || {};
+  openSheet(function () { var o = it.old, f = o.fields || {}, d = resDec(it);
+    var card = function (q, i, dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] || {}, oldR = dr === 2 ? q.reading2 : q.reading, oldD = dr === 2 ? q.deviation2 : q.deviation;
+      return '<div class="box" data-pt="' + i + '|' + dr + '" style="margin-top:8px;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-family:var(--cond);font-size:18px;color:var(--navy)">' + esc(q.point) + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : '') + '</b><small class="small">Limit ' + esc(ptLimit(it, q) || '—') + '</small><b data-rs style="font-family:var(--cond)"></b></div>' +
+        '<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px 8px;align-items:center;font-size:14px"><span></span><span class="small" style="text-align:center;font-weight:600">LAST YEAR</span><span class="small" style="text-align:center;font-weight:600">NEW</span>' +
+        '<span class="small">Ref</span><span style="background:var(--oos-soft);border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px">' + esc(q.ref || '—') + '</span><input class="inp" inputmode="decimal" data-k="ref" value="' + esc(v.ref || '') + '" placeholder="' + esc(q.ref) + '" style="height:42px;text-align:center;background:#FFF6CF;border-color:#E7D27A;font-family:var(--cond);font-size:17px">' +
+        '<span class="small">Reading</span><span style="background:var(--oos-soft);border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px">' + esc(oldR || '—') + '</span><input class="inp" inputmode="decimal" data-k="reading" value="' + esc(v.reading || '') + '" style="height:42px;text-align:center;background:#FFF6CF;border-color:#E7D27A;font-family:var(--cond);font-size:17px">' +
+        '<span class="small">Dev</span><span style="background:var(--oos-soft);border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px">' + esc(oldD || '—') + '</span><span data-dv style="background:#FFF6CF;border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px;min-height:40px"></span></div><div data-wn></div></div>'; };
+    return { title: esc(it.code || it.description), body:
+      '<div class="hero"><h3 style="margin-top:0">' + esc(it.description || f.description) + '</h3><div class="sub">' + esc([it.manufacturer || f.manufacturer, it.model || f.model].filter(Boolean).join(' · ')) + '</div>' +
+      '<dl class="kv" style="margin-top:12px"><dt>Range</dt><dd>' + esc(rangeText(it) || f.range || '—') + '</dd><dt>Cal. range</dt><dd>' + esc(calText(it) || f.calRange || '—') + '</dd><dt>Resolution</dt><dd><b>' + esc(it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution || '—') + '</b></dd><dt>Limits</dt><dd>' + esc(f.limits || '—') + '</dd></dl>' +
+      '<div class="cf"><button class="btn ghost sm" id="eRes">Edit resolution</button>' + (f.manufacturer || it.manufacturer ? '<a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.google.com/search?q=' + encodeURIComponent([it.manufacturer || f.manufacturer, it.model || f.model, 'datasheet'].filter(Boolean).join(' ')) + '">Check online</a>' : '') + '</div>' +
+      (o.status === 'similar' ? '<div class="note" style="margin:12px 0 0;background:var(--pending-soft);color:var(--pending)">Last year\'s values are from a similar device.</div>' : '') + '</div>' +
+      o.points.map(function (q, i) { return card(q, i, 1) + (o.dirs === 2 ? card(q, i, 2) : ''); }).join(''),
+      foot: '<button class="btn" id="rOk">Done</button>',
+      mount: function () { $('#rOk').onclick = closeSheet;
+        $('#eRes').onclick = function () { var was = it.res || f.resolution || '';
+          $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>Edit resolution</h3><p>Last year\'s certificate: <b>' + esc(f.resolution || '—') + '</b></p><input class="inp" id="nr" inputmode="decimal" value="' + esc(it.res || '') + '"><div class="cf"><button class="btn ghost" id="nc">Cancel</button><button class="btn" id="ns">Save</button></div></div></div>';
+          $('#nc').onclick = function () { $('#dlg-root').innerHTML = ''; };
+          $('#ns').onclick = function () { var v = $('#nr').value.trim(); $('#dlg-root').innerHTML = ''; if (!isNum(v)) return toast('Resolution must be a number', true);
+            var old = oldNums(f).res; var save = function () { it.res = v; if (!it.resUnit) it.resUnit = oldNums(f).resUnit || it.unit; saveProjects(); renderSheet(); };
+            if (old && numv(old) !== numv(v)) dialog('Are you sure?', 'The resolution will be <b>' + esc(v) + '</b> – last year it was <b>' + esc(f.resolution) + '</b>.', 'Yes, I\'m sure').then(function (y) { if (y) save(); }); else save(); }; };
+        var upd = function (el) { var a = el.dataset.pt.split('|').map(Number), r = evalPt(it, a[0], a[1]); el.querySelector('[data-dv]').textContent = r.dev == null ? '' : (d == null ? String(r.dev) : r.dev.toFixed(d));
+          var rs = el.querySelector('[data-rs]'); rs.textContent = r.res; rs.style.color = r.res === 'OUT' ? 'var(--danger)' : 'var(--office)'; el.style.borderColor = r.res === 'OUT' ? '#E9A39C' : ''; el.style.background = r.res === 'OUT' ? '#FFF8F7' : '';
+          el.querySelector('[data-wn]').innerHTML = r.warn.map(function (w) { return '<div class="small" style="color:var(--danger);margin-top:6px">' + esc(w) + '</div>'; }).join(''); return r; };
+        $$('[data-pt]').forEach(function (el) { upd(el); el.querySelectorAll('input').forEach(function (inp) { inp.oninput = function () { var a = el.dataset.pt.split('|'), k = a[0] + (a[1] === '2' ? 'd' : ''); (it.nv[k] = it.nv[k] || {})[inp.dataset.k] = inp.value.trim(); saveProjects(); var r = upd(el); if (r.res === 'OUT' && inp.dataset.k === 'reading') toast('OUT – deviation ' + r.dev + ' is beyond ±' + r.lim, true); }; }); }); } }; }); }
+function outList(p) { var L = []; withPts(p).forEach(function (it) { it.old.points.forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { var r = evalPt(it, i, dr); if (r.res === 'OUT') L.push({ code: it.code, cert: (it.old.fields || {}).certNo, point: q.point + (it.old.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), reading: r.rd, dev: r.dev, lim: r.lim, ex: +(Math.abs(r.dev) - r.lim).toFixed(6) }); }); }); }); return L; }
+function outSheet(p) { openSheet(function () { var L = outList(p); return { title: 'OUT report', body: '<div class="note warnbox">Re-measure these with the technician. Their certificates use last year\'s readings as placeholders and must be replaced before going to the customer.</div>' +
+  '<div class="list">' + (L.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.code) + ' · point ' + esc(x.point) + '</b><small>Old cert ' + esc(x.cert || '—') + ' · reading ' + x.reading + ' · limit ±' + x.lim + '</small></span><span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">+' + x.ex + '</span></div>'; }).join('') || '<div class="row">No OUT points</div>') + '</div>', foot: '<button class="btn" id="oc">Done</button>', mount: function () { $('#oc').onclick = closeSheet; } }; }); }
+function dlBlob(buf, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+var RHDR = ['#', 'Department', 'Equipment', 'Code', 'Old cert no.', 'Direction', 'Resolution', 'Limit', 'Point', 'Old Ref', 'New Ref', 'Old Reading', 'New Reading', 'Old Dev', 'New Dev', 'Result', 'Remarks', 'Key'];
+function xlReadings(p) { var L = withPts(p); if (!L.length) return toast('No items with old readings yet', true);
+  needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Readings', { views: [{ state: 'frozen', ySplit: 1 }] });
+    var GR = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E9EC' } }, YL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2B3' } }, thin = { style: 'thin', color: { argb: 'FFBFC5CE' } };
+    ws.addRow(RHDR).eachCell(function (c) { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Arial', size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF13294B' } }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+    var n = 0, fmt = function (d) { return d > 0 ? '0.' + '0'.repeat(d) : '0'; }, nv = function (s) { return isNum(s) ? numv(s) : (s || ''); };
+    L.forEach(function (it) { n++; var o = it.old, f = o.fields || {}, d = resDec(it), first = true;
+      o.points.forEach(function (q, i) { [1].concat(o.dirs === 2 ? [2] : []).forEach(function (dr) { var v = it.nv && it.nv[i + (dr === 2 ? 'd' : '')] || {}, lt = ptLimit(it, q);
+        var row = ws.addRow([first ? n : '', first ? it.dept : '', first ? (it.description || f.description) : '', first ? it.code : '', first ? (f.certNo || '') + (o.status === 'similar' ? ' (similar)' : '') : '', o.dirs === 2 ? (dr === 2 ? 'Down' : 'Up') : '', first ? (it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution) : '', lt, nv(q.point), nv(q.ref), v.ref ? nv(v.ref) : null, nv(dr === 2 ? q.reading2 : q.reading), v.reading ? nv(v.reading) : null, nv(dr === 2 ? q.deviation2 : q.deviation), null, null, '', it.id + '|' + i + '|' + dr]);
+        var r = row.number, lim = limitVal(lt, numv(q.ref), null), pct = String(lt).replace(/\s/g, '').match(/(\d*\.?\d+)%/);
+        row.getCell(15).value = { formula: 'IF(OR(K' + r + '="",M' + r + '=""),"",M' + r + '-K' + r + ')' };
+        row.getCell(16).value = pct ? { formula: 'IF(O' + r + '="","",IF(ABS(O' + r + ')<=' + parseFloat(pct[1]) / 100 + '*ABS(' + (/rdg|reading/i.test(lt) ? 'M' : 'K') + r + '),"OK","OUT"))' } : lim != null ? { formula: 'IF(O' + r + '="","",IF(ABS(O' + r + ')<=' + lim + ',"OK","OUT"))' } : '';
+        [10, 12, 14].forEach(function (c) { var cell = row.getCell(c); cell.fill = GR; if (typeof cell.value === 'number') cell.numFmt = fmt(decOf(c === 10 ? q.ref : c === 12 ? (dr === 2 ? q.reading2 : q.reading) : (dr === 2 ? q.deviation2 : q.deviation))); });
+        [11, 13, 15].forEach(function (c) { var cell = row.getCell(c); cell.fill = YL; cell.numFmt = fmt(d == null ? decOf(q.reading) : d); if (c !== 15) cell.dataValidation = { type: 'decimal', operator: 'between', formulae: [-1e9, 1e9], showErrorMessage: true, errorTitle: 'Number only', error: 'Type a number' }; });
+        row.eachCell({ includeEmpty: true }, function (c, ci) { if (ci > 18) return; c.font = { name: 'Arial', size: 10 }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: ci === 3 }; c.border = { top: first ? { style: 'medium', color: { argb: 'FF13294B' } } : thin, bottom: thin, left: thin, right: thin }; });
+        first = false; }); }); });
+    ws.addConditionalFormatting({ ref: 'P2:P' + ws.rowCount, rules: [{ type: 'containsText', operator: 'containsText', text: 'OUT', style: { font: { color: { argb: 'FFC2362B' }, bold: true }, fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFBE6E3' } } } }] });
+    [5, 12, 24, 14, 18, 9, 11, 14, 10, 11, 11, 12, 12, 10, 10, 8, 16, 4].forEach(function (w, i) { ws.getColumn(i + 1).width = w; }); ws.getColumn(18).hidden = true;
+    var ix = wb.addWorksheet('Index'); ix.addRow(['Code', 'Equipment', 'Note']).font = { bold: true, name: 'Arial' };
+    p.items.filter(function (i) { return L.indexOf(i) < 0; }).forEach(function (i) { ix.addRow([i.code, i.description, (i.old && i.old.note) || 'No old readings']); }); ix.columns.forEach(function (c) { c.width = 28; });
+    return wb.xlsx.writeBuffer(); }).then(function (b) { dlBlob(b, 'Readings - ' + p.company.name + '.xlsx'); }).catch(function (e) { toast(e.message, true); }); }
+function cellRaw(c) { var v = c.value; if (v == null || v === '') return ''; if (typeof v === 'number') { var m = (c.numFmt || '').match(/0\.(0+)/); return m ? v.toFixed(m[1].length) : String(v); } if (typeof v === 'object' && 'result' in v) return v.result == null ? '' : String(v.result); return cellStr(v).trim(); }
+function xlReadUp(p, file) { needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) {
+  var ws = wb.getWorksheet('Readings') || wb.worksheets[0], H = ws.getRow(1).values.map(function (v) { return cellStr(v).trim(); }), cK = H.indexOf('Key'), cR = H.indexOf('New Ref'), cN = H.indexOf('New Reading');
+  if (cK < 0 || cN < 0) throw new Error('This is not the readings file downloaded from the app'); var cnt = 0, probs = [], touched = {};
+  ws.eachRow(function (row, i) { if (i === 1) return; var key = cellStr(row.getCell(cK).value); if (!key) return; var a = key.split('|'), it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (!it || !it.old) return;
+    var ref = cellRaw(row.getCell(cR)), rd = cellRaw(row.getCell(cN)); if (ref === '' && rd === '') return; it.nv = it.nv || {}; var k = a[1] + (a[2] === '2' ? 'd' : '');
+    it.nv[k] = Object.assign(it.nv[k] || {}, ref !== '' ? { ref: ref } : {}, rd !== '' ? { reading: rd } : {}); cnt++; touched[it.id] = 1;
+    var r = evalPt(it, +a[1], +a[2]), pt = it.old.points[+a[1]].point; r.warn.forEach(function (w) { probs.push(it.code + ' · ' + pt + ': ' + w); }); if (r.res === 'OUT') probs.push(it.code + ' · ' + pt + ': OUT (dev ' + r.dev + ', limit ±' + r.lim + ')'); });
+  saveProjects(); render(); $('#upMsg').innerHTML = '<div class="note" style="background:var(--office-soft);color:#14603C">' + cnt + ' readings loaded for ' + Object.keys(touched).length + ' items.</div>' + (probs.length ? '<div class="note warnbox"><b>Please check:</b><br>' + probs.slice(0, 40).map(esc).join('<br>') + '</div>' : '');
+}).catch(function (e) { toast(e.message || String(e), true); }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); } });
