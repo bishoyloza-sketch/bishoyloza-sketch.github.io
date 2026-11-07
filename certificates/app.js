@@ -678,21 +678,22 @@ var NAVI = {
   over: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
   certs: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h4"/></svg>',
   read: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-3M12 5V3"/></svg>',
+  gen: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg>',
   det: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'
 };
 function renderOverview(p) {
   p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String(p.company.code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} };
   p.info.refRes = p.info.refRes || {};
-  var titles = { over: [p.company.name, [p.depts.join(', '), TYPES[p.orderType][0]].filter(Boolean).join(' · ')], certs: ['Old certificates', 'Last year\'s certificate of every item'], read: ['Readings', 'New readings next to last year\'s'], det: ['Project details', 'Dates, technician, references, conditions'] }[PT.tab];
+  var titles = { over: [p.company.name, [p.depts.join(', '), TYPES[p.orderType][0]].filter(Boolean).join(' · ')], certs: ['Old certificates', 'Last year\'s certificate of every item'], read: ['Readings', 'New readings next to last year\'s'], det: ['Project details', 'Dates, technician, references, conditions'], gen: ['Certificates', 'Covers, certificates and the receipt letter'] }[PT.tab];
   var extra = '';
   if (PT.tab === 'over' || PT.tab === 'certs') { var n = p.items.length || 1, c = certCounts(p);
     extra = '<div class="strip">' + [['found', 'var(--office)'], ['similar', 'var(--pending)'], ['missing', 'var(--danger)'], ['todo', 'var(--oos)']].map(function (x) { return '<span style="width:' + (c[x[0]] / n * 100) + '%;background:' + x[1] + '"></span>'; }).join('') + '</div>' +
       '<div class="legend">' + [['found', 'Found', 'var(--office)'], ['similar', 'Similar', 'var(--pending)'], ['missing', 'Missing', 'var(--danger)'], ['todo', 'To search', 'var(--oos)']].map(function (x) { return '<button data-lf="' + x[0] + '"><div class="n">' + c[x[0]] + '</div><div class="l"><i class="dot" style="background:' + x[2] + '"></i>' + x[1] + '</div></button>'; }).join('') + '</div>'; }
   $('#app').innerHTML = '<div class="shell">' + top(esc(titles[0]), esc(titles[1]), extra) + '<main id="pm"></main></div>' +
-    '<nav class="nav"><div>' + [['over', 'Overview'], ['certs', 'Old certs'], ['read', 'Readings'], ['det', 'Details']].map(function (x) { return '<a href="#" data-tab="' + x[0] + '" class="' + (PT.tab === x[0] ? 'on' : '') + '">' + NAVI[x[0]] + x[1] + '</a>'; }).join('') + '</div></nav>';
+    '<nav class="nav"><div>' + [['over', 'Overview'], ['det', 'Details'], ['certs', 'Old certs'], ['read', 'Readings'], ['gen', 'Certificates']].map(function (x) { return '<a href="#" data-tab="' + x[0] + '" class="' + (PT.tab === x[0] ? 'on' : '') + '">' + NAVI[x[0]] + x[1] + '</a>'; }).join('') + '</div></nav>';
   $$('[data-tab]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); PT.tab = a.dataset.tab; render(); window.scrollTo(0, 0); }; });
   $$('[data-lf]').forEach(function (b) { b.onclick = function () { PT.tab = 'certs'; render(); }; });
-  ({ over: tOver, certs: tCerts, read: tRead, det: tDet })[PT.tab](p);
+  ({ over: tOver, certs: tCerts, read: tRead, det: tDet, gen: tGen })[PT.tab](p);
 }
 function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; p.items.forEach(function (it) { var s = (it.old || {}).status; if (s === 'found') c.found++; else if (s === 'similar') c.similar++; else if (s === 'missing' || s === 'error') c.missing++; else c.todo++; }); return c; }
 
@@ -709,7 +710,7 @@ function tOver(p) {
     step(1, !!(inf.cal && inf.tech), 'Project details', inf.cal ? 'Calibration ' + dmy(inf.cal) + ' · ' + esc(inf.tech || 'no technician yet') : 'Dates, technician, references', 'Details', 'det') +
     step(2, p.items.length && !c.todo, 'Old certificates', (c.found + c.similar) + ' of ' + p.items.length + ' have last year\'s data', 'Old certificates', 'certs') +
     step(3, pr.tot && pr.fil === pr.tot, 'New readings', pr.tot ? pr.fil + ' of ' + pr.tot + ' points' + (pr.out ? ' · <span class="warn">' + pr.out + ' OUT</span>' : '') : 'After the old certificates', 'Readings', 'read') +
-    '<div class="note" style="margin-top:6px">Certificates, covers and the receipt letter (Word + PDF) are the next version.</div>' +
+    step(4, false, 'Certificates', 'Covers, certificates and the receipt letter – Word and PDF', 'Certificates', 'gen') +
     '<div class="cf"><button class="btn ghost" id="home">All projects</button><button class="btn danger" id="delP">Delete project</button></div>';
   $$('[data-g]').forEach(function (b) { b.onclick = function () { go(p, b.dataset.g); }; });
   $$('[data-go]').forEach(function (b) { b.onclick = function () { PT.tab = b.dataset.go; render(); window.scrollTo(0, 0); }; });
@@ -1001,6 +1002,215 @@ function xlReadUp(p, file) { needExcel().then(function () { return file.arrayBuf
     var r = evalPt(it, +a[1], +a[2]), pt = it.old.points[+a[1]].point; r.warn.forEach(function (w) { probs.push(it.code + ' · ' + pt + ': ' + w); }); if (r.res === 'OUT') probs.push(it.code + ' · ' + pt + ': OUT (dev ' + r.dev + ', limit ±' + r.lim + ')'); });
   saveProjects(); render(); $('#upMsg').innerHTML = '<div class="note" style="background:var(--office-soft);color:#14603C">' + cnt + ' readings loaded for ' + Object.keys(touched).length + ' items.</div>' + (probs.length ? '<div class="note warnbox"><b>Please check:</b><br>' + probs.slice(0, 40).map(esc).join('<br>') + '</div>' : '');
 }).catch(function (e) { toast(e.message || String(e), true); }); }
+
+/* ================= certificates, covers and receipt letter (Word + print/PDF) ================= */
+/* --- tiny zip (stored) + Word writer: no library needed --- */
+var CRC_T = (function () { var t = [], c; for (var n = 0; n < 256; n++) { c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { var c = 0xFFFFFFFF; for (var i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipFiles(files) { /* files: [{name, data: string|Uint8Array}] → Uint8Array */
+  var te = new TextEncoder(), parts = [], cen = [], off = 0;
+  files.forEach(function (f) { var nm = te.encode(f.name), d = typeof f.data === 'string' ? te.encode(f.data) : f.data, crc = crc32(d);
+    var h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true); h.setUint32(14, crc, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nm.length, true);
+    parts.push(new Uint8Array(h.buffer), nm, d);
+    var c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint32(16, crc, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    cen.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + d.length; });
+  var cs = cen.reduce(function (a, b) { return a + b.length; }, 0), e = new DataView(new ArrayBuffer(22)); e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cs, true); e.setUint32(16, off, true);
+  var all = parts.concat(cen, [new Uint8Array(e.buffer)]), len = all.reduce(function (a, b) { return a + b.length; }, 0), out = new Uint8Array(len), p = 0; all.forEach(function (b) { out.set(b, p); p += b.length; }); return out; }
+var X = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+var W = { /* WordprocessingML pieces – Arial everywhere */
+  r: function (t, o) { o = o || {}; return '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>' + (o.b ? '<w:b/><w:bCs/>' : '') + (o.i ? '<w:i/>' : '') + (o.c ? '<w:color w:val="' + o.c + '"/>' : '') + '<w:sz w:val="' + (o.sz || 18) + '"/><w:szCs w:val="' + (o.sz || 18) + '"/>' + (o.rtl ? '<w:rtl/>' : '') + '</w:rPr><w:t xml:space="preserve">' + X(t) + '</w:t></w:r>'; },
+  p: function (runs, o) { o = o || {}; return '<w:p><w:pPr>' + (o.pb ? '<w:pageBreakBefore/>' : '') + (o.keep ? '<w:keepNext/><w:keepLines/>' : '') + (o.bidi ? '<w:bidi/>' : '') + '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after == null ? 40 : o.after) + '" w:line="240" w:lineRule="auto"/><w:jc w:val="' + (o.jc || 'left') + '"/></w:pPr>' + (Array.isArray(runs) ? runs.join('') : runs) + '</w:p>'; },
+  fld: function (instr, o) { o = o || {}; return '<w:fldSimple w:instr=" ' + instr + ' "><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="' + (o.sz || 16) + '"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>'; },
+  tbl: function (rows, widths, o) { o = o || {}; var tw = widths.reduce(function (a, b) { return a + b; }, 0), bd = '<w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideH w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:color="000000"/>';
+    return '<w:tbl><w:tblPr><w:tblW w:w="' + tw + '" w:type="dxa"/>' + (o.bidi ? '<w:bidiVisual/>' : '') + '<w:jc w:val="center"/><w:tblBorders>' + bd + '</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>' + widths.map(function (w) { return '<w:gridCol w:w="' + w + '"/>'; }).join('') + '</w:tblGrid>' +
+      rows.map(function (row, ri) { var ci = 0; return '<w:tr><w:trPr><w:cantSplit/>' + (o.h ? '<w:trHeight w:val="' + o.h + '"/>' : '') + (ri === 0 && o.head ? '<w:tblHeader/>' : '') + '</w:trPr>' + row.map(function (c) { c = typeof c === 'object' ? c : { t: c }; var span = c.span || 1, w = widths.slice(ci, ci + span).reduce(function (a, b) { return a + b; }, 0); ci += span;
+        var lines = String(c.t == null ? '' : c.t).split('\n');
+        return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : '') + (c.shade ? '<w:shd w:val="clear" w:color="auto" w:fill="' + c.shade + '"/>' : '') + '<w:vAlign w:val="center"/></w:tcPr>' +
+          lines.map(function (ln) { return W.p(W.r(ln, { b: c.b, sz: c.sz || o.sz || 16, rtl: o.bidi }), { jc: c.jc || o.jc || 'center', after: 0, keep: true, bidi: o.bidi }); }).join('') + '</w:tc>'; }).join('') + '</w:tr>'; }).join('') + '</w:tbl>'; },
+  doc: function (body, o) { o = o || {}; /* o: header, footer, pgStart */
+    var ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    var sect = '<w:sectPr>' + (o.header ? '<w:headerReference w:type="default" r:id="rIdH"/>' : '') + (o.footer ? '<w:footerReference w:type="default" r:id="rIdF"/>' : '') + '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1000" w:right="850" w:bottom="900" w:left="850" w:header="400" w:footer="400" w:gutter="0"/>' + (o.pgStart ? '<w:pgNumType w:start="' + o.pgStart + '"/>' : '') + (o.bidi ? '<w:bidi/>' : '') + '</w:sectPr>';
+    var files = [
+      { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' + (o.header ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : '') + (o.footer ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : '') + '</Types>' },
+      { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+      { name: 'word/_rels/document.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' + (o.header ? '<Relationship Id="rIdH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' : '') + (o.footer ? '<Relationship Id="rIdF" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' : '') + '</Relationships>' },
+      { name: 'word/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ' + ns + '><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" w:eastAsia="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="40" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>' },
+      { name: 'word/document.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + ns + '><w:body>' + body + sect + '</w:body></w:document>' } ];
+    if (o.header) files.push({ name: 'word/header1.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + ns + '>' + o.header + '</w:hdr>' });
+    if (o.footer) files.push({ name: 'word/footer1.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + ns + '>' + o.footer + '</w:ftr>' });
+    return zipFiles(files); } };
+
+/* --- data for the documents --- */
+var LAB = { name: 'AKHNATON', sub: 'Trading and Representation', lab: 'CALIBRATION LAB.', addr: '113 Tomanbay St. El-Zeitoun, Cairo', tel: 'Phone: 24515197   Fax: 24514690', mail: 'E-Mail: Calibration@akhnatontrade.com' };
+var MON = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'June', 'July', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+function monYear(s, add) { var d = s2d(s); if (!d) return ''; return MON[d.getMonth()] + ' ' + (d.getFullYear() + (add || 0)); }
+function genDefaults(p) { var g = p.gen = p.gen || {}, first = p.items.filter(function (i) { return i.old && i.old.fields && i.old.fields.certNo; })[0], yr = s2d(p.info && p.info.cal) ? s2d(p.info.cal).getFullYear() : new Date().getFullYear();
+  if (g.prefix == null) { var m = first && String(first.old.fields.certNo).match(/^(.*?)(\d+)-(\d{4})$/); g.prefix = m ? m[1] : (/^\d+$/.test(p.company.code || '') ? p.company.code + '-' : (String(p.company.code || '').replace(/^(\d+)([A-Z]+)$/i, '$1/$2-') || '')); g.pad = m ? m[2].length : 3; }
+  g.year = yr; if (g.start == null) g.start = ''; if (g.approver == null) g.approver = 'Eng. Ayman Wasfy'; if (g.approverPos == null) g.approverPos = 'Technical Manager';
+  if (g.techPos == null) g.techPos = 'Calibration Engineer'; if (g.interval == null) g.interval = 'One Year'; if (g.signer == null) g.signer = 'م/ ميــنا إبراهــيم'; if (g.signerPos == null) g.signerPos = 'مدير قســمي الصيانة والمعايرة';
+  g.addr = g.addr || ''; g.tel = g.tel || ''; g.fax = g.fax || ''; g.loc = g.loc || ''; g.prices = g.prices || {}; g.dsr = g.dsr || {}; return g; }
+function certNo(g, n) { var s = String(n); while (s.length < (g.pad || 3)) s = '0' + s; return g.prefix + s + '-' + g.year; }
+function genGroups(p) { /* one cover per machine; units of the same kind share one cover */
+  var groups = [], byKey = {};
+  var ready = function (i) { return i.old && (i.old.points || []).length; };
+  p.machines.forEach(function (m) { var its = p.items.filter(function (i) { return i.machineId === m.id && ready(i); }); if (its.length) groups.push({ machine: m, items: its }); });
+  p.items.filter(function (i) { return !i.machineId && ready(i); }).forEach(function (it) { var k = norm((it.description || (it.old && it.old.fields.description) || '') + '|' + (it.manufacturer || '')); if (!byKey[k]) { byKey[k] = { machine: null, items: [] }; groups.push(byKey[k]); } byKey[k].items.push(it); });
+  var g = genDefaults(p), n = parseInt(g.start, 10);
+  groups.forEach(function (gr) { gr.items.forEach(function (it) { it.certNo = isNaN(n) ? '' : certNo(g, n++); }); gr.from = gr.items[0].certNo; gr.to = gr.items[gr.items.length - 1].certNo; });
+  return groups; }
+function dsRef(p, it) { var g = genDefaults(p); if (g.dsr[it.id] != null) return g.dsr[it.id]; var o = it.old && it.old.fields && it.old.fields.dataSheetRef; if (!o) return '';
+  var yy = String(g.year).slice(2); return String(o).replace(/\s+/g, '').replace(/^(\d+)-(\d{2})$/, '$1-' + yy); }
+function ptRows(p, it) { /* new readings; if missing or OUT → last year's readings as placeholder */
+  var o = it.old, rows = [], ph = [];
+  (o.points || []).forEach(function (q, i) { var dirs = o.dirs === 2 ? [1, 2] : [1], row = { point: q.point, limit: ptLimit(it, q), cells: [] }, out = false;
+    dirs.forEach(function (dr) { var r = evalPt(it, i, dr), v = (it.nv || {})[i + (dr === 2 ? 'd' : '')] || {};
+      var ok = r.ref != null && r.rd != null && r.res !== 'OUT', d = resDec(it);
+      if (!ok) { ph.push({ point: q.point + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), why: r.res === 'OUT' ? 'OUT' : 'no new reading', reading: r.rd, dev: r.dev, lim: r.lim }); if (r.res === 'OUT') out = true; }
+      row.ref = ok ? v.ref : q.ref;
+      row.cells.push(ok ? v.reading : (dr === 2 ? q.reading2 : q.reading), ok ? (d == null ? String(r.dev) : r.dev.toFixed(d)) : (dr === 2 ? q.deviation2 : q.deviation)); });
+    rows.push(row); });
+  return { rows: rows, ph: ph }; }
+function genIssues(p) { var inf = p.info || {}, g = genDefaults(p), L = [];
+  if (!inf.cal) L.push('Calibration date'); if (!inf.iss) L.push('Date of issue'); if (!inf.wo) L.push('Work order date'); if (!inf.tech) L.push('Calibrated by');
+  if (!(inf.refs || []).length) L.push('Reference standards'); if (refResWarn(p)) L.push('Resolution of the references'); if (!String(g.start).trim()) L.push('First certificate number');
+  if (!g.addr) L.push('Customer address'); p.items.forEach(function (it) { if (!it.old || !(it.old.points || []).length) L.push((it.code || it.description) + ': no old certificate / readings'); });
+  return L.concat(dateWarns(inf)).concat(refWarns(p)); }
+function phList(p) { var L = []; p.items.forEach(function (it) { if (!it.old || !(it.old.points || []).length) return; ptRows(p, it).ph.forEach(function (x) { L.push(Object.assign({ code: it.code, cert: it.certNo }, x)); }); }); return L; }
+function refsUsed(p) { var ds = labDevices(); return (p.info.refs || []).map(function (id) { return ds.filter(function (d) { return d.id === id; })[0]; }).filter(Boolean); }
+function envDevice() { return labDevices().filter(function (d) { return /hygro|thermo-?hygro|rh\b/i.test(d.description + ' ' + d.category); })[0]; }
+function dueText(d) { var s = String(d.calDue || '').slice(0, 10), x = s2d(s); return x ? x.getDate() + '-' + MON[x.getMonth()].replace('.', '') + '-' + x.getFullYear() : s; }
+
+/* --- Word: header, cover, certificate, letter --- */
+function wHeader(title) { return W.p(W.r(title || 'Calibration Certificate', { b: true, sz: 32, c: '13294B' }), { jc: 'center', after: 20 }) +
+  W.p([W.r('ISSUED BY  ', { sz: 14 }), W.r(LAB.name + ' ', { b: true, sz: 16 }), W.r(LAB.sub + '   ' + LAB.lab, { sz: 14 })], { jc: 'center', after: 0 }) + W.p(W.r(LAB.addr + '   ' + LAB.tel + '   ' + LAB.mail, { sz: 13 }), { jc: 'center', after: 60 }); }
+function wFooter(form, pageOfN) { return W.p(W.r('This report shall not be duplicated except in full or with written approval from this laboratory', { sz: 13, i: true }), { jc: 'center', after: 0 }) +
+  W.p([W.r(form + '      Page ', { sz: 14 }), W.fld('PAGE', { sz: 14 }), W.r(' of ' + pageOfN + ' Page(s)', { sz: 14 })], { jc: 'right', after: 0 }); }
+function kvRow(a, b, c, d) { return [{ t: a, b: true, jc: 'left' }, { t: b, jc: 'left' }, { t: c, b: true, jc: 'left' }, { t: d, jc: 'left' }]; }
+var COVER_FORM = 'F-7.2.2  ISSUE (1) 15/05/2019', ROWS_PER_PAGE = 18;
+function pagesOf(it) { var n = (it.old.points || []).length; return Math.max(1, Math.ceil(n / ROWS_PER_PAGE)); }
+function topBlock(p, no, cont) { var inf = p.info; return W.tbl([kvRow('DATE OF ISSUE:', dmy(inf.iss), cont ? 'CONTINUE CERTIFICATE NO.:' : 'CERTIFICATE NO.:', no), kvRow('CUSTOMER:', (p.company.official || p.company.name), 'CUSTOMER ID:', p.company.code || '')], [1800, 3300, 1900, 3100], { sz: 16 }); }
+function coverDoc(p, gr, total) { var inf = p.info, g = genDefaults(p), its = gr.items, body = '';
+  body += W.tbl([kvRow('DATE OF ISSUE:', dmy(inf.iss), 'CERTIFICATE NO.:', its.length > 1 ? 'From ' + gr.from + ' to ' + gr.to : gr.from), kvRow('CUSTOMER:', p.company.official || p.company.name, 'CUSTOMER ID:', p.company.code || ''), kvRow('ADDRESS:', g.addr, 'Tel / Fax:', [g.tel, g.fax].filter(Boolean).join(' / ')), kvRow('DATE RECEIVED:', dmy(inf.rec), 'WORK ORDER No.:', woNo(inf))], [1800, 3600, 1700, 3000], { sz: 16 });
+  body += W.p(W.r('Unit under Test', { b: true, sz: 18 }), { before: 120, keep: true });
+  var uut = gr.machine ? [['1', its[0].manufacturer || (its[0].old && its[0].old.fields.manufacturer) || 'N/A', gr.machine.name, 'N/A', 'N/A', gr.machine.code || 'N/A', g.loc || 'N/A']]
+    : its.map(function (it, i) { var f = (it.old || {}).fields || {}; return [String(i + 1), it.manufacturer || f.manufacturer || 'N/A', it.description || f.description || 'N/A', it.model || f.model || 'N/A', it.serial || f.serial || 'N/A', it.code || 'N/A', g.loc || 'N/A']; });
+  body += W.tbl([[{ t: 'Item No.', b: true, shade: 'E7ECF2' }, { t: 'Manufacturer', b: true, shade: 'E7ECF2' }, { t: 'Description', b: true, shade: 'E7ECF2' }, { t: 'Model', b: true, shade: 'E7ECF2' }, { t: 'S/N', b: true, shade: 'E7ECF2' }, { t: 'Code', b: true, shade: 'E7ECF2' }, { t: 'Location', b: true, shade: 'E7ECF2' }]].concat(uut), [700, 1500, 2300, 1300, 1400, 1500, 1500], { head: true });
+  body += W.p(W.r('Item to be calibrated', { b: true, sz: 18 }), { before: 120, keep: true });
+  body += W.tbl([[{ t: 'Item No.', b: true, shade: 'E7ECF2' }, { t: 'Manufacturer', b: true, shade: 'E7ECF2' }, { t: 'Description', b: true, shade: 'E7ECF2' }, { t: 'Code', b: true, shade: 'E7ECF2' }, { t: 'Cal. Range', b: true, shade: 'E7ECF2' }, { t: 'Accepted Limit', b: true, shade: 'E7ECF2' }]].concat(its.map(function (it, i) { var f = (it.old || {}).fields || {};
+    return [String(i + 1), it.manufacturer || f.manufacturer || 'N/A', it.description || f.description || '', it.code || '', calRangeText(it) || f.calRange || f.range || '', f.limits || (it.old.points[0] || {}).limit || '']; })), [700, 1600, 2700, 1700, 1900, 1600], { head: true });
+  body += W.p(W.r('Calibration Standard(s) Utilized', { b: true, sz: 18 }), { before: 120, keep: true });
+  body += W.tbl([[{ t: 'Item No.', b: true, shade: 'E7ECF2' }, { t: 'Manufacturer', b: true, shade: 'E7ECF2' }, { t: 'Description', b: true, shade: 'E7ECF2' }, { t: 'Model', b: true, shade: 'E7ECF2' }, { t: 'Serial Number', b: true, shade: 'E7ECF2' }, { t: 'Range', b: true, shade: 'E7ECF2' }, { t: 'Calibration Due Date', b: true, shade: 'E7ECF2' }]].concat(refsUsed(p).map(function (d, i) { return [String(i + 1), d.manufacturer, d.description, d.model || '', d.serial || '', d.range || '', dueText(d)]; })), [700, 1500, 2300, 1300, 1500, 1500, 1400], { head: true });
+  var ev = envDevice(); if (ev) { body += W.p(W.r('Environmental Conditions Measured by', { b: true, sz: 18 }), { before: 120, keep: true });
+    body += W.tbl([[{ t: 'Item No.', b: true, shade: 'E7ECF2' }, { t: 'Manufacturer', b: true, shade: 'E7ECF2' }, { t: 'Description', b: true, shade: 'E7ECF2' }, { t: 'Model', b: true, shade: 'E7ECF2' }, { t: 'Serial Number', b: true, shade: 'E7ECF2' }, { t: 'Range', b: true, shade: 'E7ECF2' }, { t: 'Calibration Due Date', b: true, shade: 'E7ECF2' }], ['1', ev.manufacturer, ev.description, ev.model || '', ev.serial || '', ev.range || '', dueText(ev)]], [700, 1500, 2300, 1300, 1500, 1500, 1400], { head: true }); }
+  body += W.p(W.r('This Certificate is issued in accordance with the laboratory accreditation requirements of the ISO 17025 and the policies and procedures employed by AKHNATON ENGINEERING. It provides traceability of measurement to National Institute for Standards (NIS) & SI units. This certificate may not be reproduced other than in full, except with the prior written approval of the issuing laboratory.', { sz: 14 }), { before: 160, jc: 'both' });
+  return W.doc(body, { header: wHeader(), footer: wFooter(COVER_FORM, total) }); }
+function calRangeText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + it.cMin + ' : ' + it.cMax + ') ' + (it.unit || ''); if (isNum(it.rMin) && isNum(it.rMax)) return '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || ''); return ''; }
+function certBody(p, it, first) { var inf = p.info, g = genDefaults(p), f = it.old.fields || {}, pr = ptRows(p, it), out = pr.ph.some(function (x) { return x.why === 'OUT'; }), body = '', dirs = it.old.dirs === 2;
+  var head = function (pb, cont) { return W.p(W.r(' ', { sz: 4 }), { pb: pb, after: 0 }) + topBlock(p, it.certNo, cont); };
+  body += head(!first, false);
+  body += W.p(W.r('Data of item to be calibrated', { b: true, sz: 18 }), { before: 100, keep: true });
+  body += W.tbl([kvRow('Manufacturer', it.manufacturer || f.manufacturer || 'N/A', 'Calibration Date', monYear(inf.cal)), kvRow('Description', it.description || f.description || '', 'Calibration interval**', g.interval), kvRow('Code', it.code || '', 'Calibration Due Date', monYear(inf.cal, 1)),
+    kvRow('Range', rangeText(it) || f.range || '', 'Environmental Condition', (inf.eLoc ? inf.eLoc + '  ' : '') + inf.eT + ' °C & ' + inf.eH + ' %R.H.'), kvRow('Cal. Range', calRangeText(it) || f.calRange || f.range || '', 'Model / S/N', [it.model || f.model, it.serial || f.serial].filter(Boolean).join(' / ') || 'N/A'),
+    kvRow('Resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : (f.resolution || ''), 'Procedure No.', f.procedure || ''), kvRow('Accepted Limits', f.limits || '', 'Received status', 'In A Good Condition'), kvRow('Data Sheet Ref.', dsRef(p, it), 'Delivered status', out ? 'Out of Tolerance' : 'In Tolerance')], [1900, 3150, 2100, 2950], { sz: 16 });
+  var hdr = dirs ? [[{ t: 'Point', b: true, shade: 'E7ECF2' }, { t: 'Reference', b: true, shade: 'E7ECF2' }, { t: 'Reading ↑', b: true, shade: 'E7ECF2' }, { t: 'Deviation ↑', b: true, shade: 'E7ECF2' }, { t: 'Reading ↓', b: true, shade: 'E7ECF2' }, { t: 'Deviation ↓', b: true, shade: 'E7ECF2' }, { t: 'Accepted Limits', b: true, shade: 'E7ECF2' }]]
+    : [[{ t: 'Point', b: true, shade: 'E7ECF2' }, { t: 'Reference', b: true, shade: 'E7ECF2' }, { t: 'UUT Reading', b: true, shade: 'E7ECF2' }, { t: 'Deviation', b: true, shade: 'E7ECF2' }, { t: 'Accepted Limits', b: true, shade: 'E7ECF2' }, { t: 'Status', b: true, shade: 'E7ECF2' }]];
+  var wd = dirs ? [1200, 1500, 1500, 1400, 1500, 1400, 1600] : [1500, 1900, 1900, 1700, 1700, 1400];
+  for (var k = 0; k < pr.rows.length; k += ROWS_PER_PAGE) { if (k > 0) body += head(true, true);
+    body += W.p(W.r((k ? '' : '1 - ') + 'Calibration Results' + (f.unit ? '' : '') + (it.unit ? '  (' + it.unit + ')' : ''), { b: true, sz: 18 }), { before: 100, keep: true });
+    body += W.tbl(hdr.concat(pr.rows.slice(k, k + ROWS_PER_PAGE).map(function (r) { return dirs ? [r.point, r.ref, r.cells[0], r.cells[1], r.cells[2], r.cells[3], r.limit] : [r.point, r.ref, r.cells[0], r.cells[1], r.limit, 'Accepted']; })), wd, { head: true, h: 300 }); }
+  body += W.p(W.r('Remarks', { b: true, sz: 18 }), { before: 120, keep: true });
+  body += W.tbl([[{ t: 'Calibrated By:', b: true, jc: 'left' }, { t: '', jc: 'left' }, { t: 'Approved By:', b: true, jc: 'left' }, { t: '', jc: 'left' }], kvRow('Date:', dmy(inf.iss), 'Position:', g.approverPos), kvRow('Position:', g.techPos, 'Name:', g.approver), kvRow('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Signature:', '_____________________'), kvRow('Signature:', '_____________________', '', '')], [1500, 3550, 1500, 3550], { sz: 16 });
+  body += W.p(W.r('** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.', { sz: 13 }), { before: 80, jc: 'both' });
+  body += W.p(W.r('This Certificate and Readings refers only to the particular item under calibration. The reported uncertainty is based on a standard uncertainty multiplied by a coverage factor k = 2, providing a level of confidence of approximately 95 %. The uncertainty evaluation has been carried out in accordance with ISO 17025 requirements.', { sz: 13 }), { jc: 'both' });
+  return body; }
+function certDoc(p, gr, total) { var body = gr.items.map(function (it, i) { return certBody(p, it, i === 0); }).join(''), f0 = (gr.items[0].old.fields || {}).procedure || 'SOP';
+  return W.doc(body, { header: wHeader(), footer: wFooter(f0 + '  Rev. (0) 15/05/2019', total), pgStart: 2 }); }
+function letterDoc(p, groups) { var inf = p.info, g = genDefaults(p), o = p.order || {}, rows = [], tot = 0, n = 0;
+  var cal = s2d(inf.cal), mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
+  groups.forEach(function (gr) { gr.items.forEach(function (it) { n++; var pr = g.prices[it.id] || ''; if (isNum(pr)) tot += numv(pr);
+    rows.push([String(n), (gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || ''), it.code || it.serial || '', mm, dd, it.certNo, pr || 'Lump sum']); }); });
+  var hd = [[{ t: 'No.', b: true, shade: 'E7ECF2' }, { t: 'Item To be Calibrated', b: true, shade: 'E7ECF2' }, { t: 'Code or Serial', b: true, shade: 'E7ECF2' }, { t: 'Cal. Date', b: true, shade: 'E7ECF2' }, { t: 'Due Date', b: true, shade: 'E7ECF2' }, { t: 'Cert. No.', b: true, shade: 'E7ECF2' }, { t: 'Unit Price', b: true, shade: 'E7ECF2' }]];
+  var ar = function (t, o2) { return W.p(W.r(t, Object.assign({ sz: 20, rtl: true }, o2 || {})), { jc: 'right', bidi: true, after: 60 }); };
+  var body = ar('أخناتون تريدنج أند ربريسنتاشن', { b: true, sz: 24 }) + ar('المركز الرئيسي: 13 ش الموسيقار علي اسماعيل – الدقي    الفرع: 9 شارع الشركات – عابدين', { sz: 16 }) + ar('المكتب الفني: 113 ش طومان باي - الزيتون    التليفون: 24515197    الفاكس: 24514690', { sz: 16 }) +
+    ar('التاريخ: ' + dmy(inf.iss).replace(/\//g, ' - ')) + ar('السادة/ ' + (p.company.official || p.company.name), { b: true }) + ar('تحية طيبة وبعد ....') +
+    (o.number ? W.p(W.r('P.O   ' + o.number, { b: true, sz: 20 }), { jc: 'left' }) : '') +
+    ar('موضح لسيادتكم أدناه بيان بتقارير أعمال المعايرة المنتهية طرفكم؛ برجاء التكرم باستلام التقارير الآتية:-') +
+    W.tbl(hd.concat(rows), [500, 3300, 1500, 900, 900, 1700, 1200], { head: true, sz: 16, h: 320 }) +
+    (tot ? W.p(W.r('Price without VAT:  ' + tot.toLocaleString('en') + ' EGP', { b: true, sz: 18 }), { before: 120 }) : '') +
+    ar('مع جزيل الشكر وتفضلوا بقبول فائق الاحترام،', { before: 200 }) + ar(g.signerPos, { b: true }) + ar(g.signer, { b: true });
+  return W.doc(body, {}); }
+function fileBase(g, gr) { var pre = String(g.prefix).replace(/[\/\\]/g, ''), a = gr.from.slice(g.prefix.length).split('-')[0], b = gr.to.slice(g.prefix.length).split('-')[0]; return pre + a + (b !== a ? ',' + b : '') + '-' + g.year; }
+function buildAll(p) { var groups = genGroups(p), g = genDefaults(p), files = [];
+  groups.forEach(function (gr) { var total = 1 + gr.items.reduce(function (a, it) { return a + pagesOf(it); }, 0), base = fileBase(g, gr);
+    files.push({ name: base + ' cover page.docx', data: coverDoc(p, gr, total) }, { name: base + ' cal. cert.docx', data: certDoc(p, gr, total) }); });
+  files.push({ name: 'Letter - ' + p.company.name + ' - ' + monYear(p.info.cal) + '.docx', data: letterDoc(p, groups) });
+  return { files: files, groups: groups }; }
+
+/* --- print view (PDF): every cover followed by its certificates --- */
+function htmlTbl(rows, head) { return '<table class="pt">' + rows.map(function (r, i) { return '<tr>' + r.map(function (c) { c = typeof c === 'object' && c !== null ? c : { t: c }; return (i === 0 && head ? '<th' : '<td') + (c.span ? ' colspan="' + c.span + '"' : '') + (c.b ? ' class="b"' : '') + '>' + esc(c.t == null ? '' : c.t).replace(/\n/g, '<br>') + (i === 0 && head ? '</th>' : '</td>'); }).join('') + '</tr>'; }).join('') + '</table>'; }
+function printView(p) { var all = buildAll(p), g = genDefaults(p), inf = p.info, pages = [];
+  var hdr = '<div class="ph"><div class="t">Calibration Certificate</div><div class="s">ISSUED BY <b>AKHNATON</b> Trading and Representation · CALIBRATION LAB. · ' + esc(LAB.addr) + ' · ' + esc(LAB.tel) + '</div></div>';
+  var ftr = function (form, i, n) { return '<div class="pf"><i>This report shall not be duplicated except in full or with written approval from this laboratory</i><span>' + esc(form) + ' &nbsp; Page ' + i + ' of ' + n + ' Page(s)</span></div>'; };
+  all.groups.forEach(function (gr) { var total = 1 + gr.items.reduce(function (a, it) { return a + pagesOf(it); }, 0), pg = 1, its = gr.items;
+    var kv = function (a, b, c, d) { return [{ t: a, b: 1 }, b, { t: c, b: 1 }, d]; };
+    pages.push('<section class="pg">' + hdr + htmlTbl([kv('DATE OF ISSUE:', dmy(inf.iss), 'CERTIFICATE NO.:', its.length > 1 ? 'From ' + gr.from + ' to ' + gr.to : gr.from), kv('CUSTOMER:', p.company.official || p.company.name, 'CUSTOMER ID:', p.company.code), kv('ADDRESS:', g.addr, 'Tel / Fax:', [g.tel, g.fax].filter(Boolean).join(' / ')), kv('DATE RECEIVED:', dmy(inf.rec), 'WORK ORDER No.:', woNo(inf))]) +
+      '<h4>Unit under Test</h4>' + htmlTbl([['Item No.', 'Manufacturer', 'Description', 'Model', 'S/N', 'Code', 'Location']].concat(gr.machine ? [['1', its[0].manufacturer || 'N/A', gr.machine.name, 'N/A', 'N/A', gr.machine.code || 'N/A', g.loc || 'N/A']] : its.map(function (it, i) { var f = it.old.fields || {}; return [i + 1, it.manufacturer || f.manufacturer || 'N/A', it.description || f.description, it.model || f.model || 'N/A', it.serial || f.serial || 'N/A', it.code, g.loc || 'N/A']; })), true) +
+      '<h4>Item to be calibrated</h4>' + htmlTbl([['Item No.', 'Manufacturer', 'Description', 'Code', 'Cal. Range', 'Accepted Limit']].concat(its.map(function (it, i) { var f = it.old.fields || {}; return [i + 1, it.manufacturer || f.manufacturer || 'N/A', it.description || f.description, it.code, calRangeText(it) || f.calRange || f.range, f.limits || (it.old.points[0] || {}).limit || '']; })), true) +
+      '<h4>Calibration Standard(s) Utilized</h4>' + htmlTbl([['Item No.', 'Manufacturer', 'Description', 'Model', 'Serial Number', 'Range', 'Calibration Due Date']].concat(refsUsed(p).map(function (d, i) { return [i + 1, d.manufacturer, d.description, d.model, d.serial, d.range, dueText(d)]; })), true) +
+      ftr(COVER_FORM, pg++, total) + '</section>');
+    its.forEach(function (it) { var f = it.old.fields || {}, pr = ptRows(p, it), dirs = it.old.dirs === 2, out = pr.ph.some(function (x) { return x.why === 'OUT'; }), form = (f.procedure || 'SOP') + ' Rev. (0) 15/05/2019';
+      var top = function (cont) { return htmlTbl([kv('DATE OF ISSUE:', dmy(inf.iss), (cont ? 'CONTINUE ' : '') + 'CERTIFICATE NO.:', it.certNo), kv('CUSTOMER:', p.company.official || p.company.name, 'CUSTOMER ID:', p.company.code)]); };
+      for (var k = 0; k < pr.rows.length || k === 0; k += ROWS_PER_PAGE) {
+        var h = '<section class="pg">' + hdr + top(k > 0);
+        if (!k) h += '<h4>Data of item to be calibrated</h4>' + htmlTbl([kv('Manufacturer', it.manufacturer || f.manufacturer || 'N/A', 'Calibration Date', monYear(inf.cal)), kv('Description', it.description || f.description, 'Calibration interval**', g.interval), kv('Code', it.code, 'Calibration Due Date', monYear(inf.cal, 1)), kv('Range', rangeText(it) || f.range, 'Environmental Condition', (inf.eLoc ? inf.eLoc + ' ' : '') + inf.eT + ' °C & ' + inf.eH + ' %R.H.'), kv('Cal. Range', calRangeText(it) || f.calRange || f.range, 'Model / S/N', [it.model || f.model, it.serial || f.serial].filter(Boolean).join(' / ') || 'N/A'), kv('Resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution, 'Procedure No.', f.procedure), kv('Accepted Limits', f.limits, 'Received status', 'In A Good Condition'), kv('Data Sheet Ref.', dsRef(p, it), 'Delivered status', out ? 'Out of Tolerance' : 'In Tolerance')]);
+        h += '<h4>' + (k ? '' : '1 - ') + 'Calibration Results' + (it.unit ? ' (' + esc(it.unit) + ')' : '') + '</h4>' + htmlTbl([dirs ? ['Point', 'Reference', 'Reading ↑', 'Deviation ↑', 'Reading ↓', 'Deviation ↓', 'Accepted Limits'] : ['Point', 'Reference', 'UUT Reading', 'Deviation', 'Accepted Limits', 'Status']].concat(pr.rows.slice(k, k + ROWS_PER_PAGE).map(function (r) { return dirs ? [r.point, r.ref, r.cells[0], r.cells[1], r.cells[2], r.cells[3], r.limit] : [r.point, r.ref, r.cells[0], r.cells[1], r.limit, 'Accepted']; })), true);
+        if (k + ROWS_PER_PAGE >= pr.rows.length) h += '<h4>Remarks</h4>' + htmlTbl([[{ t: 'Calibrated By:', b: 1 }, '', { t: 'Approved By:', b: 1 }, ''], kv('Date:', dmy(inf.iss), 'Position:', g.approverPos), kv('Position:', g.techPos, 'Name:', g.approver), kv('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Signature:', '____________'), kv('Signature:', '____________', '', '')]) +
+          '<p class="nt">** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.</p><p class="nt">This Certificate and Readings refers only to the particular item under calibration. The reported uncertainty is based on a standard uncertainty multiplied by a coverage factor k = 2, providing a level of confidence of approximately 95 %.</p>';
+        pages.push(h + ftr(form, pg++, total) + '</section>'); } }); });
+  var css = '@page{size:A4;margin:12mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#000;background:#fff}.pg{page-break-after:always;break-after:page;min-height:270mm;position:relative;padding-bottom:16mm}.pg:last-child{page-break-after:auto}.ph{text-align:center;margin-bottom:8px}.ph .t{font-size:16pt;font-weight:bold;color:#13294B}.ph .s{font-size:7pt}h4{font-size:9pt;margin:8px 0 4px}table.pt{width:100%;border-collapse:collapse;font-size:8pt;table-layout:fixed;page-break-inside:avoid}table.pt td,table.pt th{border:1px solid #000;padding:3px 4px;text-align:center;vertical-align:middle;word-break:normal;overflow-wrap:anywhere}table.pt th,.b{font-weight:bold;background:#E7ECF2}.nt{font-size:6.5pt;text-align:justify;margin:4px 0}.pf{position:absolute;bottom:0;left:0;right:0;font-size:7pt;display:flex;justify-content:space-between;border-top:1px solid #999;padding-top:3px}';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(p.company.name) + ' – certificates</title><style>' + css + '</style></head><body>' + pages.join('') + '</body></html>'; }
+
+/* --- the Certificates tab --- */
+function tGen(p) { var g = genDefaults(p), groups = genGroups(p), iss = genIssues(p), ph = phList(p), inf = p.info || {};
+  if (!g.addr && !p.genAddrTried && spOn()) { p.genAddrTried = true; findAddress(p).then(function () { if (PT.tab === 'gen' && !sheetFn) tGen(p); }); }
+  var F = function (k, l, ph2) { return '<label class="f"><span>' + l + '</span><input class="inp" data-g="' + k + '" value="' + esc(g[k]) + '"' + (ph2 ? ' placeholder="' + esc(ph2) + '"' : '') + '></label>'; };
+  $('#pm').innerHTML = (iss.length ? '<div class="note warnbox"><b>Before the final PDF:</b><br>' + iss.map(esc).join('<br>') + '</div>' : '<div class="note" style="background:var(--office-soft);color:#14603C">Everything needed is filled in.</div>') +
+    (ph.length ? '<div class="note" style="background:var(--service-soft);color:#6A4300"><b>' + ph.length + ' points use last year\'s readings as placeholders</b> (missing or OUT). Those certificates must be replaced before going to the customer. <a href="#" id="phR" style="color:inherit;font-weight:700">See the list</a></div>' : '') +
+    '<div class="sec" style="margin-top:4px"><h2>Certificate numbers</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('prefix', 'Prefix', 'e.g. 10/EP- or 62-') + F('start', 'First number', 'e.g. 940') + '</div>' +
+    '<div class="small" style="margin:-6px 0 10px">Example: <b>' + esc(String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : certNo(g, 1).replace(/\d+(?=-\d{4}$)/, 'NNN')) + '</b></div>' +
+    '<div class="sec"><h2>Customer</h2>' + (spOn() ? '<button class="btn ghost sm" id="adr">From last cover</button>' : '') + '</div>' + F('addr', 'ADDRESS') + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('tel', 'Tel No.') + F('fax', 'Fax No.') + '</div>' + F('loc', 'Location (on the cover)', 'e.g. QC LAB.') +
+    '<div class="sec"><h2>Signatures</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('techPos', 'Calibrated by – position') + F('interval', 'Calibration interval') + F('approver', 'Approved by') + F('approverPos', 'Approved by – position') + '</div>' +
+    '<div class="sec"><h2>Covers and certificates</h2><small>' + groups.length + ' covers · ' + p.items.length + ' certificates</small></div>' +
+    groups.map(function (gr) { return '<div class="mach"><div class="mach-h"><b>' + esc(gr.machine ? gr.machine.name : (gr.items[0].description || 'Units')) + '</b><span class="small">' + esc(gr.from ? (gr.items.length > 1 ? gr.from + ' → ' + gr.to : gr.from) : 'no number yet') + '</span></div>' +
+      gr.items.map(function (it) { return '<div class="row"><span class="t"><b>' + esc(it.certNo || '—') + ' · ' + esc(it.code || it.description) + '</b><small>Data sheet ref. <input class="inp" data-ds="' + it.id + '" value="' + esc(dsRef(p, it)) + '" style="height:32px;width:110px;display:inline-block;padding:0 6px"> · Price <input class="inp" data-pr="' + it.id + '" value="' + esc(g.prices[it.id] || '') + '" inputmode="decimal" placeholder="Lump sum" style="height:32px;width:100px;display:inline-block;padding:0 6px"></small></span></div>'; }).join('') + '</div>'; }).join('') +
+    '<div class="sec"><h2>Receipt letter</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('signer', 'Signed by') + F('signerPos', 'Position') + '</div>' +
+    '<div class="cf"><button class="btn" id="gW">Word files (.zip)</button><button class="btn blue" id="gP">' + (iss.length || ph.length ? 'Preview / print (draft)' : 'Print / PDF') + '</button></div>' +
+    '<div class="small" style="margin-top:8px">Word: for every cover a “… cover page.docx” and a “… cal. cert.docx”, plus the receipt letter. One font (Arial), all borders, page X of N. ' + (iss.length || ph.length ? 'The final PDF waits until nothing is missing.' : '') + '</div>';
+  $$('[data-g]').forEach(function (e) { e.onchange = function () { g[e.dataset.g] = e.value.trim(); saveProjects(); tGen(p); }; });
+  $$('[data-ds]').forEach(function (e) { e.onchange = function () { g.dsr[e.dataset.ds] = e.value.trim(); saveProjects(); }; });
+  $$('[data-pr]').forEach(function (e) { e.onchange = function () { g.prices[e.dataset.pr] = e.value.trim(); saveProjects(); }; });
+  var ad = $('#adr'); if (ad) ad.onclick = function () { ad.disabled = true; ad.innerHTML = '<span class="spin dark"></span>'; findAddress(p, true).then(function () { tGen(p); }); };
+  var r = $('#phR'); if (r) r.onclick = function (e) { e.preventDefault(); phSheet(p); };
+  $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); };
+  $('#gP').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); openPrint(p, iss.length || ph.length); };
+}
+function dlZip(files, name) { var z = zipFiles(files.map(function (f) { return { name: f.name, data: f.data }; }));
+  if (CL.on) return clSave(new Blob([z], { type: 'application/zip' }), name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([z], { type: 'application/zip' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+function openPrint(p, draft) { var html = printView(p);
+  if (CL.on) return clSave(new Blob([html], { type: 'text/html' }), p.company.name + ' certificates – print.html').then(function () { toast('Open the file in Chrome and print it as PDF'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not saved', true); });
+  if (draft) toast('Draft – the final PDF waits until nothing is missing', true);
+  var fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close(); setTimeout(function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Printing is not allowed here', true); } setTimeout(function () { fr.remove(); }, 4000); }, 400); }
+function phSheet(p) { openSheet(function () { var L = phList(p); return { title: 'Placeholder report', body: '<div class="note warnbox">These points use last year\'s readings in the certificate. Re-measure with the technician; when the new reading is in, the certificate is made again. They must be replaced before going to the customer.</div>' +
+  '<div class="list">' + L.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.cert || '—') + ' · ' + esc(x.code) + ' · point ' + esc(x.point) + '</b><small>' + (x.why === 'OUT' ? 'OUT · reading ' + x.reading + ' · limit ±' + x.lim + ' · beyond by ' + (+(Math.abs(x.dev) - x.lim).toFixed(6)) : 'No new reading yet') + '</small></span></div>'; }).join('') + '</div>', foot: '<button class="btn" id="phc">Done</button>', mount: function () { $('#phc').onclick = closeSheet; } }; }); }
+function findAddress(p, loud) { var g = genDefaults(p), code = p.company.code || '';
+  var q = (g.prefix ? g.prefix.replace(/[\/-]+$/, '') : code) + ' cover page';
+  return spSearch(q, 15).then(function (fs) { fs = fs.filter(function (f) { return /cover/i.test(f.name); }).sort(function (a, b) { return String(b.mod).localeCompare(String(a.mod)); });
+    if (!fs.length) { if (loud) toast('No old cover page found', true); return; }
+    return pdfPages(fs[0].driveId, fs[0].id).then(function (pages) { var t = pages.map(function (pg) { return pg.join(' '); }).join(' ').replace(/\s+/g, ' ');
+      var m = t.match(/ADDRESS\s*:?\s*(.+?)\s*(Tel|DATE RECEIVED|Fax)/i), tl = t.match(/Tel\.?\s*No\.?\s*:?\s*([0-9 +\-–]{6,})/i), fx = t.match(/Fax\.?\s*No\.?\s*:?\s*([0-9 +\-–]{6,})/i);
+      if (m && !g.addr) g.addr = tidy(m[1]).replace(/\s*-\s*/g, ' - '); if (tl && !g.tel) g.tel = tl[1].trim(); if (fx && !g.fax) g.fax = fx[1].trim(); saveProjects(); if (loud) toast(g.addr ? 'Address taken from ' + fs[0].name : 'Address not found in the cover', !g.addr); }); }).catch(function (e) { if (loud) toast(e.message, true); }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); } });
