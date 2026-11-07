@@ -1243,19 +1243,28 @@ function lyMonth(s) { var m = String(s || '').match(/([A-Za-z]{3,5})\.?\s*-?\s*(
 /* items step: "From last year" */
 function lastYearSheet(p) { var st = { busy: true, rows: [], files: [], err: '', sel: null, on: {} };
   openSheet(function () { var groups = {}; st.rows.forEach(function (r, i) { var mm = lyMonth(r.cal); var k = mm ? mm.key : 'other'; (groups[k] = groups[k] || { label: mm ? mm.label : 'No date', rows: [], pos: {} }).rows.push(i); if (r.po) groups[k].pos[r.po] = 1; });
-    var keys = Object.keys(groups).sort().reverse(), g = st.sel && groups[st.sel];
+    var keys = Object.keys(groups).sort().reverse(), g = null;
+    var prevKey = function (k) { var a = k.split('-').map(Number), d = new Date(a[0], a[1] - 2, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+    if (st.sel && groups[st.sel]) { var pk = prevKey(st.sel), pg = st.withPrev !== false ? groups[pk] : null, seenC = {}, rowsAll = [];
+      groups[st.sel].rows.forEach(function (i) { var c = norm(st.rows[i].code); if (c) seenC[c] = 1; rowsAll.push({ i: i, prev: false }); });
+      if (pg) pg.rows.forEach(function (i) { var c = norm(st.rows[i].code); if (c && seenC[c]) return; rowsAll.push({ i: i, prev: true }); });
+      g = { label: groups[st.sel].label, prevLabel: groups[pk] ? groups[pk].label : '', hasPrev: !!groups[pk], list: rowsAll, nMain: groups[st.sel].rows.length, nPrev: rowsAll.length - groups[st.sel].rows.length }; }
     return { title: 'From last year', body: st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Reading the receipt letters of ' + esc(p.company.name) + '…</b>Certificates / Reports ' + lyYear(-1) + ' and ' + lyYear() + '</div>'
       : st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>'
       : !st.rows.length ? '<div class="empty"><b>No receipt letters found for this company</b>Use photo, Excel or Add item.</div>'
       : (!g ? '<div class="note">Choose the month to copy – you can edit the list after.</div><div class="list">' + keys.map(function (k) { var x = groups[k]; return '<button class="row" data-mo="' + k + '"><span class="t"><b>' + esc(x.label) + '</b><small>' + x.rows.length + (x.rows.length === 1 ? ' item' : ' items') + (Object.keys(x.pos).length ? ' · PO ' + esc(Object.keys(x.pos).join(', ')) : '') + '</small></span><span class="pill">Due ' + esc(dueOf(x.label)) + '</span></button>'; }).join('') + '</div>'
-        : '<div class="note"><b>' + esc(g.label) + '</b> – untick what is not in this year\'s order. The old certificate number of each item is kept, so its certificate is found right away.</div><div class="list">' + g.rows.map(function (i) { var r = st.rows[i], on = st.on[i] !== false;
-          return '<button class="row' + (on ? ' sel' : '') + '" data-ly="' + i + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc([r.machine, r.item].filter(Boolean).join(' – ')) + '</b><small>' + esc([r.code, r.certNo, r.price].filter(Boolean).join(' · ')) + '</small></span></button>'; }).join('') + '</div>'),
-      foot: g ? '<button class="btn ghost" id="lyB">Other month</button><button class="btn" id="lyA">Add ' + g.rows.filter(function (i) { return st.on[i] !== false; }).length + ' items</button>' : '',
+        : '<div class="note"><b>' + esc(g.label) + '</b> – untick what is not in this year\'s order. The old certificate number of each item is kept, so its certificate is found right away.</div>' +
+          (g.hasPrev ? '<button class="row' + (st.withPrev !== false ? ' sel' : '') + '" id="lyP" style="border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface)"><span class="check">' + (st.withPrev !== false ? '✓' : '') + '</span><span class="t"><b>Also look in the month before (' + esc(g.prevLabel) + ')</b><small>Some companies do it one month earlier</small></span></button>' : '') +
+          (g.nPrev ? '<div class="note" style="background:var(--service-soft);color:#6A4300">Take care: <b>' + g.nMain + '</b> item' + (g.nMain === 1 ? ' was' : 's were') + ' done in <b>' + esc(g.label) + '</b> and <b>' + g.nPrev + '</b> in <b>' + esc(g.prevLabel) + '</b> (marked in orange).</div>' : '') +
+          '<div class="list">' + g.list.map(function (x) { var i = x.i, r = st.rows[i], on = st.on[i] !== false;
+          return '<button class="row' + (on ? ' sel' : '') + '" data-ly="' + i + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc([r.machine, r.item].filter(Boolean).join(' – ')) + '</b><small>' + esc([r.code, r.certNo, r.price].filter(Boolean).join(' · ')) + '</small></span><span class="pill" style="--s-fg:' + (x.prev ? 'var(--service)' : 'var(--client)') + ';--s-bg:' + (x.prev ? 'var(--service-soft)' : 'var(--client-soft)') + '">' + esc(x.prev ? g.prevLabel : g.label) + '</span></button>'; }).join('') + '</div>'),
+      foot: g ? '<button class="btn ghost" id="lyB">Other month</button><button class="btn" id="lyA">Add ' + g.list.filter(function (x) { return st.on[x.i] !== false; }).length + ' items</button>' : '',
       mount: function () { $$('[data-mo]').forEach(function (b) { b.onclick = function () { st.sel = b.dataset.mo; renderSheet(); }; });
         $$('[data-ly]').forEach(function (b) { b.onclick = function () { var i = +b.dataset.ly; st.on[i] = st.on[i] === false; renderSheet(); }; });
         var bb = $('#lyB'); if (bb) bb.onclick = function () { st.sel = null; renderSheet(); };
+        var lp = $('#lyP'); if (lp) lp.onclick = function () { st.withPrev = st.withPrev === false; renderSheet(); };
         var ba = $('#lyA'); if (ba) ba.onclick = function () { var have = {}; p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; }); var n = 0;
-          groups[st.sel].rows.forEach(function (i) { if (st.on[i] === false) return; var r = st.rows[i]; if (r.code && have[norm(r.code)]) return; if (r.code) have[norm(r.code)] = 1;
+          var gg = sheetFn && g; (g ? g.list : []).forEach(function (x) { var i = x.i; if (st.on[i] === false) return; var r = st.rows[i]; if (r.code && have[norm(r.code)]) return; if (r.code) have[norm(r.code)] = 1;
             var mid = ''; if (r.machine) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine); })[0]; if (!m) { m = { id: uid(), name: r.machine, code: '', dept: p.depts[0] || '' }; p.machines.push(m); } mid = m.id; }
             p.items.push(newItem({ machineId: mid, code: r.code, description: r.item, prevCert: r.certNo, src: 'last year', dept: p.depts[0] || '' })); n++; });
           saveProjects(); closeSheet(); toast(n + ' items copied from ' + groups[st.sel].label); }; } }; });
