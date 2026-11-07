@@ -84,18 +84,31 @@ function msToken() { return MS.ready.then(function () {
 function graph(method, path, body) { return msToken().then(function (tk) {
   return fetch('https://graph.microsoft.com/v1.0' + path, { method: method, headers: Object.assign({ Authorization: 'Bearer ' + tk }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined })
     .then(function (r) { if (r.status === 403) throw new Error('SharePoint said no access (403). Your company may need to allow this app.'); if (!r.ok) return r.text().then(function (t) { throw new Error('SharePoint error ' + r.status + ': ' + t.slice(0, 160)); }); return r.json(); }); }); }
-var spOn = function () { return !!(MS.app && MS.account); };
+var FILES = { ok: null, err: '' };
+var useFiles = function () { return !!CFG.FILES_URL; };
+var spOn = function () { return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
+function fcall(action, payload) { if (!CFG.FILES_URL) return Promise.reject(new Error('The files server is not set up yet'));
+  return fetch(CFG.FILES_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }), redirect: 'follow' })
+    .then(function (r) { if (!r.ok) throw new Error('The files server did not answer (' + r.status + ')'); return r.json(); })
+    .then(function (j) { if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j.data; }); }
+function filesPing() { if (!useFiles()) return Promise.resolve(); return fcall('ping').then(function (d) { FILES.ok = true; FILES.root = d.root; FILES.err = d.root ? '' : 'The SharePoint copy is not on Google Drive yet'; }).catch(function (e) { FILES.ok = false; FILES.err = e.message; }); }
 /* search files in SharePoint / OneDrive */
 function spSearch(q, size) {
+  if (useFiles()) return fcall('search', { q: q, limit: size || 25 }).then(function (l) { return l.map(function (f) { return { id: f.id, driveId: '', name: f.name, webUrl: f.webUrl, mod: f.mod, path: f.path, summary: '' }; }); });
   return graph('POST', '/search/query', { requests: [{ entityTypes: ['driveItem'], query: { queryString: q }, from: 0, size: size || 25 }] }).then(function (r) {
     var out = []; ((r.value || [])[0] || { hitsContainers: [] }).hitsContainers.forEach(function (c) { (c.hits || []).forEach(function (h) { var x = h.resource || {};
       if (!x.name || x.folder) return;
       out.push({ id: x.id, name: x.name, webUrl: x.webUrl || '', driveId: x.parentReference && x.parentReference.driveId, mod: x.lastModifiedDateTime, by: x.lastModifiedBy && x.lastModifiedBy.user && x.lastModifiedBy.user.displayName, summary: String(h.summary || '').replace(/<[^>]+>/g, '') }); }); });
     return out; }); }
-function pathOf(f) { try { return decodeURIComponent(f.webUrl || ''); } catch (e) { return f.webUrl || ''; } }
+function pathOf(f) { if (f.path) return '/' + f.path; try { return decodeURIComponent(f.webUrl || ''); } catch (e) { return f.webUrl || ''; } }
 var ORDERS_CACHE = null;
+function ordersFrom(v, fname) { var hd = (v[0] || []).map(function (x) { return String(x).trim().toLowerCase(); });
+  var col = function (re) { for (var i = 0; i < hd.length; i++) if (re.test(hd[i])) return i; return -1; };
+  var cC = col(/^customer/), cN = col(/po\.? *\/?price offer number|po.*number/), cV = col(/po\.? value/), cD = col(/po\.? date/), cJ = col(/job type/);
+  return v.slice(1).filter(function (row) { return row[cC]; }).map(function (row) { return { customer: String(row[cC]).trim(), number: String(row[cN] == null ? '' : row[cN]).trim(), value: row[cV], date: row[cD], job: cJ >= 0 ? row[cJ] : '', file: fname }; }); }
 function calibrationOrders() { /* rows of "Calibration Orders.xlsx" → Main Dashboard */
   if (ORDERS_CACHE) return Promise.resolve(ORDERS_CACHE);
+  if (useFiles()) return fcall('sheet', { name: 'Calibration Orders.xlsx', tab: 'Main Dashboard' }).then(function (r) { ORDERS_CACHE = ordersFrom(r.values || [], r.file || 'Calibration Orders.xlsx'); return ORDERS_CACHE; });
   return spSearch('filename:"Calibration Orders.xlsx"', 10).then(function (fs) {
     var f = fs.filter(function (x) { return /^Calibration Orders\.xlsx$/i.test(x.name); }).sort(function (a, b) { return String(b.mod).localeCompare(String(a.mod)); })[0];
     if (!f) return [];
@@ -145,7 +158,7 @@ function signOut() { S.session = null; S.me = null; LS.del('session'); renderLog
 /* ================= app shell ================= */
 function top(title, sub, extra) {
   return '<div class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton"><span class="bdiv"></span><span class="bname"><small>Akhnaton</small><b>Certificates</b></span></div>' +
-    '<span class="sync' + (spOn() ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() ? 'SharePoint' : 'Offline') + '</span></div>' +
+    '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
 function render() {
   if (!S.session) return renderLogin();
@@ -154,10 +167,13 @@ function render() {
   if (p.stage !== 'done') return renderWizard(p);
   return renderOverview(p);
 }
-function boot() { render(); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
+function boot() { render(); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
 
 /* ================= home ================= */
 function msCard() {
+  if (useFiles()) { if (FILES.ok === null) return '<div class="okline"><span class="spin dark"></span> Checking the SharePoint copy…</div>';
+    if (FILES.ok && !FILES.err) return '<div class="okline">' + I.ok.replace(/28/g, '20') + ' SharePoint files connected (copy on Google Drive)</div>';
+    return '<div class="note warnbox"><b>SharePoint files are not reachable yet.</b><br>' + esc(FILES.err) + '</div>'; }
   if (spOn()) return '<div class="okline">' + I.ms + ' SharePoint connected · ' + esc(MS.account.username) + '</div>';
   if (MS.error === 'not-configured') return '<div class="note warnbox">SharePoint is not set up yet. Bishoy needs to add the Microsoft app ID to <b>config.js</b> (one time).</div>';
   return '<div class="card"><h3>Connect SharePoint</h3><div class="meta">To find old certificates, POs and contracts, sign in with your work account.</div>' + (MS.error ? '<div class="note warnbox" style="margin:10px 0 0">' + esc(MS.error) + '</div>' : '') +
@@ -296,7 +312,7 @@ function wType(p) {
 /* ---- 4. order document from SharePoint ---- */
 var TYPE_WORDS = { contract: ['contract', 'عقد', 'agreement'], po: ['PO', 'purchase order', 'أمر توريد'], offer: ['offer', 'quotation', 'عرض سعر'], approval: ['approval', 'موافقة'], visit: ['visit', 'زيارة'] };
 var DOC_EXT = /\.(pdf|docx?|xlsx?|jpe?g|png|msg|eml)$/i;
-var ORDER_FOLDER = 'General/Certificates/Orders'; /* where an attached PO / document is saved on SharePoint (can be changed) */
+var ORDER_FOLDER = CFG.FILES_URL ? 'Google Drive › Akhnaton Certificates – Uploads' : 'General/Certificates/Orders'; /* where an attached PO / document is saved on SharePoint (can be changed) */
 function findOrderFiles(p) {
   var terms = companyTerms(p.company).slice(0, 2), words = TYPE_WORDS[p.orderType] || [], qs = [];
   terms.forEach(function (t) { words.slice(0, 2).forEach(function (w) { qs.push('"' + t.replace(/"/g, '') + '" ' + (w.indexOf(' ') > 0 ? '"' + w + '"' : w)); }); });
@@ -319,7 +335,11 @@ function findOrderFiles(p) {
 var SITE = null;
 function siteDrive() { if (SITE) return Promise.resolve(SITE); var u = new URL(CFG.SP_SITE_URL);
   return graph('GET', '/sites/' + u.hostname + ':' + u.pathname + '?$select=id').then(function (s) { return graph('GET', '/sites/' + s.id + '/drive?$select=id'); }).then(function (d) { SITE = d.id; return SITE; }); }
-function uploadOrder(p, file) { /* saves the attached document in SharePoint: <ORDER_FOLDER>/<company>/<file> */
+function uploadOrder(p, file) {
+  if (useFiles()) return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1]); }; r.readAsDataURL(file); })
+    .then(function (b64) { return fcall('upload', { name: file.name, mime: file.type, base64: b64, company: p.company.name }); });
+  return uploadOrderSP(p, file); }
+function uploadOrderSP(p, file) { /* saves the attached document in SharePoint: <ORDER_FOLDER>/<company>/<file> */
   var safe = function (s) { return String(s).replace(/["*:<>?\/\\|#%]/g, ' ').replace(/\s+/g, ' ').trim(); };
   var path = ORDER_FOLDER + '/' + safe(p.company.name) + '/' + safe(file.name);
   return siteDrive().then(function (drive) { return msToken().then(function (tk) {
@@ -328,7 +348,7 @@ function uploadOrder(p, file) { /* saves the attached document in SharePoint: <O
 function wOrder(p) {
   var of = p.orderFiles, o = p.order || {}, tname = TYPES[p.orderType][0], isPO = p.orderType === 'po';
   if (!of && spOn() && !W.busy) { W.busy = true; findOrderFiles(p).catch(function (e) { toast(e.message, true); p.orderFiles = { list: [], nums: [], err: e.message }; }).then(function () { W.busy = false; if (p.stage === 'order') render(); }); }
-  var chosen = o.fileName ? '<div class="card bar" style="--c:var(--office)"><h3>' + (o.auto ? 'Found – please confirm' : 'Chosen') + '</h3><div class="meta" style="word-break:break-word"><b>' + esc(o.fileName) + '</b>' + (o.number ? ' · No. ' + esc(o.number) : '') + (o.attached ? ' · attached by you' + (o.uploaded ? ' · saved on SharePoint' : ' · on this phone') : '') + '</div>' +
+  var chosen = o.fileName ? '<div class="card bar" style="--c:var(--office)"><h3>' + (o.auto ? 'Found – please confirm' : 'Chosen') + '</h3><div class="meta" style="word-break:break-word"><b>' + esc(o.fileName) + '</b>' + (o.number ? ' · No. ' + esc(o.number) : '') + (o.attached ? ' · attached by you' + (o.uploaded ? ' · saved' : ' · on this phone') : '') + '</div>' +
       '<div class="cf">' + (o.webUrl ? '<a class="btn ghost sm" href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + (o.auto ? '<button class="btn sm" id="oConf">Yes, this one</button>' : '') + '<button class="btn ghost sm" id="oClr">Choose another</button></div></div>' : '';
   $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3><div class="meta">' + esc(tname) + (p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></div>' + chosen +
     (!spOn() ? '<div class="note warnbox">SharePoint is not connected yet, so the ' + esc(tname) + ' can\'t be found on the share. ' + (isPO ? 'You can attach it below.' : 'You can skip this for now.') + '</div>'
@@ -352,7 +372,7 @@ function wOrder(p) {
     keep.then(function (d) { var key = 'order-' + p.id; return IDB.put(key, d).then(function () { return key; }); }).then(function (key) {
       var rec = { attached: true, photo: key, fileName: f.name, number: '' };
       if (!spOn()) { setO(rec); return toast('Attached – it will be saved on SharePoint once it is connected'); }
-      toast('Saving on SharePoint…'); return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; setO(rec); toast('Saved on SharePoint'); })
+      toast('Saving…'); return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; setO(rec); toast('Saved'); })
         .catch(function (e) { setO(rec); toast(e.message + ' – kept on this phone', true); }); }); }); };
   var must = isPO; /* a PO is needed; contract / offer / approval / visit can be skipped for now */
   var has = function () { var x = p.order || {}; return !!(x.fileName && !x.auto); };
@@ -562,7 +582,8 @@ var NAVI = {
   det: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'
 };
 function renderOverview(p) {
-  p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String(p.company.code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '', eH: '', eLoc: 'On Site', refs: [] };
+  p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String(p.company.code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} };
+  p.info.refRes = p.info.refRes || {};
   var titles = { over: [p.company.name, [p.depts.join(', '), TYPES[p.orderType][0]].filter(Boolean).join(' · ')], certs: ['Old certificates', 'Last year\'s certificate of every item'], read: ['Readings', 'New readings next to last year\'s'], det: ['Project details', 'Dates, technician, references, conditions'] }[PT.tab];
   var extra = '';
   if (PT.tab === 'over' || PT.tab === 'certs') { var n = p.items.length || 1, c = certCounts(p);
@@ -578,7 +599,7 @@ function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; 
 
 /* ---- overview ---- */
 function tOver(p) {
-  var o = p.order || {}, inf = p.info, c = certCounts(p), pr = readProgress(p), warn = dateWarns(inf).concat(refWarns(p));
+  var o = p.order || {}, inf = p.info, c = certCounts(p), pr = readProgress(p), warn = dateWarns(inf).concat(refWarns(p)).concat(refResWarn(p) ? [refResWarn(p) + ' chosen reference(s) without a resolution'] : []);
   var step = function (n, done, title, sub, btn, tab) { return '<div class="card"><div style="display:flex;gap:12px;align-items:center"><span style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:18px;flex:none;' + (done ? 'background:var(--office);color:#fff' : 'background:var(--blue-soft);color:var(--navy)') + '">' + (done ? '✓' : n) + '</span><div style="flex:1;min-width:0"><h3>' + title + '</h3><div class="meta">' + sub + '</div></div></div><div class="cf"><button class="btn ' + (done ? 'ghost' : '') + '" data-go="' + tab + '">' + btn + '</button></div></div>'; };
   $('#pm').innerHTML = warn.map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') +
     '<div class="card bar"><h3>Order</h3><dl class="kv" style="margin-top:8px"><dt>Type</dt><dd>' + esc(TYPES[p.orderType][0]) + '</dd>' + (o.number ? '<dt>Number</dt><dd>' + esc(o.number) + '</dd>' : '') +
@@ -615,6 +636,18 @@ function dateWarns(inf) { var w = [], yr = new Date().getFullYear(), nm = { wo: 
 function labDevices() { return ((S.data && S.data.devices) || []).filter(function (d) { return d.active !== false; }); }
 function refExpired(d, inf) { if (!d.calDue) return null; return s2d(String(d.calDue).slice(0, 10)) < (s2d(inf.cal) || new Date()); }
 function refWarns(p) { var inf = p.info, ds = labDevices(); return (inf.refs || []).map(function (id) { var d = ds.filter(function (x) { return x.id === id; })[0]; return d && refExpired(d, inf) ? 'Reference ' + d.manufacturer + ' ' + d.description + ' (S/N ' + d.serial + ') certificate expired on ' + dmy(String(d.calDue).slice(0, 10)) : ''; }).filter(Boolean); }
+var UCAT = { '°C': ['Temperature', 'T', 1, 0], '°F': ['Temperature', 'T', 5 / 9, -32 * 5 / 9], '%RH': ['RH', 'RH', 1, 0], 'bar': ['Pressure', 'P', 1e5, 0], 'mbar': ['Pressure', 'P', 100, 0], 'psi': ['Pressure', 'P', 6894.757, 0], 'kPa': ['Pressure', 'P', 1e3, 0], 'MPa': ['Pressure', 'P', 1e6, 0], 'Pa': ['Pressure', 'P', 1, 0], 'inH2O': ['Pressure', 'P', 249.089, 0], 'mmH2O': ['Pressure', 'P', 9.80665, 0], 'mmHg': ['Pressure', 'P', 133.322, 0],
+  'g': ['Weight', 'M', 1, 0], 'mg': ['Weight', 'M', 1e-3, 0], 'kg': ['Weight', 'M', 1e3, 0], 'rpm': ['RPM', 'R', 1, 0], 's': ['Timer', 'S', 1, 0], 'min': ['Timer', 'S', 60, 0], 'h': ['Timer', 'S', 3600, 0], 'lux': ['Light', 'L', 1, 0], 'm/s': ['HVAC', 'V', 1, 0], 'm³/h': ['HVAC', 'Q', 1, 0], 'CFM': ['HVAC', 'Q', 1.699, 0] };
+function unitKey(u) { u = String(u || '').trim().replace(/^o\s*c$/i, '°C').replace(/^deg\.?\s*c$/i, '°C').replace(/^c$/i, '°C').replace(/^%\s*rh$/i, '%RH').replace(/^r\.?h\.?%?$/i, '%RH'); for (var k in UCAT) if (k.toLowerCase() === u.toLowerCase()) return k; return u; }
+function toBase(v, u) { var c = UCAT[unitKey(u)]; return c ? v * c[2] + (c[3] || 0) : v; }
+function devRange(d) { var t = String(d.range || '').replace(/amb\.?/i, '20').replace(/\s+/g, ' '), m = t.match(/\(?\s*(-?\d+(?:\.\d+)?)\s*(?::|to|~)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?/i);
+  if (!m) return null; var u = unitKey((m[3] || '').trim().split(/[\s,;&]/)[0]); return { lo: Math.min(+m[1], +m[2]), hi: Math.max(+m[1], +m[2]), unit: u }; }
+function suggestRefs(p) { var out = {}; labDevices().forEach(function (d) { var r = devRange(d); if (!r || !UCAT[r.unit]) return;
+    p.items.forEach(function (it) { var u = unitKey(it.unit); if (!UCAT[u] || UCAT[u][1] !== UCAT[r.unit][1]) return;
+      var lo = isNum(it.cMin) ? numv(it.cMin) : (isNum(it.rMin) ? numv(it.rMin) : null), hi = isNum(it.cMax) ? numv(it.cMax) : (isNum(it.rMax) ? numv(it.rMax) : null); if (lo == null || hi == null) return;
+      if (toBase(r.lo, r.unit) <= toBase(lo, u) + 1e-9 && toBase(r.hi, r.unit) >= toBase(hi, u) - 1e-9) (out[d.id] = out[d.id] || []).push(it.code || it.description); }); });
+  return out; }
+function refResWarn(p) { return (p.info.refs || []).filter(function (id) { return !isNum(p.info.refRes[id]); }).length; }
 function tDet(p) {
   var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin'; }), ds = labDevices(), q = norm(PT.rq || '');
   var cats = {}; ds.forEach(function (d) { (cats[d.category || 'Other'] = cats[d.category || 'Other'] || []).push(d); });
@@ -622,32 +655,49 @@ function tDet(p) {
     '<div class="sec"><h2>Dates</h2><small>Sun – Thu</small></div>' +
     '<label class="f"><span>Calibration date</span><input class="inp" type="date" data-i="cal" value="' + esc(inf.cal) + '"></label>' +
     '<div class="note">Work order ≈ 1 week before · Date of issue = 3 working days after (same month) · Received ≈ issue − 7 · Due = +1 year. You can change any of them.</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Work order date</span><input class="inp" type="date" data-i="wo" value="' + esc(inf.wo) + '"></label><label class="f"><span>WO prefix</span><input class="inp" data-i="woPre" value="' + esc(inf.woPre) + '"></label>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Work order date</span><input class="inp" type="date" data-i="wo" value="' + esc(inf.wo) + '"></label><label class="f"><span>WO number prefix (the 10 in 10/21/10/2026)</span><input class="inp" data-i="woPre" value="' + esc(inf.woPre) + '"></label>' +
     '<label class="f"><span>Date of issue</span><input class="inp" type="date" data-i="iss" value="' + esc(inf.iss) + '"></label><label class="f"><span>Date received</span><input class="inp" type="date" data-i="rec" value="' + esc(inf.rec) + '"></label>' +
     '<label class="f"><span>Due date</span><input class="inp" type="date" data-i="due" value="' + esc(inf.due) + '"></label></div>' +
     '<div class="note" id="woShow" style="background:var(--office-soft);color:#14603C">WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b></div><div id="dw">' + dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') + '</div>' +
-    '<div class="sec"><h2>Environmental conditions</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Temperature (°C)</span><input class="inp" inputmode="decimal" data-i="eT" value="' + esc(inf.eT) + '"></label><label class="f"><span>Humidity (%RH)</span><input class="inp" inputmode="decimal" data-i="eH" value="' + esc(inf.eH) + '"></label></div>' +
+    '<div class="sec"><h2>Environmental conditions</h2>' + (PT.envEdit ? '<small>editing</small>' : '<button class="btn ghost sm" id="envE">Edit</button>') + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Temperature (°C)</span><input class="inp" inputmode="decimal" data-i="eT" value="' + esc(inf.eT) + '"' + (PT.envEdit ? '' : ' readonly') + '></label><label class="f"><span>Humidity (%RH)</span><input class="inp" inputmode="decimal" data-i="eH" value="' + esc(inf.eH) + '"' + (PT.envEdit ? '' : ' readonly') + '></label></div>' +
     '<label class="f"><span>Location</span><input class="inp" data-i="eLoc" value="' + esc(inf.eLoc) + '"></label>' +
     '<div class="sec"><h2>Reference standards</h2><small>' + (inf.refs || []).length + ' chosen</small></div>' +
     '<div class="small" style="margin-bottom:8px">From the Akhnaton Devices list – the expiry comes from each device\'s calibration due date.</div>' +
     refWarns(p).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') +
+    (function () { var sg = suggestRefs(p), ids = Object.keys(sg).filter(function (id) { return (inf.refs || []).indexOf(id) < 0; });
+      var chosen = (inf.refs || []).map(function (id) { return ds.filter(function (x) { return x.id === id; })[0]; }).filter(Boolean);
+      return (chosen.length ? '<div class="sec" style="margin:4px 0 6px"><h2 style="font-size:15px">Chosen – resolution of each reference</h2></div><div class="list">' + chosen.map(function (d) { var rv = inf.refRes[d.id] || '';
+          return '<div class="row"><span class="t"><b>' + esc(d.manufacturer + ' ' + d.description) + '</b><small>' + esc([d.model, 'S/N ' + d.serial, d.range].filter(Boolean).join(' · ')) + '</small></span><input class="inp' + (isNum(rv) ? '' : ' bad') + '" data-rr="' + d.id + '" value="' + esc(rv) + '" inputmode="decimal" placeholder="Resolution" style="width:110px;height:42px;text-align:center"' + (isNum(rv) ? ' readonly' : '') + '>' + (isNum(rv) ? '<button class="icon-btn" data-rre="' + d.id + '" style="color:var(--muted)">' + I.edit + '</button>' : '') + '</div>'; }).join('') + '</div>' +
+          (refResWarn(p) ? '<div class="small" style="color:var(--danger);margin-top:6px">Write the resolution of every chosen reference.</div>' : '') : '') +
+        (ids.length ? '<div class="sec" style="margin:14px 0 6px"><h2 style="font-size:15px">Suggested for your items</h2><small>from unit + range</small></div><div class="list">' + ids.map(function (id) { var d = ds.filter(function (x) { return x.id === id; })[0], ex = refExpired(d, inf);
+          return '<button class="row" data-ref="' + d.id + '"><span class="check"></span><span class="t"><b>' + esc(d.manufacturer + ' ' + d.description) + '</b><small>' + esc([d.range, 'S/N ' + d.serial].filter(Boolean).join(' · ')) + '</small><small>Covers: ' + esc(sg[id].slice(0, 6).join(', ') + (sg[id].length > 6 ? '…' : '')) + '</small></span>' + (d.calDue ? '<span class="pill" style="--s-fg:' + (ex ? 'var(--danger)' : 'var(--office)') + ';--s-bg:' + (ex ? 'var(--danger-soft)' : 'var(--office-soft)') + '">' + (ex ? 'Expired' : 'Valid') + '</span>' : '') + '</button>'; }).join('') + '</div><div class="small" style="margin-top:6px">Tap to confirm. Only items with a range and unit get suggestions.</div>' : ''); })() +
+    '<div class="sec" style="margin:14px 0 6px"><h2 style="font-size:15px">All lab devices</h2></div>' +
     '<div class="search">' + I.search + '<input id="rq" placeholder="Search reference (name, model, serial)" value="' + esc(PT.rq || '') + '"></div>' +
     (ds.length ? Object.keys(cats).sort().map(function (k) { var L = cats[k].filter(function (d) { return !q || norm(d.manufacturer + d.description + d.model + d.serial).indexOf(q) >= 0 || (inf.refs || []).indexOf(d.id) >= 0; }); if (!L.length) return '';
       return '<div class="sec" style="margin:12px 0 6px"><h2 style="font-size:15px">' + esc(k) + '</h2></div><div class="list">' + L.map(function (d) { var on = (inf.refs || []).indexOf(d.id) >= 0, ex = refExpired(d, inf);
         return '<button class="row' + (on ? ' sel' : '') + '" data-ref="' + d.id + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(d.manufacturer + ' ' + d.description) + '</b><small>' + esc([d.model, 'S/N ' + d.serial, d.range].filter(Boolean).join(' · ')) + '</small></span>' +
           (d.calDue ? '<span class="pill" style="--s-fg:' + (ex ? 'var(--danger)' : 'var(--office)') + ';--s-bg:' + (ex ? 'var(--danger-soft)' : 'var(--office-soft)') + '">' + (ex ? 'Expired ' : 'Due ') + dmy(String(d.calDue).slice(0, 10)) + '</span>' : '') + '</button>'; }).join('') + '</div>'; }).join('')
       : '<div class="empty">Loading the device list…</div>');
+  var ee = $('#envE'); if (ee) ee.onclick = function () { PT.envEdit = true; tDet(p); };
   $$('[data-tech]').forEach(function (b) { b.onclick = function () { var u = people.filter(function (x) { return x.id === b.dataset.tech; })[0]; inf.techId = u.id; inf.tech = u.name; saveProjects(); tDet(p); }; });
   $$('[data-i]').forEach(function (e) { e.oninput = function () { inf[e.dataset.i] = e.value; if (e.dataset.i === 'cal') { calcDates(inf); ['wo', 'iss', 'rec', 'due'].forEach(function (k) { $('[data-i="' + k + '"]').value = inf[k]; }); }
     $('#woShow').innerHTML = 'WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b>'; $('#dw').innerHTML = dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join(''); saveProjects(); }; });
+  var memo = LS.get('refRes', {});
+  $$('[data-rr]').forEach(function (e) { e.onchange = function () { var v = e.value.trim(); if (!isNum(v)) { toast('Resolution must be a number', true); return; } inf.refRes[e.dataset.rr] = v; memo[e.dataset.rr] = v; LS.set('refRes', memo); saveProjects(); tDet(p); }; });
+  $$('[data-rre]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rre, was = inf.refRes[id];
+    $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>Reference resolution</h3><p>Now: <b>' + esc(was) + '</b></p><input class="inp" id="rrv" inputmode="decimal" value="' + esc(was) + '"><div class="cf"><button class="btn ghost" id="rrc">Cancel</button><button class="btn" id="rrs">Save</button></div></div></div>';
+    $('#rrc').onclick = function () { $('#dlg-root').innerHTML = ''; };
+    $('#rrs').onclick = function () { var v = $('#rrv').value.trim(); $('#dlg-root').innerHTML = ''; if (!isNum(v)) return toast('Resolution must be a number', true); if (numv(v) === numv(was)) return;
+      dialog('Are you sure?', 'The reference resolution changes from <b>' + esc(was) + '</b> to <b>' + esc(v) + '</b>.', 'Yes, I\'m sure').then(function (y) { if (!y) return; inf.refRes[id] = v; memo[id] = v; LS.set('refRes', memo); saveProjects(); tDet(p); }); }; }; });
   var rq = $('#rq'); rq.oninput = function () { PT.rq = rq.value; var pos = rq.selectionStart; tDet(p); var n = $('#rq'); n.focus(); n.setSelectionRange(pos, pos); };
-  $$('[data-ref]').forEach(function (b) { b.onclick = function () { var id = b.dataset.ref, a = inf.refs || (inf.refs = []), i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else { a.push(id); var d = ds.filter(function (x) { return x.id === id; })[0]; if (d && refExpired(d, inf)) toast('This reference\'s certificate is expired!', true); } saveProjects(); tDet(p); }; });
+  $$('[data-ref]').forEach(function (b) { b.onclick = function () { var id = b.dataset.ref, a = inf.refs || (inf.refs = []), i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else { a.push(id); if (!inf.refRes[id] && LS.get('refRes', {})[id]) inf.refRes[id] = LS.get('refRes', {})[id]; var d = ds.filter(function (x) { return x.id === id; })[0]; if (d && refExpired(d, inf)) toast('This reference\'s certificate is expired!', true); } saveProjects(); tDet(p); }; });
 }
 
 /* ---- old certificates: find last year's certificate on SharePoint and read it ---- */
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 function needPdf() { return window.pdfjsLib ? Promise.resolve() : loadScript(PDFJS + 'pdf.min.js').then(function () { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; }); }
 function pdfPages(driveId, id) { /* SharePoint converts the Word file to PDF; we read its text line by line */
+  if (useFiles()) return fcall('text', { id: id }).then(function (r) { return r.pages || []; });
   return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + driveId + '/items/' + id + '/content?format=pdf', { headers: { Authorization: 'Bearer ' + r[1] } }); })
     .then(function (res) { if (!res.ok) throw new Error('Could not open the file (' + res.status + ')'); return res.arrayBuffer(); })
     .then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; })
