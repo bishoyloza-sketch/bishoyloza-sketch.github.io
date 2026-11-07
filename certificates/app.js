@@ -15,12 +15,13 @@ var LS = {
   del: function (k) { try { localStorage.removeItem('akhc.' + k); } catch (e) {} }
 };
 /* photos go to IndexedDB (too big for localStorage) */
+var MEMIMG = {};
 var IDB = {
   db: null,
   open: function () { var self = this; if (self.db) return Promise.resolve(self.db);
     return new Promise(function (res, rej) { var r = indexedDB.open('akhc', 1); r.onupgradeneeded = function () { r.result.createObjectStore('img'); }; r.onsuccess = function () { self.db = r.result; res(self.db); }; r.onerror = function () { rej(r.error); }; }); },
-  put: function (k, v) { return this.open().then(function (db) { return new Promise(function (res, rej) { var t = db.transaction('img', 'readwrite'); t.objectStore('img').put(v, k); t.oncomplete = res; t.onerror = function () { rej(t.error); }; }); }); },
-  get: function (k) { return this.open().then(function (db) { return new Promise(function (res) { var q = db.transaction('img').objectStore('img').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { res(null); }; }); }).catch(function () { return null; }); }
+  put: function (k, v) { MEMIMG[k] = v; return this.open().then(function (db) { return new Promise(function (res, rej) { var t = db.transaction('img', 'readwrite'); t.objectStore('img').put(v, k); t.oncomplete = res; t.onerror = function () { res(); }; }); }).catch(function () {}); },
+  get: function (k) { if (MEMIMG[k]) return Promise.resolve(MEMIMG[k]); return this.open().then(function (db) { return new Promise(function (res) { var q = db.transaction('img').objectStore('img').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { res(null); }; }); }).catch(function () { return null; }); }
 };
 function toast(t, bad) { var e = $('#toast'); e.textContent = t; e.className = (bad ? 'bad ' : '') + 'on'; clearTimeout(e._t); e._t = setTimeout(function () { e.className = ''; }, 3600); }
 function dialog(title, msg, yes, no) { return new Promise(function (r) {
@@ -51,8 +52,101 @@ var I = {
   ms: '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#F25022" d="M2 2h9.5v9.5H2z"/><path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z"/><path fill="#00A4EF" d="M2 12.5h9.5V22H2z"/><path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z"/></svg>'
 };
 
+
+/* tiny .xlsx reader (no library needed): returns { sheetName: [[cell, …], …] } */
+function readXlsx(buf) {
+  var u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), td = new TextDecoder();
+  var eocd = -1; for (var i = u8.length - 22; i >= Math.max(0, u8.length - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) return Promise.reject(new Error('Not an Excel file'));
+  var n = dv.getUint16(eocd + 10, true), off = dv.getUint32(eocd + 16, true), files = {};
+  for (var k = 0; k < n; k++) { var m = dv.getUint16(off + 10, true), cs = dv.getUint32(off + 20, true), nl = dv.getUint16(off + 28, true), el = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true), lo = dv.getUint32(off + 42, true);
+    var name = td.decode(u8.subarray(off + 46, off + 46 + nl)), ds = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true); files[name] = { m: m, d: u8.subarray(ds, ds + cs) }; off += 46 + nl + el + cl; }
+  var get = function (nm) { var f = files[nm]; if (!f) return Promise.resolve(''); if (f.m === 0) return Promise.resolve(td.decode(f.d));
+    return new Response(new Blob([f.d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text(); };
+  var xml = function (t) { return new DOMParser().parseFromString(t, 'application/xml'); };
+  return Promise.all([get('xl/workbook.xml'), get('xl/_rels/workbook.xml.rels'), get('xl/sharedStrings.xml')]).then(function (r) {
+    var wb = xml(r[0]), rels = {}, ss = [];
+    Array.prototype.forEach.call(xml(r[1]).getElementsByTagName('Relationship'), function (e) { rels[e.getAttribute('Id')] = e.getAttribute('Target'); });
+    if (r[2]) Array.prototype.forEach.call(xml(r[2]).getElementsByTagName('si'), function (si) { ss.push(Array.prototype.map.call(si.getElementsByTagName('t'), function (t) { return t.textContent; }).join('')); });
+    var sheets = Array.prototype.map.call(wb.getElementsByTagName('sheet'), function (e) { var t = rels[e.getAttribute('r:id')] || ''; return { name: e.getAttribute('name'), path: t.replace(/^\/?(xl\/)?/, 'xl/') }; });
+    var out = {};
+    return Promise.all(sheets.map(function (sh) { return get(sh.path).then(function (t) { var rows = [];
+      Array.prototype.forEach.call(xml(t).getElementsByTagName('row'), function (row) { var arr = [];
+        Array.prototype.forEach.call(row.getElementsByTagName('c'), function (c) { var ref = c.getAttribute('r') || '', col = 0; ref.replace(/[A-Z]+/, function (L) { for (var q = 0; q < L.length; q++) col = col * 26 + L.charCodeAt(q) - 64; });
+          var ty = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], val = '';
+          if (ty === 's') val = ss[+((v && v.textContent) || 0)] || ''; else if (ty === 'inlineStr') val = Array.prototype.map.call(c.getElementsByTagName('t'), function (x) { return x.textContent; }).join(''); else val = v ? v.textContent : '';
+          arr[(col || arr.length + 1) - 1] = val; });
+        rows.push(Array.from(arr, function (x) { return x == null ? '' : x; })); });
+      out[sh.name] = rows; }); })).then(function () { return out; }); }); }
+/* ================= Claude mode: the same app opened inside Claude uses the user's own Claude connectors ================= */
+var CL = { on: !!(window.claude && typeof window.claude.use === 'function'), mcp: null, sample: null, dl: null, imgs: false };
+CL.ready = CL.on ? Promise.all([claude.use('mcp').catch(function () { return null; }), claude.use('sample').catch(function () { return null; }), claude.use('downloads').catch(function () { return null; })])
+  .then(function (r) { CL.mcp = r[0]; CL.sample = r[1]; CL.dl = r[2]; if (CL.sample && CL.sample.limits) return CL.sample.limits().then(function (l) { CL.imgs = !!(l && l.images); }).catch(function () {}); }) : Promise.resolve();
+var M365 = 'Microsoft 365', GDRIVE = 'Google Drive';
+var CL_DRIVE = 'b!-PWHJdIcZ0-gKkia4j9odEgetIygwXxKmFhm4bIxj5SHSByxhJikSrSa5YHlcuHY', CL_CERT_FOLDER = '01D2DJYVWLHWJ5M4UNGVAY4BQO5PP3NDBF'; /* General/Certificates */
+var DATA_SHEET_ID = '17Ge4w5MyfBuqUSXEo3GDcwcSRbi0wrrXCJzzdnBWdUc'; /* Akhnaton Device Tracker – Data */
+function clErr(e) { var c = e && e.code;
+  return new Error(({ needs_reauth: 'Reconnect ' + (e.server || 'the connector') + ' in claude.ai → Settings → Connectors', server_not_connected: 'Add the ' + (e.server || '') + ' connector in claude.ai → Settings → Connectors', approval_required: 'Allow the app to use ' + (e.server || 'the connector') + ' (claude.ai asks once)', not_in_manifest: 'This connector is not allowed for the app – allow it in claude.ai', blocked_by_policy: 'Blocked by your organization', server_unavailable: (e.server || 'The server') + ' is not answering – try again', not_granted: 'Open the app inside Claude' })[c] || (e && (e.message || e.code)) || String(e)); }
+function clCall(server, tool, input) { return CL.ready.then(function () { if (!CL.mcp) throw new Error('Open the app inside Claude to reach SharePoint');
+  return CL.mcp.callTool(server, tool, input).catch(function (e) { if (e && e.retryable) return new Promise(function (r) { setTimeout(r, (e.retryAfterMs || 1500) + 500); }).then(function () { return CL.mcp.callTool(server, tool, input); }); throw e; }).catch(function (e) { throw clErr(e); }); }); }
+function clText(r) { var t = (r.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n'); if (t) return t; return typeof r.payload === 'string' ? r.payload : (r.payload ? JSON.stringify(r.payload) : ''); }
+function clObjs(r) { if (Array.isArray(r.payload)) return r.payload; var out = [];
+  (r.content || []).forEach(function (b) { if (b.type !== 'text') return; var s = b.text, d = 0, st = -1, ins = false, es = false;
+    for (var i = 0; i < s.length; i++) { var c = s[i]; if (ins) { if (es) es = false; else if (c === '\\') es = true; else if (c === '"') ins = false; continue; }
+      if (c === '"') ins = true; else if (c === '{') { if (!d) st = i; d++; } else if (c === '}') { d--; if (!d && st >= 0) { try { out.push(JSON.parse(s.slice(st, i + 1))); } catch (e) {} st = -1; } } } });
+  if (!out.length && r.payload && typeof r.payload === 'object') out.push(r.payload); return out; }
+/* people, companies, lab devices – read from the Akhnaton Devices data sheet (same list as the devices app) */
+var CL_DB = null;
+function clData() { if (CL_DB) return Promise.resolve(CL_DB);
+  return clCall(GDRIVE, 'download_file_content', { fileId: DATA_SHEET_ID, exportMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }).then(function (r) {
+    var o = r.payload && r.payload.content ? r.payload : clObjs(r)[0]; if (!o || !o.content) throw new Error('Could not read the Akhnaton Devices data sheet');
+    var bin = atob(o.content), buf = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return readXlsx(buf.buffer).then(function (wb) {
+      var tab = function (name) { var rows = (wb[name] || []).filter(function (x) { return x.some(function (c) { return String(c).trim(); }); }); var h = rows.shift() || [];
+        return rows.filter(function (x) { return x[0]; }).map(function (x) { var ob = {}; h.forEach(function (k, j) { ob[k] = x[j] == null ? '' : x[j]; }); return ob; }); };
+      var tf = function (v) { return String(v).toLowerCase() !== 'false' && String(v) !== '0'; };
+      var dt = function (v) { v = String(v || ''); if (/^\d{5}(\.\d+)?$/.test(v)) { var d = new Date(Date.UTC(1899, 11, 30) + parseFloat(v) * 864e5); return d.toISOString().slice(0, 10); } return v; };
+      CL_DB = { users: tab('Users').map(function (u) { return { id: u.id, name: u.name, role: u.role, active: tf(u.active) }; }).filter(function (u) { return u.active; }),
+        companies: tab('Companies').map(function (c) { return { id: c.id, name: c.name, official: c.official, code: String(c.code || ''), group: c.group, active: tf(c.active), lastUsed: c.lastUsed }; }),
+        devices: tab('Devices').map(function (d) { return { id: d.id, category: d.category, manufacturer: d.manufacturer, description: d.description, model: d.model, serial: d.serial, range: d.range, accuracy: d.accuracy, calDue: dt(d.calDue), active: tf(d.active) }; }) };
+      return CL_DB; }); }); }
+function clApi(req) { var a = req.action;
+  if (a === 'people') return clData().then(function (d) { return d.users; });
+  if (a === 'login') return clData().then(function (d) { var u = d.users.filter(function (x) { return x.id === req.userId; })[0]; if (!u) throw new Error('Unknown person'); return { user: u, mustChange: false }; });
+  if (a === 'state') return clData();
+  if (a === 'saveCompany') return Promise.reject(new Error('Add new companies in Akhnaton Devices – they show here right after.'));
+  return Promise.reject(new Error('Not available inside Claude')); }
+function clSearch(q, size) { return clCall(M365, 'sharepoint_search', { query: q, limit: Math.min(size || 25, 50), offset: 0 }).then(function (r) {
+  return clObjs(r).filter(function (o) { return o && o.name && o.uri; }).map(function (o) { return { id: o.uri, uri: o.uri, driveId: o.driveId, itemId: o.id, name: o.name, webUrl: o.webUrl || '', mod: o.lastModifiedDateTime, summary: String(o.summary || o.content || '').replace(/<[^>]+>/g, '') }; }); }); }
+function clRead(uri) { var txt = '', page = 1, chain = function (k) { var inp = { uri: uri }; if (page > 1) inp.startPage = page;
+    return clCall(M365, 'read_resource', inp).then(function (r) { var t = clText(r); txt += '\n' + t; var m = t.match(/startPage\s*=\s*(\d+)/); if (m && +m[1] > page && k < 8) { page = +m[1]; return chain(k + 1); } return txt; }); };
+  return chain(0); }
+function clPages(uri) { return clRead(uri).then(function (t) { return t.split(/\n+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 40; }).map(function (x) { return [x]; }); }); }
+function clOrders() { return clSearch('Calibration Orders', 10).then(function (fs) { var f = fs.filter(function (x) { return /^Calibration Orders\.xlsx$/i.test(x.name); }).sort(function (a, b) { return String(b.mod).localeCompare(String(a.mod)); })[0]; if (!f) return [];
+  return clCall(M365, 'read_resource', { uri: f.uri, startPage: 2, endPage: 2 }).then(function (r) { var lines = clText(r).split('\n'), i = lines.findIndex(function (l) { return /^ID\t/i.test(l) || /\tCustomer\t/i.test(l); }); if (i < 0) return [];
+    var v = []; for (var k = i; k < lines.length; k++) { if (!lines[k].trim() || /^##|^Formulas/.test(lines[k])) break; v.push(lines[k].split('\t')); } return ordersFrom(v, f.name); }); }); }
+function clFolder(parent, name) { return clCall(M365, 'sharepoint_create_folder', { driveId: CL_DRIVE, parentItemId: parent, name: name, conflictBehavior: 'fail' }).then(function (r) { var o = clObjs(r)[0] || {}; return o.id; })
+  .catch(function () { return clCall(M365, 'sharepoint_folder_search', { name: name, limit: 50, offset: 0 }).then(function (r) { var hit = clObjs(r).filter(function (o) { return o.driveId === CL_DRIVE && o.name === name && /\/Certificates\/Orders(\/[^/]+)?$/.test(decodeURIComponent(o.webUrl || '')); });
+    var want = name === 'Orders' ? hit.filter(function (o) { return /\/Certificates\/Orders$/.test(decodeURIComponent(o.webUrl)); }) : hit.filter(function (o) { return /\/Certificates\/Orders\/[^/]+$/.test(decodeURIComponent(o.webUrl)); }); if (!want[0]) throw new Error('Could not open the Orders folder on SharePoint'); return want[0].id; }); }); }
+function clUpload(p, file) { if (file.size > 1048000) return Promise.reject(new Error('The file is bigger than 1 MB – attach a photo instead'));
+  return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1]); }; r.readAsDataURL(file); }).then(function (b64) {
+    return clFolder(CL_CERT_FOLDER, 'Orders').then(function (orders) { return clFolder(orders, String(p.company.name).replace(/["*:<>?\/\\|#%]/g, ' ').trim()); })
+      .then(function (fid) { return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: fid, filename: file.name, contentBase64: b64, conflictBehavior: 'rename' }); })
+      .then(function (r) { var o = clObjs(r)[0] || {}; return { id: o.uri || o.id, webUrl: o.webUrl, name: o.name || file.name }; }); }); }
+function clSave(blob, name) { return CL.ready.then(function () { if (!CL.dl) throw new Error('Downloading needs the app inside claude.ai'); return CL.dl.save({ filename: name, data: blob }); }); }
+function clOcr(dataUrl) { return CL.ready.then(function () { if (!CL.sample || !CL.imgs) throw new Error('Reading photos needs the app inside claude.ai');
+  return fetch(dataUrl).then(function (r) { return r.blob(); }).then(function (b) { return CL.sample('Transcribe every piece of text in this photo exactly as written, line by line. Keep codes, numbers, units and dashes exactly. Output only the text.', { images: [b] }); }).then(function (r) { return r.text || ''; }); }); }
+/* read a certificate with Claude (exact values, no rounding) */
+function clExtract(sec, hint) { return CL.ready.then(function () { if (!CL.sample) throw new Error('Reading certificates needs the app inside claude.ai');
+  var text = sec.map(function (pg) { return pg.join(' '); }).join('\n\n---PAGE---\n\n').slice(0, 24000);
+  return CL.sample.json('Below is text (spacing is messy) from ONE calibration certificate of Akhnaton calibration lab. ' + hint + '\nExtract it as JSON. Copy every value EXACTLY as written – never compute, round, correct or invent a number. Only repair spacing inside one number/token ("5 0"→"50", "- 0.02"→"-0.02", "0.0 1"→"0.01", "48 - 925 - 2026"→"48-925-2026"); keep trailing zeros. Missing → "".\n' +
+    'If the results have ascending/descending or Up/Down columns put the second set in reading2/deviation2 and set dirs to 2, else dirs 1. ref = the standard/reference value (if there is no separate column use the nominal point). limit = the acceptance limit of that row as written ("" if only a global limit). Ignore repeatability / eccentricity tables.\n' +
+    'Return JSON only: {"fields":{"certNo":"","manufacturer":"","description":"","code":"","model":"","serial":"","range":"","calRange":"","resolution":"","limits":"","calDate":"","dataSheetRef":"","procedure":""},"dirs":1,"points":[{"point":"","ref":"","reading":"","deviation":"","reading2":"","deviation2":"","limit":""}]}\n\nTEXT:\n"""\n' + text + '\n"""', { modelTier: 'default' })
+    .then(function (j) { j = j || {}; return { fields: j.fields || {}, points: j.points || [], dirs: j.dirs === 2 ? 2 : 1 }; }); }); }
+
 /* ================= server (same as Akhnaton Devices) ================= */
 var Api = { call: function (req) {
+  if (CL.on) return clApi(req);
   if (!CFG.API_URL) return Promise.reject(new Error('Server address is missing in config.js'));
   return fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(req), redirect: 'follow' })
     .then(function (r) { if (!r.ok) throw new Error('The server did not answer (' + r.status + '). Check the internet and try again.'); return r.json(); })
@@ -86,7 +180,7 @@ function graph(method, path, body) { return msToken().then(function (tk) {
     .then(function (r) { if (r.status === 403) throw new Error('SharePoint said no access (403). Your company may need to allow this app.'); if (!r.ok) return r.text().then(function (t) { throw new Error('SharePoint error ' + r.status + ': ' + t.slice(0, 160)); }); return r.json(); }); }); }
 var FILES = { ok: null, err: '' };
 var useFiles = function () { return !!CFG.FILES_URL; };
-var spOn = function () { return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
+var spOn = function () { if (CL.on) return true; return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
 function fcall(action, payload) { if (!CFG.FILES_URL) return Promise.reject(new Error('The files server is not set up yet'));
   return fetch(CFG.FILES_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }), redirect: 'follow' })
     .then(function (r) { if (!r.ok) throw new Error('The files server did not answer (' + r.status + ')'); return r.json(); })
@@ -94,6 +188,7 @@ function fcall(action, payload) { if (!CFG.FILES_URL) return Promise.reject(new 
 function filesPing() { if (!useFiles()) return Promise.resolve(); return fcall('ping').then(function (d) { FILES.ok = true; FILES.root = d.root; FILES.err = d.root ? '' : 'The SharePoint copy is not on Google Drive yet'; }).catch(function (e) { FILES.ok = false; FILES.err = e.message; }); }
 /* search files in SharePoint / OneDrive */
 function spSearch(q, size) {
+  if (CL.on) return clSearch(q, size);
   if (useFiles()) return fcall('search', { q: q, limit: size || 25 }).then(function (l) { return l.map(function (f) { return { id: f.id, driveId: '', name: f.name, webUrl: f.webUrl, mod: f.mod, path: f.path, summary: '' }; }); });
   return graph('POST', '/search/query', { requests: [{ entityTypes: ['driveItem'], query: { queryString: q }, from: 0, size: size || 25 }] }).then(function (r) {
     var out = []; ((r.value || [])[0] || { hitsContainers: [] }).hitsContainers.forEach(function (c) { (c.hits || []).forEach(function (h) { var x = h.resource || {};
@@ -108,6 +203,7 @@ function ordersFrom(v, fname) { var hd = (v[0] || []).map(function (x) { return 
   return v.slice(1).filter(function (row) { return row[cC]; }).map(function (row) { return { customer: String(row[cC]).trim(), number: String(row[cN] == null ? '' : row[cN]).trim(), value: row[cV], date: row[cD], job: cJ >= 0 ? row[cJ] : '', file: fname }; }); }
 function calibrationOrders() { /* rows of "Calibration Orders.xlsx" → Main Dashboard */
   if (ORDERS_CACHE) return Promise.resolve(ORDERS_CACHE);
+  if (CL.on) return clOrders().then(function (o) { ORDERS_CACHE = o; return o; });
   if (useFiles()) return fcall('sheet', { name: 'Calibration Orders.xlsx', tab: 'Main Dashboard' }).then(function (r) { ORDERS_CACHE = ordersFrom(r.values || [], r.file || 'Calibration Orders.xlsx'); return ORDERS_CACHE; });
   return spSearch('filename:"Calibration Orders.xlsx"', 10).then(function (fs) {
     var f = fs.filter(function (x) { return /^Calibration Orders\.xlsx$/i.test(x.name); }).sort(function (a, b) { return String(b.mod).localeCompare(String(a.mod)); })[0];
@@ -135,14 +231,14 @@ function renderLogin() {
     people.sort(function (a, b) { return (order[a.role] - order[b.role]) || a.name.localeCompare(b.name); });
     app.innerHTML = '<div class="login"><div class="login-top"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation">' +
       '<h1><small>Akhnaton</small>Certificates</h1><p>Calibration certificates from last year\'s data.</p></div><div class="login-card"><div>' +
-      (!pick ? '<div class="sec" style="margin-top:4px"><h2>Who are you?</h2><small>Same PIN as Akhnaton Devices</small></div>' +
+      (!pick ? '<div class="sec" style="margin-top:4px"><h2>Who are you?</h2><small>' + (CL.on ? 'Tap your name' : 'Same PIN as Akhnaton Devices') + '</small></div>' +
         (people.length ? '<div class="people">' + people.map(function (p) { return '<button data-u="' + p.id + '"><b>' + esc(p.name) + '</b><small>' + (roleName[p.role] || p.role) + '</small></button>'; }).join('') + '</div>'
           : '<div class="empty"><b>Loading names…</b>Check the internet connection.</div>')
       : '<div class="sec" style="margin-top:4px"><h2>' + esc(pick.name) + '</h2><button class="btn ghost sm" data-back>Change</button></div><p style="text-align:center;margin:8px 0 0;color:var(--muted)">Enter your 4-digit PIN</p>' +
         '<div class="pin" id="pin">' + [0, 1, 2, 3].map(function (i) { return '<i class="' + (i < pin.length ? 'f' : '') + '"></i>'; }).join('') + '</div>' +
         '<div class="pad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(function (k) { return k ? '<button data-k="' + k + '">' + k + '</button>' : '<span></span>'; }).join('') + '</div>') +
       '</div></div></div>';
-    $$('[data-u]').forEach(function (b) { b.onclick = function () { pick = people.filter(function (p) { return p.id === b.dataset.u; })[0]; pin = ''; draw(); }; });
+    $$('[data-u]').forEach(function (b) { b.onclick = function () { pick = people.filter(function (p) { return p.id === b.dataset.u; })[0]; pin = ''; if (CL.on) { pin = '----'; return tryLogin(); } draw(); }; });
     var bk = $('[data-back]'); if (bk) bk.onclick = function () { pick = null; draw(); };
     $$('[data-k]').forEach(function (b) { b.onclick = function () { var k = b.dataset.k; if (k === '⌫') pin = pin.slice(0, -1); else if (pin.length < 4) pin += k; draw(); if (pin.length === 4) tryLogin(); }; });
   }
@@ -151,7 +247,7 @@ function renderLogin() {
       S.session = { userId: pick.id, pin: pin }; LS.set('session', S.session); S.me = r.user; boot();
     }).catch(function (e) { pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake'); toast(e.message, true); }); }
   draw();
-  Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); if (!pick) draw(); }).catch(function () { if (!S.people) toast('Cannot reach the server. Check the internet.', true); });
+  Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); if (!pick) draw(); }).catch(function (e) { if (!S.people) toast(CL.on ? (e && e.message) || 'Could not load the names' : 'Cannot reach the server. Check the internet.', true); });
 }
 function signOut() { S.session = null; S.me = null; LS.del('session'); renderLogin(); }
 
@@ -171,6 +267,7 @@ function boot() { render(); filesPing().then(function () { if (!sheetFn) render(
 
 /* ================= home ================= */
 function msCard() {
+  if (CL.on) return CL.mcp ? '<div class="okline">' + I.ok.replace(/28/g, '20') + ' SharePoint connected through your Claude account</div>' : '<div class="okline"><span class="spin dark"></span> Connecting…</div>';
   if (useFiles()) { if (FILES.ok === null) return '<div class="okline"><span class="spin dark"></span> Checking the SharePoint copy…</div>';
     if (FILES.ok && !FILES.err) return '<div class="okline">' + I.ok.replace(/28/g, '20') + ' SharePoint files connected (copy on Google Drive)</div>';
     return '<div class="note warnbox"><b>SharePoint files are not reachable yet.</b><br>' + esc(FILES.err) + '</div>'; }
@@ -336,6 +433,7 @@ var SITE = null;
 function siteDrive() { if (SITE) return Promise.resolve(SITE); var u = new URL(CFG.SP_SITE_URL);
   return graph('GET', '/sites/' + u.hostname + ':' + u.pathname + '?$select=id').then(function (s) { return graph('GET', '/sites/' + s.id + '/drive?$select=id'); }).then(function (d) { SITE = d.id; return SITE; }); }
 function uploadOrder(p, file) {
+  if (CL.on) return clUpload(p, file);
   if (useFiles()) return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1]); }; r.readAsDataURL(file); })
     .then(function (b64) { return fcall('upload', { name: file.name, mime: file.type, base64: b64, company: p.company.name }); });
   return uploadOrderSP(p, file); }
@@ -500,6 +598,7 @@ function photoChoice(p) {
 }
 var OCR = null;
 function ocrText(dataUrl) {
+  if (CL.on) return clOcr(dataUrl);
   var ready = window.Tesseract ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
   return ready.then(function () { if (!OCR) OCR = Tesseract.createWorker('eng'); return OCR; }).then(function (w) { return w.recognize(dataUrl); }).then(function (r) { return r.data.text || ''; }); }
 function codesFromPhotos(p, files) {
@@ -552,7 +651,7 @@ function xlTemplate(p) { needExcel().then(function () { var wb = new ExcelJS.Wor
   list('A', ['Unit', 'Machine item']); list('K', UNITS); list('O', UNITS); if (p.depts.length) list('P', p.depts); ['I', 'J', 'L', 'M', 'N'].forEach(nums);
   [16, 22, 12, 14, 26, 14, 12, 12, 10, 10, 9, 12, 12, 11, 11, 14].forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
   ws.addRow([]); ws.addRow(['(Grey rows are examples – delete them)']).getCell(1).font = { italic: true, color: { argb: 'FFB26F12' } };
-  return wb.xlsx.writeBuffer(); }).then(function (buf) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = 'Items template - ' + (p.company ? p.company.name : 'project') + '.xlsx'; document.body.appendChild(a); a.click(); a.remove(); })
+  return wb.xlsx.writeBuffer(); }).then(function (buf) { dlBlob(buf, 'Items template - ' + (p.company ? p.company.name : 'project') + '.xlsx'); })
   .catch(function (e) { toast(e.message, true); }); }
 function cellStr(v) { if (v == null) return ''; if (typeof v === 'object') { if (v.richText) return v.richText.map(function (t) { return t.text; }).join(''); if ('result' in v) return String(v.result == null ? '' : v.result); if (v.text) return v.text; } return String(v); }
 function xlImport(p, file) { needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) {
@@ -697,6 +796,7 @@ function tDet(p) {
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 function needPdf() { return window.pdfjsLib ? Promise.resolve() : loadScript(PDFJS + 'pdf.min.js').then(function () { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; }); }
 function pdfPages(driveId, id) { /* SharePoint converts the Word file to PDF; we read its text line by line */
+  if (CL.on) return clPages(id);
   if (useFiles()) return fcall('text', { id: id }).then(function (r) { return r.pages || []; });
   return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + driveId + '/items/' + id + '/content?format=pdf', { headers: { Authorization: 'Bearer ' + r[1] } }); })
     .then(function (res) { if (!res.ok) throw new Error('Could not open the file (' + res.status + ')'); return res.arrayBuffer(); })
@@ -735,6 +835,8 @@ function certSection(pages, code) { var nc = norm(code), at = -1;
   for (var n = at + 1; n < pages.length && sec.length < 5; n++) { var t = pages[n].join(' '); if (/data\s*of\s*item/i.test(t)) break; if (/continue/i.test(t)) sec.push(pages[n]); else break; }
   return sec; }
 var yearOf = function (f) { var m = pathOf(f).match(/Cert\s*(20\d\d)/i) || f.name.match(/-(20\d\d)/); return m ? +m[1] : 0; };
+function readSec(sec, hint) { if (CL.on) return clExtract(sec, hint);
+  var rs = parseResults([].concat.apply([], sec)); return Promise.resolve({ fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs }); }
 function findOldCert(p, it) {
   if (!it.code) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
   var mine = (p.deptSug && p.deptSug.certFolders) || [];
@@ -745,8 +847,7 @@ function findOldCert(p, it) {
     if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
     var tryN = function (k) { if (k >= Math.min(3, fs.length)) return { status: 'missing', note: 'Files found, but the code is not clearly inside them', files: fs.slice(0, 6).map(fileRef) };
       var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = certSection(pages, it.code); if (!sec) return tryN(k + 1);
-        var fl = parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), rs = parseResults([].concat.apply([], sec));
-        return { status: 'found', file: fileRef(f), fields: fl, points: rs.points, dirs: rs.dirs, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); };
+        return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (x) { return { status: 'found', file: fileRef(f), fields: x.fields, points: x.points, dirs: x.dirs, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); }); };
     return tryN(0); }); }
 function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
 function findSimilar(p, it) { var q = [it.description, it.manufacturer, it.model].filter(Boolean).join(' ');
@@ -798,10 +899,10 @@ function oldSheet(p, id) { var it = p.items.filter(function (x) { return x.id ==
             pdfPages(s.driveId, s.id).then(function (pages) { var toks = String(it.description + ' ' + it.manufacturer).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = 0, bs = -1;
               pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (sc > bs) { bs = sc; best = i; } });
               var sec = [pages[best]]; for (var n = best + 1; n < pages.length && sec.length < 5 && /continue/i.test(pages[n].join(' ')); n++) sec.push(pages[n]);
-              var rs = parseResults([].concat.apply([], sec)); it.old = { status: 'similar', file: s, fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs, at: Date.now() }; saveProjects(); renderSheet(); })
+              return readSec(sec, 'Use the certificate whose description best matches "' + it.description + ' ' + it.manufacturer + '".').then(function (x) { it.old = { status: 'similar', file: s, fields: x.fields, points: x.points, dirs: x.dirs, at: Date.now() }; saveProjects(); renderSheet(); }); })
               .catch(function (e) { toast(e.message, true); }); }); }; });
         $$('[data-use]').forEach(function (b) { b.onclick = function () { var x = o.files[+b.dataset.use]; pdfPages(x.driveId, x.id).then(function (pages) { var sec = certSection(pages, it.code); if (!sec) return toast('The code is not inside this file', true);
-          var rs = parseResults([].concat.apply([], sec)); it.old = { status: 'found', file: x, files: o.files, fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs, at: Date.now() }; saveProjects(); renderSheet(); }).catch(function (e) { toast(e.message, true); }); }; }); } }; }); }
+          return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (r2) { it.old = { status: 'found', file: x, files: o.files, fields: r2.fields, points: r2.points, dirs: r2.dirs, at: Date.now() }; saveProjects(); renderSheet(); }); }).catch(function (e) { toast(e.message, true); }); }; }); } }; }); }
 /* fill the item's missing range / resolution from the old certificate */
 function oldNums(f) { var rg = tidy(f.calRange || f.range).match(/(-?\d+(?:\.\d+)?)\s*(?::|to|~|-)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?$/i), mx = !rg && tidy(f.range).match(/max\.?\s*(-?\d+(?:\.\d+)?)\s*(\S+)?/i), rs = tidy(f.resolution).match(/(\d*\.?\d+)\s*(\S+)?/);
   return { rMin: rg ? rg[1] : (mx ? '0' : ''), rMax: rg ? rg[2] : (mx ? mx[1] : ''), unit: rg && rg[3] ? rg[3].trim() : (mx && mx[2] ? mx[2] : ''), res: rs ? rs[1] : '', resUnit: rs && rs[2] ? rs[2] : '' }; }
@@ -868,7 +969,7 @@ function readSheet(p, id) { var it = p.items.filter(function (x) { return x.id =
 function outList(p) { var L = []; withPts(p).forEach(function (it) { it.old.points.forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { var r = evalPt(it, i, dr); if (r.res === 'OUT') L.push({ code: it.code, cert: (it.old.fields || {}).certNo, point: q.point + (it.old.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), reading: r.rd, dev: r.dev, lim: r.lim, ex: +(Math.abs(r.dev) - r.lim).toFixed(6) }); }); }); }); return L; }
 function outSheet(p) { openSheet(function () { var L = outList(p); return { title: 'OUT report', body: '<div class="note warnbox">Re-measure these with the technician. Their certificates use last year\'s readings as placeholders and must be replaced before going to the customer.</div>' +
   '<div class="list">' + (L.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.code) + ' · point ' + esc(x.point) + '</b><small>Old cert ' + esc(x.cert || '—') + ' · reading ' + x.reading + ' · limit ±' + x.lim + '</small></span><span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">+' + x.ex + '</span></div>'; }).join('') || '<div class="row">No OUT points</div>') + '</div>', foot: '<button class="btn" id="oc">Done</button>', mount: function () { $('#oc').onclick = closeSheet; } }; }); }
-function dlBlob(buf, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+function dlBlob(buf, name) { if (CL.on) { clSave(new Blob([buf]), name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); }); return; } var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 var RHDR = ['#', 'Department', 'Equipment', 'Code', 'Old cert no.', 'Direction', 'Resolution', 'Limit', 'Point', 'Old Ref', 'New Ref', 'Old Reading', 'New Reading', 'Old Dev', 'New Dev', 'Result', 'Remarks', 'Key'];
 function xlReadings(p) { var L = withPts(p); if (!L.length) return toast('No items with old readings yet', true);
   needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Readings', { views: [{ state: 'frozen', ySplit: 1 }] });
@@ -903,5 +1004,5 @@ function xlReadUp(p, file) { needExcel().then(function () { return file.arrayBuf
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); } });
-MS.ready.then(function () { if (S.session) boot(); else renderLogin(); });
+Promise.all([MS.ready, CL.ready]).then(function () { if (S.session) boot(); else renderLogin(); });
 })();
