@@ -279,7 +279,7 @@ function projTitle(p) { return p.company ? p.company.name : 'New project'; }
 var TYPES = { contract: ['Contract', I.doc], po: ['Purchase order (PO)', I.po], offer: ['Price offer', I.offer], approval: ['General approval', I.ok], visit: ['One visit', I.visit] };
 function renderHome() {
   var mine = S.projects.slice().sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
-  $('#app').innerHTML = '<div class="shell">' + top('', '<span>Hello</span><strong>' + esc(S.me ? S.me.name : (S.session && S.session.userId)) + '</strong>') + '<main>' + msCard() +
+  $('#app').innerHTML = '<div class="shell">' + top('', '<span>Hello</span><strong>' + esc(S.me ? S.me.name : (S.session && S.session.userId)) + '</strong>') + '<main>' + msCard() + dueCard() +
     '<div class="sec"><h2>Projects</h2><small>' + mine.length + '</small></div>' +
     (mine.length ? mine.map(function (p) { return '<button class="card bar projcard" style="--c:' + (p.stage === 'done' ? 'var(--office)' : 'var(--service)') + '" data-p="' + p.id + '"><h3>' + esc(projTitle(p)) + '</h3>' +
       '<div class="meta">' + [p.depts && p.depts.length ? p.depts.join(', ') : '', p.orderType ? TYPES[p.orderType][0] + (p.order && p.order.number ? ' ' + esc(p.order.number) : '') : '', (p.items || []).length ? p.items.length + ' items' : ''].filter(Boolean).join(' · ') + '</div>' +
@@ -290,6 +290,7 @@ function renderHome() {
   $('#newP').onclick = function () { var p = { id: uid(), created: new Date().toISOString(), by: S.session.userId, stage: 'company', company: null, deptSug: null, depts: [], orderType: '', order: null, orderFiles: null, items: [], machines: [] };
     S.projects.push(p); saveProjects(); S.cur = p.id; render(); window.scrollTo(0, 0); };
   $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; render(); window.scrollTo(0, 0); }; });
+  var dg = $('#dueGo'); if (dg) dg.onclick = dueScan;
   $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn;
 }
 
@@ -503,7 +504,7 @@ function wItems(p) {
   var loose = p.items.filter(function (i) { return !i.machineId; }), need = p.items.filter(function (i) { return itemIssues(i).length; }).length;
   var irow = function (it) { var iss = itemIssues(it); return '<button class="row" data-it="' + it.id + '">' + (it.photo ? '<img class="thumb" data-ph="' + it.photo + '" alt="">' : '') + '<span class="t"><b>' + esc(it.description || it.code || 'Photo') + '</b><small>' + esc([it.code && it.description ? it.code : '', rangeText(it), it.res && 'res ' + it.res + ' ' + (it.resUnit || it.unit)].filter(Boolean).join(' · ') || 'Tap to add the data') + '</small></span>' +
     (iss.length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '</button>'; };
-  $('#wm').innerHTML = '<div class="cats">' +
+  $('#wm').innerHTML = '<div class="cats one" style="margin-bottom:8px"><button data-a="last">' + I.visit + '<b>Same as last year</b><small>Copy the items of the same month last year from the receipt letters, then edit</small></button></div><div class="cats">' +
     '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Nameplates or a code list</small></button>' +
     '<button data-a="excel">' + I.xls + '<b>Excel</b><small>Fixed template</small></button></div>' +
     '<div class="cats one" style="margin-top:8px"><button data-a="add">' + I.plus.replace(/22/g, '28') + '<b>Add an item</b><small>A unit (one instrument) or a machine with instruments under it</small></button></div>' +
@@ -513,7 +514,7 @@ function wItems(p) {
     (loose.length ? '<div class="list">' + loose.map(irow).join('') + '</div>' : (!p.machines.length ? '<div class="empty"><b>No items yet</b>Use one of the three ways above.</div>' : '')) +
     (need ? '<div class="small" style="margin-top:10px">Items with “Photo only” or “Missing data” can be completed later – before the readings.</div>' : '');
   $$('[data-ph]').forEach(function (im) { IDB.get(im.dataset.ph).then(function (d) { if (d) im.src = d; }); });
-  $$('[data-a]').forEach(function (b) { b.onclick = function () { ({ photo: photoChoice, excel: excelSheet, add: addChoice })[b.dataset.a](p); }; });
+  $$('[data-a]').forEach(function (b) { b.onclick = function () { ({ photo: photoChoice, excel: excelSheet, add: addChoice, last: function (pp) { if (!spOn()) return toast('SharePoint is not connected', true); lastYearSheet(pp); } })[b.dataset.a](p); }; });
   $$('[data-it]').forEach(function (b) { b.onclick = function () { itemSheet(p, b.dataset.it); }; });
   $$('[data-m]').forEach(function (b) { b.onclick = function () { machineSheet(p, b.dataset.m); }; });
   foot(p, 'Finish setup', p.items.length > 0, function () { p.stage = 'done'; saveProjects(); render(); window.scrollTo(0, 0); });
@@ -839,15 +840,15 @@ var yearOf = function (f) { var m = pathOf(f).match(/Cert\s*(20\d\d)/i) || f.nam
 function readSec(sec, hint) { if (CL.on) return clExtract(sec, hint);
   var rs = parseResults([].concat.apply([], sec)); return Promise.resolve({ fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs }); }
 function findOldCert(p, it) {
-  if (!it.code) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
+  var key = it.code || it.prevCert; if (!key) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
   var mine = (p.deptSug && p.deptSug.certFolders) || [];
-  return spSearch('"' + it.code + '"', 30).then(function (fs) {
+  return spSearch('"' + (it.prevCert || it.code) + '"', 30).then(function (fs) {
     fs = fs.filter(function (f) { return /cal\.?\s*cert/i.test(f.name) && !/cover/i.test(f.name) && /\.(docx?|pdf)$/i.test(f.name); });
     fs.forEach(function (f) { f.yr = yearOf(f); f.mine = mine.some(function (m) { return pathOf(f).indexOf(m) >= 0; }) ? 1 : 0; });
     fs.sort(function (a, b) { return b.mine - a.mine || b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
     if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
     var tryN = function (k) { if (k >= Math.min(3, fs.length)) return { status: 'missing', note: 'Files found, but the code is not clearly inside them', files: fs.slice(0, 6).map(fileRef) };
-      var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = certSection(pages, it.code); if (!sec) return tryN(k + 1);
+      var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = (it.prevCert && certSection(pages, it.prevCert)) || (it.code && certSection(pages, it.code)); if (!sec) return tryN(k + 1);
         return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (x) { return { status: 'found', file: fileRef(f), fields: x.fields, points: x.points, dirs: x.dirs, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); }); };
     return tryN(0); }); }
 function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
@@ -1212,6 +1213,74 @@ function findAddress(p, loud) { var g = genDefaults(p), code = p.company.code ||
       var m = t.match(/ADDRESS\s*:?\s*(.+?)\s*(Tel|DATE RECEIVED|Fax)/i), tl = t.match(/Tel\.?\s*No\.?\s*:?\s*([0-9 +\-–]{6,})/i), fx = t.match(/Fax\.?\s*No\.?\s*:?\s*([0-9 +\-–]{6,})/i);
       if (m && !g.addr) g.addr = tidy(m[1]).replace(/\s*-\s*/g, ' - '); if (tl && !g.tel) g.tel = tl[1].trim(); if (fx && !g.fax) g.fax = fx[1].trim(); saveProjects(); if (loud) toast(g.addr ? 'Address taken from ' + fs[0].name : 'Address not found in the cover', !g.addr); }); }).catch(function (e) { if (loud) toast(e.message, true); }); }
 
+/* ================= assistant: last year's work (from the receipt letters in Certificates/Reports <year>) ================= */
+var LY_CACHE = LS.get('lyCache', {}); /* fileId|mod → rows */
+function lyYear(off) { return new Date().getFullYear() + (off || 0); }
+function lyLetterFiles(p) { /* the customer's letters file(s) in Reports <last year> and <this year> */
+  var terms = p ? companyTerms(p.company).slice(0, 2) : ['Reports'];
+  return Promise.all(terms.map(function (t) { return spSearch(t, 40).catch(function () { return []; }); })).then(function (rs) {
+    var seen = {}, out = [];
+    [].concat.apply([], rs).forEach(function (f) { if (seen[f.id] || !/\.docx?$/i.test(f.name)) return; var pa = pathOf(f), m = pa.match(/\/Reports\s*(20\d\d)\//i); if (!m) return; seen[f.id] = 1; f.year = +m[1]; out.push(f); });
+    return out.sort(function (a, b) { return b.year - a.year; }); }); }
+function lyRowsFromText(txt) { /* web mode: one row per line that has a certificate number */
+  var rows = [];
+  txt.split(/\n+/).forEach(function (l) { var c = l.match(/(\d{1,3}\s*\/?\s*[A-Z]{0,4}\s*-\s*\d{2,5}\s*-\s*20\d\d)/), d = l.match(/\b(Jan|Feb|Mar|Apr|May|Jun|June|Jul|July|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*-?\s*(\d{2,4})\b/gi);
+    if (!c || !d) return; var parts = l.split(/\s*\|\s*/);
+    rows.push({ item: parts[1] || '', code: parts[2] || '', cal: d[0], due: d[1] || '', certNo: c[1].replace(/\s+/g, ''), price: parts[parts.length - 1] || '' }); });
+  return rows; }
+function lyExtract(f) { /* rows of all letters in one file */
+  var key = f.id + '|' + f.mod; if (LY_CACHE[key]) return Promise.resolve(LY_CACHE[key]);
+  return pdfPages(f.driveId, f.id).then(function (pages) { var txt = pages.map(function (pg) { return pg.join('\n'); }).join('\n');
+    if (!CL.on) return lyRowsFromText(txt);
+    return CL.ready.then(function () { if (!CL.sample) return lyRowsFromText(txt);
+      var chunks = [], step = 18000; for (var i = 0; i < txt.length; i += step) chunks.push(txt.slice(i, i + step));
+      return chunks.reduce(function (pr, ch) { return pr.then(function (acc) { return CL.sample.json('This text comes from receipt letters (خطاب استلام) of a calibration lab. Each letter has a date (التاريخ), maybe a P.O number, and a table: No. | Item To be Calibrated | Code or Serial | Cal. Date | Due Date | Cert. No. | Unit Price.\n' +
+        'Return every table row as JSON. "machine" = the machine/system name if the item text starts with one (e.g. "Water station", "Autoclave …"), else "". "item" = the instrument. Copy codes, dates, certificate numbers and prices exactly (only remove spaces inside a certificate number: "260 - 001 - 2026" → "260-001-2026"). Do not invent rows.\n' +
+        'JSON only: {"rows":[{"letterDate":"","po":"","machine":"","item":"","code":"","cal":"","due":"","certNo":"","price":""}]}\n\nTEXT:\n"""\n' + ch + '\n"""', { modelTier: 'default' }).then(function (j) { return acc.concat((j && j.rows) || []); }); }); }, Promise.resolve([])); }); })
+    .then(function (rows) { LY_CACHE[key] = rows; try { LS.set('lyCache', LY_CACHE); } catch (e) {} return rows; }); }
+var MIDX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
+function lyMonth(s) { var m = String(s || '').match(/([A-Za-z]{3,5})\.?\s*-?\s*(\d{2,4})/); if (!m) return null; var k = MIDX[m[1].toLowerCase()]; if (k == null) return null; var y = +m[2]; if (y < 100) y += 2000; return { m: k, y: y, key: y + '-' + String(k + 1).padStart(2, '0'), label: MON[k] + ' ' + y }; }
+/* items step: "From last year" */
+function lastYearSheet(p) { var st = { busy: true, rows: [], files: [], err: '', sel: null, on: {} };
+  openSheet(function () { var groups = {}; st.rows.forEach(function (r, i) { var mm = lyMonth(r.cal); var k = mm ? mm.key : 'other'; (groups[k] = groups[k] || { label: mm ? mm.label : 'No date', rows: [], pos: {} }).rows.push(i); if (r.po) groups[k].pos[r.po] = 1; });
+    var keys = Object.keys(groups).sort().reverse(), g = st.sel && groups[st.sel];
+    return { title: 'From last year', body: st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Reading the receipt letters of ' + esc(p.company.name) + '…</b>Certificates / Reports ' + lyYear(-1) + ' and ' + lyYear() + '</div>'
+      : st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>'
+      : !st.rows.length ? '<div class="empty"><b>No receipt letters found for this company</b>Use photo, Excel or Add item.</div>'
+      : (!g ? '<div class="note">Choose the month to copy – you can edit the list after.</div><div class="list">' + keys.map(function (k) { var x = groups[k]; return '<button class="row" data-mo="' + k + '"><span class="t"><b>' + esc(x.label) + '</b><small>' + x.rows.length + (x.rows.length === 1 ? ' item' : ' items') + (Object.keys(x.pos).length ? ' · PO ' + esc(Object.keys(x.pos).join(', ')) : '') + '</small></span><span class="pill">Due ' + esc(dueOf(x.label)) + '</span></button>'; }).join('') + '</div>'
+        : '<div class="note"><b>' + esc(g.label) + '</b> – untick what is not in this year\'s order. The old certificate number of each item is kept, so its certificate is found right away.</div><div class="list">' + g.rows.map(function (i) { var r = st.rows[i], on = st.on[i] !== false;
+          return '<button class="row' + (on ? ' sel' : '') + '" data-ly="' + i + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc([r.machine, r.item].filter(Boolean).join(' – ')) + '</b><small>' + esc([r.code, r.certNo, r.price].filter(Boolean).join(' · ')) + '</small></span></button>'; }).join('') + '</div>'),
+      foot: g ? '<button class="btn ghost" id="lyB">Other month</button><button class="btn" id="lyA">Add ' + g.rows.filter(function (i) { return st.on[i] !== false; }).length + ' items</button>' : '',
+      mount: function () { $$('[data-mo]').forEach(function (b) { b.onclick = function () { st.sel = b.dataset.mo; renderSheet(); }; });
+        $$('[data-ly]').forEach(function (b) { b.onclick = function () { var i = +b.dataset.ly; st.on[i] = st.on[i] === false; renderSheet(); }; });
+        var bb = $('#lyB'); if (bb) bb.onclick = function () { st.sel = null; renderSheet(); };
+        var ba = $('#lyA'); if (ba) ba.onclick = function () { var have = {}; p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; }); var n = 0;
+          groups[st.sel].rows.forEach(function (i) { if (st.on[i] === false) return; var r = st.rows[i]; if (r.code && have[norm(r.code)]) return; if (r.code) have[norm(r.code)] = 1;
+            var mid = ''; if (r.machine) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine); })[0]; if (!m) { m = { id: uid(), name: r.machine, code: '', dept: p.depts[0] || '' }; p.machines.push(m); } mid = m.id; }
+            p.items.push(newItem({ machineId: mid, code: r.code, description: r.item, prevCert: r.certNo, src: 'last year', dept: p.depts[0] || '' })); n++; });
+          saveProjects(); closeSheet(); toast(n + ' items copied from ' + groups[st.sel].label); }; } }; });
+  lyLetterFiles(p).then(function (fs) { st.files = fs; if (!fs.length) return [];
+    var use = fs.filter(function (f) { return f.year >= lyYear(-1); }).slice(0, 3); return Promise.all(use.map(function (f) { return lyExtract(f).catch(function () { return []; }); })); })
+    .then(function (rs) { st.rows = [].concat.apply([], rs || []); st.busy = false; if (sheetFn) renderSheet(); })
+    .catch(function (e) { st.busy = false; st.err = e.message; if (sheetFn) renderSheet(); }); }
+function dueOf(label) { var mm = lyMonth(label); return mm ? MON[mm.m] + ' ' + (mm.y + 1) : ''; }
+/* home: what is due soon (from all receipt letters of last year) */
+var DUE = LS.get('dueScan', null);
+function dueScan() { var lastY = lyYear(-1); DUE = { busy: true, at: Date.now(), list: [], done: 0, n: 0 }; render();
+  return spSearch('Reports ' + lastY, 50).then(function (fs) { fs = fs.filter(function (f) { return /\.docx?$/i.test(f.name) && new RegExp('/Reports\\s*' + lastY + '/', 'i').test(pathOf(f)); }); DUE.n = fs.length;
+    return fs.reduce(function (pr, f) { return pr.then(function () { return lyExtract(f).then(function (rows) { var by = {};
+      rows.forEach(function (r) { var mm = lyMonth(r.due) || (lyMonth(r.cal) ? { m: lyMonth(r.cal).m, y: lyMonth(r.cal).y + 1 } : null); if (!mm) return; var k = mm.y + '-' + String(mm.m + 1).padStart(2, '0'); (by[k] = by[k] || []).push(r); });
+      Object.keys(by).forEach(function (k) { DUE.list.push({ file: f.name.replace(/\.docx?$/i, ''), fileId: f.id, month: k, count: by[k].length }); }); }).catch(function () {}).then(function () { DUE.done++; render(); }); }); }, Promise.resolve()); })
+    .then(function () { DUE.busy = false; LS.set('dueScan', DUE); render(); }).catch(function (e) { DUE = { err: e.message }; render(); }); }
+function dueCard() { if (!spOn()) return '';
+  var now = new Date(), k0 = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'), n1 = new Date(now.getFullYear(), now.getMonth() + 1, 1), k1 = n1.getFullYear() + '-' + String(n1.getMonth() + 1).padStart(2, '0');
+  if (!DUE || (!DUE.busy && !DUE.list)) return '<div class="card"><h3>What is due?</h3><div class="meta">Checks last year\'s receipt letters and tells you which customers are due this month and next month.</div><div class="cf"><button class="btn ghost" id="dueGo">Check now</button></div>' + (DUE && DUE.err ? '<div class="note warnbox" style="margin:10px 0 0">' + esc(DUE.err) + '</div>' : '') + '</div>';
+  if (DUE.busy) return '<div class="card"><div class="okline"><span class="spin dark"></span> Reading last year\'s letters… ' + DUE.done + ' / ' + (DUE.n || '?') + '</div></div>';
+  var soon = DUE.list.filter(function (x) { return x.month === k0 || x.month === k1; }).sort(function (a, b) { return a.month.localeCompare(b.month) || b.count - a.count; });
+  var ml = function (k) { var a = k.split('-'); return MON[+a[1] - 1] + ' ' + a[0]; };
+  return '<div class="card bar" style="--c:var(--service)"><h3>Due this month and next</h3><div class="meta">From last year\'s receipt letters · checked ' + fmtDate(DUE.at) + '</div>' +
+    (soon.length ? '<div class="list" style="margin-top:10px">' + soon.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.file) + '</b><small>' + x.count + ' items due ' + ml(x.month) + '</small></span></div>'; }).join('') + '</div>' : '<div class="small" style="margin-top:8px">Nothing due this month or next.</div>') +
+    '<div class="cf"><button class="btn ghost sm" id="dueGo">Check again</button></div></div>'; }
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); } });
 Promise.all([MS.ready, CL.ready]).then(function () { if (S.session) boot(); else renderLogin(); });
