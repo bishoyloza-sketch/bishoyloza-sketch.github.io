@@ -116,7 +116,7 @@ function clApi(req) { var a = req.action;
   if (a === 'state') return clData();
   if (a === 'saveCompany') return Promise.reject(new Error('Add new companies in Akhnaton Devices – they show here right after.'));
   return Promise.reject(new Error('Not available inside Claude')); }
-function clSearch(q, size) { return clCall(M365, 'sharepoint_search', { query: q, limit: Math.min(size || 25, 50), offset: 0 }).then(function (r) {
+function clSearch(q, size, off) { return clCall(M365, 'sharepoint_search', { query: q, limit: Math.min(size || 25, 50), offset: off || 0 }).then(function (r) {
   return clObjs(r).filter(function (o) { return o && o.name && o.uri; }).map(function (o) { return { id: o.uri, uri: o.uri, driveId: o.driveId, itemId: o.id, name: o.name, webUrl: o.webUrl || '', mod: o.lastModifiedDateTime, summary: String(o.summary || o.content || '').replace(/<[^>]+>/g, '') }; }); }); }
 function clRead(uri) { var txt = '', page = 1, chain = function (k) { var inp = { uri: uri }; if (page > 1) inp.startPage = page;
     return clCall(M365, 'read_resource', inp).then(function (r) { var t = clText(r); txt += '\n' + t; var m = t.match(/startPage\s*=\s*(\d+)/); if (m && +m[1] > page && k < 8) { page = +m[1]; return chain(k + 1); } return txt; }); };
@@ -188,10 +188,10 @@ function fcall(action, payload) { if (!CFG.FILES_URL) return Promise.reject(new 
     .then(function (j) { if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j.data; }); }
 function filesPing() { if (!useFiles()) return Promise.resolve(); return fcall('ping').then(function (d) { FILES.ok = true; FILES.root = d.root; FILES.err = d.root ? '' : 'The SharePoint copy is not on Google Drive yet'; }).catch(function (e) { FILES.ok = false; FILES.err = e.message; }); }
 /* search files in SharePoint / OneDrive */
-function spSearch(q, size) {
-  if (CL.on) return clSearch(q, size);
+function spSearch(q, size, off) {
+  if (CL.on) return clSearch(q, size, off);
   if (useFiles()) return fcall('search', { q: q, limit: size || 25 }).then(function (l) { return l.map(function (f) { return { id: f.id, driveId: '', name: f.name, webUrl: f.webUrl, mod: f.mod, path: f.path, summary: '' }; }); });
-  return graph('POST', '/search/query', { requests: [{ entityTypes: ['driveItem'], query: { queryString: q }, from: 0, size: size || 25 }] }).then(function (r) {
+  return graph('POST', '/search/query', { requests: [{ entityTypes: ['driveItem'], query: { queryString: q }, from: off || 0, size: size || 25 }] }).then(function (r) {
     var out = []; ((r.value || [])[0] || { hitsContainers: [] }).hitsContainers.forEach(function (c) { (c.hits || []).forEach(function (h) { var x = h.resource || {};
       if (!x.name || x.folder) return;
       out.push({ id: x.id, name: x.name, webUrl: x.webUrl || '', driveId: x.parentReference && x.parentReference.driveId, mod: x.lastModifiedDateTime, by: x.lastModifiedBy && x.lastModifiedBy.user && x.lastModifiedBy.user.displayName, summary: String(h.summary || '').replace(/<[^>]+>/g, '') }); }); });
@@ -536,6 +536,7 @@ function rangeText(it) { if (!isNum(it.rMin) || !isNum(it.rMax)) return ''; retu
 function calText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + it.cMin + ' : ' + it.cMax + ') ' + (it.unit || ''); return rangeText(it) ? 'Full range' : ''; }
 function wItems(p) {
   p.items = p.items || []; p.machines = p.machines || []; setTimeout(function () { queueOld(p); }, 0);
+  if (!p.items.length && !p.lyAuto && spOn()) { p.lyAuto = 1; saveProjects(); setTimeout(function () { if (!sheetFn) lastYearSheet(p, true); }, 300); }
   var loose = p.items.filter(function (i) { return !i.machineId; }), need = p.items.filter(function (i) { return itemIssues(i).length; }).length;
   var irow = function (it) { var iss = itemIssues(it); return '<button class="row" data-it="' + it.id + '">' + (it.photo ? '<img class="thumb" data-ph="' + it.photo + '" alt="">' : '') + '<span class="t"><b>' + esc(it.description || it.code || 'Photo') + '</b><small>' + esc([it.code && it.description ? it.code : '', rangeText(it), it.res && 'res ' + it.res + ' ' + (it.resUnit || it.unit)].filter(Boolean).join(' · ') || 'Tap to add the data') + '</small></span>' +
     (it.old && it.old.status === 'searching' ? '<span class="pill" style="--s-fg:var(--blue);--s-bg:var(--blue-soft)"><span class="spin dark" style="width:12px;height:12px;border-width:2px"></span> Last year…</span>'
@@ -859,9 +860,9 @@ function readSec(sec, hint) { if (CL.on) return clExtract(sec, hint);
   var rs = parseResults([].concat.apply([], sec)); return Promise.resolve({ fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs }); }
 /* find every certificate file that holds a code: cal certs directly, covers → their cal cert */
 var CODE_CACHE = {};
-function isCalCert(n) { return /(cal\.?\s*cert|cert\s*page)/i.test(n) && !/cover/i.test(n) && /\.(docx?|pdf)$/i.test(n); }
+function isCalCert(n) { var b = String(n).replace(/\.(docx?|pdf)$/i, ''); return b !== n && !/cover/i.test(b) && /(^|[\s\-_.])(cal\.?\s*)?cert(ificate)?(\s*page)?[\s.]*$/i.test(b); }
 function isCover(n) { return /cover/i.test(n) && /\.(docx?|pdf)$/i.test(n); }
-function certBase(n) { return String(n).replace(/\.(docx?|pdf)$/i, '').replace(/\s*(cover\s*page|cover|cal\.?\s*cert\.*|cert\s*page)\.*\s*$/i, '').trim(); }
+function certBase(n) { return String(n).replace(/\.(docx?|pdf)$/i, '').replace(/[\s.]*(cover\s*page|cover|cal\.?\s*cert(ificate)?|cert(ificate)?\s*page|cert(ificate)?)[\s.]*$/i, '').trim(); }
 function codeHits(p, code) { code = String(code || '').trim(); if (!code) return Promise.resolve([]);
   var key = (p && p.company && p.company.name || '') + '|' + code.toUpperCase(); if (CODE_CACHE[key]) return Promise.resolve(CODE_CACHE[key]);
   var pre = String((p && p.company && p.company.code) || '').replace(/[^A-Za-z0-9]/g, ''), q = '"' + code + '"';
@@ -891,7 +892,7 @@ function findOldCert(p, it) {
 function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
 function findSimilar(p, it) { var q = [it.description, it.manufacturer, it.model].filter(Boolean).join(' ');
   if (!q) return Promise.reject(new Error('Write the description first'));
-  return spSearch(q, 30).then(function (fs) { return fs.filter(function (f) { return /cal\.?\s*cert/i.test(f.name) && !/cover/i.test(f.name); }).slice(0, 6).map(function (f) { var r = fileRef(f); r.snip = f.summary; return r; }); }); }
+  return spSearch(q, 30).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name); }).slice(0, 6).map(function (f) { var r = fileRef(f); r.snip = f.summary; return r; }); }); }
 var CRUN = { on: false, stop: false, d: 0, n: 0 };
 function runCerts(p, only) { if (CRUN.on) return; if (!spOn()) return toast('Connect SharePoint first (home screen)', true);
   var list = only ? [only] : p.items.filter(function (i) { return !i.old || i.old.status === 'error'; }); if (!list.length) return toast('All items were searched');
@@ -1259,7 +1260,8 @@ var LY_CACHE = LS.get('lyCache', {}); /* fileId|mod → rows */
 function lyYear(off) { return new Date().getFullYear() + (off || 0); }
 function lyLetterFiles(p) { /* the customer's letters file(s) in Reports <last year> and <this year> */
   var terms = p ? companyTerms(p.company).slice(0, 2) : ['Reports'];
-  return Promise.all(terms.map(function (t) { return spSearch(t, 40).catch(function () { return []; }); })).then(function (rs) {
+  var qs = []; terms.forEach(function (t) { qs.push('filename:"' + t + '"', '"' + t + '" Reports'); });
+  return Promise.all(qs.map(function (t) { return spSearch(t, 50).catch(function () { return []; }); })).then(function (rs) {
     var seen = {}, out = [];
     [].concat.apply([], rs).forEach(function (f) { if (seen[f.id] || !/\.docx?$/i.test(f.name)) return; var pa = pathOf(f), m = pa.match(/\/Reports\s*(20\d\d)\//i); if (!m) return; seen[f.id] = 1; f.year = +m[1]; out.push(f); });
     return out.sort(function (a, b) { return b.year - a.year; }); }); }
@@ -1281,8 +1283,39 @@ function lyExtract(f) { /* rows of all letters in one file */
     .then(function (rows) { LY_CACHE[key] = rows; try { LS.set('lyCache', LY_CACHE); } catch (e) {} return rows; }); }
 var MIDX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
 function lyMonth(s) { var m = String(s || '').match(/([A-Za-z]{3,5})\.?\s*-?\s*(\d{2,4})/); if (!m) return null; var k = MIDX[m[1].toLowerCase()]; if (k == null) return null; var y = +m[2]; if (y < 100) y += 2000; return { m: k, y: y, key: y + '-' + String(k + 1).padStart(2, '0'), label: MON[k] + ' ' + y }; }
+/* last year's batches of this company in one month, straight from the certificate files */
+var M3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], MFULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function certBatches(p, y, m) { var pre = String(p.company.code || '').replace(/[^A-Za-z0-9]/g, '');
+  var alts = [M3[m] + '.' + y, M3[m] + ' ' + y, MFULL[m] + ' ' + y].filter(function (v, i, a) { return a.indexOf(v) === i; }).map(function (v) { return '"' + v + '"'; }).join(' OR ');
+  var q = '"Calibration Date" (' + alts + ')' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"'), all = {};
+  var got = [], page = function (off, k) { return spSearch(q, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); return r.length && k < 4 ? page(off + r.length, k + 1) : got; }); };
+  return page(0, 0).then(function (rs) { var bases = {};
+    rs.forEach(function (f) { if (!isCalCert(f.name) || all[f.id]) return; var bk = certBase(f.name).toLowerCase(); if (bases[bk]) return; var t = (f.summary || '').replace(/\s+/g, ' ');
+      var rx = new RegExp('Calibration Date\\s*(?:\\d{1,2}\\s*)?(' + M3[m] + '[a-z]*)\\.?\\s*' + y, 'i'); if (!rx.test(t)) return;
+      var ds = [], mm, re = /Description\s+(.+?)\s+Calibration interval/gi; while ((mm = re.exec(t))) if (ds.indexOf(mm[1]) < 0) ds.push(mm[1]);
+      f.descs = ds; f.base = certBase(f.name); bases[bk] = 1; all[f.id] = f; });
+    return Object.keys(all).map(function (k) { return all[k]; }).sort(function (a, b) { return a.base.localeCompare(b.base, undefined, { numeric: true }); }); }); }
+function batchItems(f) { /* the cover page lists every item of the batch */
+  return spSearch('filename:"' + f.base + '"', 10).then(function (r) { var cv = r.filter(function (x) { return isCover(x.name) && certBase(x.name).toLowerCase() === f.base.toLowerCase(); })[0] || f;
+    return pdfPages(cv.driveId, cv.id); }).then(function (pages) { var txt = pages.map(function (pg) { return pg.join(' '); }).join('\n').slice(0, 30000);
+    if (!CL.on || !CL.sample) throw new Error('Reading the cover needs the Claude version');
+    return CL.sample.json('Text (spacing is messy) of the cover page of a calibration batch of Akhnaton lab. It has "Unit under Test" (the machine, may be absent), "Item(s) to be calibrated" table (No. | Manufacturer | Description | Code | Calibration Points | Accepted Limits), and "PROTOCOL FOR CERTIFICATE NO.: From X To Y" (or one certificate number).\n' +
+      'Return JSON only: {"machine":"","machineCode":"","from":"","items":[{"manufacturer":"","description":"","code":"","points":"","limits":""}]}. Copy values exactly, only repair spacing inside a token ("P4 - 105/T1"→"P4-105/T1", "10/EP - 3107 - 202 5"→"10/EP-3107-2025"). Do not invent rows.\n\nTEXT:\n"""\n' + txt + '\n"""', { modelTier: 'default' }); })
+    .then(function (j) { j = j || {}; var it = j.items || [], fm = String(j.from || '').match(/^(.*?)(\d+)(-\d{4})$/);
+      it.forEach(function (x, i) { x.certNo = fm ? fm[1] + String(+fm[2] + i).padStart(fm[2].length, '0') + fm[3] : (it.length === 1 ? j.from : ''); }); return { machine: j.machine || '', machineCode: j.machineCode || '', items: it }; }); }
 /* items step: "From last year" */
-function lastYearSheet(p) { var st = { busy: true, rows: [], files: [], err: '', sel: null, on: {} };
+function lastYearSheet(p, auto) { var st = { busy: true, rows: [], files: [], err: '', sel: null, on: {}, auto: auto };
+  var loadBatches = function () { var b = st.bat; b.busy = true; if (sheetFn) renderSheet();
+    certBatches(p, b.y, b.m).then(function (l) { b.list = l; b.busy = false; if (!l.length && b.triedPrev && st.auto && !b.prevShown) { if (sheetFn) closeSheet(); return; } if (!l.length) { var pm = new Date(b.y, b.m - 1, 1); if (!b.triedPrev) { b.triedPrev = 1; b.autoPrev = 1; b.y = pm.getFullYear(); b.m = pm.getMonth(); return loadBatches(); } } if (sheetFn) renderSheet(); })
+      .catch(function (e) { b.busy = false; b.err = e.message; if (sheetFn) renderSheet(); }); };
+  var addBatches = function () { var b = st.bat, sel = b.list.filter(function (f) { return b.on[f.id] !== false; }); if (!sel.length) return; b.adding = { d: 0, n: sel.length, items: 0 }; renderSheet();
+    var have = {}; p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; });
+    sel.reduce(function (pr, f) { return pr.then(function () { return batchItems(f).then(function (r) { var mid = '';
+        if (r.machine && r.items.length > 1) { var mm = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine) && norm(x.code) === norm(r.machineCode); })[0]; if (!mm) { mm = { id: uid(), name: r.machine, code: r.machineCode || '', dept: p.depts[0] || '' }; p.machines.push(mm); } mid = mm.id; }
+        r.items.forEach(function (x) { if (x.code && have[norm(x.code)]) return; if (x.code) have[norm(x.code)] = 1;
+          p.items.push(newItem({ machineId: mid, code: x.code, description: x.description, manufacturer: x.manufacturer, prevCert: x.certNo, src: 'last year', dept: p.depts[0] || '' })); b.adding.items++; }); })
+        .catch(function () { b.failed = (b.failed || []).concat(f.base); }).then(function () { b.adding.d++; saveProjects(); if (sheetFn) renderSheet(); }); }); }, Promise.resolve())
+      .then(function () { var n = b.adding.items, fl = b.failed; saveProjects(); closeSheet(); toast(n + ' items added from ' + MON[b.m] + ' ' + b.y + (fl ? ' – could not read ' + fl.join(', ') : ''), !!fl); queueOld(p); }); };
   openSheet(function () { var groups = {}; st.rows.forEach(function (r, i) { var mm = lyMonth(r.cal); var k = mm ? mm.key : 'other'; (groups[k] = groups[k] || { label: mm ? mm.label : 'No date', rows: [], pos: {} }).rows.push(i); if (r.po) groups[k].pos[r.po] = 1; });
     var keys = Object.keys(groups).sort().reverse(), g = null;
     var prevKey = function (k) { var a = k.split('-').map(Number), d = new Date(a[0], a[1] - 2, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
@@ -1290,6 +1323,17 @@ function lastYearSheet(p) { var st = { busy: true, rows: [], files: [], err: '',
       groups[st.sel].rows.forEach(function (i) { var c = norm(st.rows[i].code); if (c) seenC[c] = 1; rowsAll.push({ i: i, prev: false }); });
       if (pg) pg.rows.forEach(function (i) { var c = norm(st.rows[i].code); if (c && seenC[c]) return; rowsAll.push({ i: i, prev: true }); });
       g = { label: groups[st.sel].label, prevLabel: groups[pk] ? groups[pk].label : '', hasPrev: !!groups[pk], list: rowsAll, nMain: groups[st.sel].rows.length, nPrev: rowsAll.length - groups[st.sel].rows.length }; }
+    if (st.bat) { var b = st.bat, nOn = b.list.filter(function (f) { return b.on[f.id] !== false; }).length;
+      return { title: 'Last year · ' + MON[b.m] + ' ' + b.y, body: b.adding ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Reading the cover pages… ' + b.adding.d + ' / ' + b.adding.n + '</b>' + b.adding.items + ' items so far</div>'
+        : b.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking for ' + esc(p.company.name) + ' certificates of ' + MON[b.m] + ' ' + b.y + '…</b></div>'
+        : b.err ? '<div class="note warnbox">' + esc(b.err) + '</div>'
+        : !b.list.length ? '<div class="empty"><b>No certificates of this company in ' + MON[b.m] + ' ' + b.y + '</b>Use Find a code, photo or Excel.</div>'
+        : '<div class="note">' + (b.autoPrev ? 'Nothing in the same month – these are from <b>the month before</b>. ' : '') + 'Last year in <b>' + MON[b.m] + ' ' + b.y + '</b> you made <b>' + b.list.length + '</b> batch' + (b.list.length > 1 ? 'es' : '') + ' for ' + esc(p.company.name) + '. Untick what is not in this year\'s order.</div>' +
+          '<div class="list">' + b.list.map(function (f) { var on = b.on[f.id] !== false; return '<button class="row' + (on ? ' sel' : '') + '" data-bt="' + esc(f.id) + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(f.descs.slice(0, 3).join(' · ') || f.base) + '</b><small>' + esc(f.base) + '</small></span></button>'; }).join('') + '</div>',
+        foot: b.adding || b.busy ? '' : '<button class="btn ghost" id="btL">Letters</button><button class="btn ghost" id="btO">' + (b.prevShown ? 'Same month' : 'Month before') + '</button>' + (b.list.length ? '<button class="btn" id="btA">Add ' + nOn + ' batch' + (nOn === 1 ? '' : 'es') + '</button>' : ''),
+        mount: function () { $$('[data-bt]').forEach(function (x) { x.onclick = function () { var id = x.dataset.bt; b.on[id] = b.on[id] === false; renderSheet(); }; });
+          var o = $('#btO'); if (o) o.onclick = function () { var d = new Date(b.y, b.m + (b.prevShown ? 1 : -1), 1); b.prevShown = !b.prevShown; b.triedPrev = 1; b.autoPrev = 0; b.y = d.getFullYear(); b.m = d.getMonth(); b.on = {}; loadBatches(); };
+          var ad = $('#btA'); if (ad) ad.onclick = addBatches; var lt = $('#btL'); if (lt) lt.onclick = st.loadLetters; } }; }
     return { title: 'From last year', body: st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Reading the receipt letters of ' + esc(p.company.name) + '…</b>Certificates / Reports ' + lyYear(-1) + ' and ' + lyYear() + '</div>'
       : st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>'
       : !st.rows.length ? '<div class="empty"><b>No receipt letters found for this company</b>Use photo, Excel or Add item.</div>'
@@ -1309,10 +1353,15 @@ function lastYearSheet(p) { var st = { busy: true, rows: [], files: [], err: '',
             var mid = ''; if (r.machine) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine); })[0]; if (!m) { m = { id: uid(), name: r.machine, code: '', dept: p.depts[0] || '' }; p.machines.push(m); } mid = m.id; }
             p.items.push(newItem({ machineId: mid, code: r.code, description: r.item, prevCert: r.certNo, src: 'last year', dept: p.depts[0] || '' })); n++; });
           saveProjects(); closeSheet(); toast(n + ' items copied from ' + groups[st.sel].label); queueOld(p); }; } }; });
+  var cd0 = new Date((p.info && p.info.cal) || Date.now()); st.bat = { busy: true, y: cd0.getFullYear() - 1, m: cd0.getMonth(), list: [], on: {} }; loadBatches();
+  st.loadLetters = function () { st.bat = null; st.busy = true; renderSheet();
   lyLetterFiles(p).then(function (fs) { st.files = fs; if (!fs.length) return [];
     var use = fs.filter(function (f) { return f.year >= lyYear(-1); }).slice(0, 3); return Promise.all(use.map(function (f) { return lyExtract(f).catch(function () { return []; }); })); })
-    .then(function (rs) { st.rows = [].concat.apply([], rs || []); st.busy = false; if (sheetFn) renderSheet(); })
-    .catch(function (e) { st.busy = false; st.err = e.message; if (sheetFn) renderSheet(); }); }
+    .then(function (rs) { st.rows = [].concat.apply([], rs || []); st.busy = false;
+      var cd = new Date((p.info && p.info.cal) || Date.now()), want = (cd.getFullYear() - 1) + '-' + String(cd.getMonth() + 1).padStart(2, '0'), pw = new Date(cd.getFullYear() - 1, cd.getMonth() - 1, 1), want2 = pw.getFullYear() + '-' + String(pw.getMonth() + 1).padStart(2, '0');
+      var ks = {}; st.rows.forEach(function (r) { var mm = lyMonth(r.cal); if (mm) ks[mm.key] = 1; }); if (ks[want]) st.sel = want; else if (ks[want2]) st.sel = want2;
+      if (sheetFn) renderSheet(); })
+    .catch(function (e) { st.busy = false; st.err = e.message; if (sheetFn) renderSheet(); }); }; }
 function dueOf(label) { var mm = lyMonth(label); return mm ? MON[mm.m] + ' ' + (mm.y + 1) : ''; }
 /* home: what is due soon (from all receipt letters of last year) */
 var DUE = LS.get('dueScan', null);
