@@ -365,6 +365,22 @@ var Core = (function () {
       return { id: ex.id };
     },
 
+    deleteCompany: function (db, actor, p, now) {
+      need(isAdmin(actor), 'Only the admin can remove companies.');
+      var co = byId(db.companies, p.companyId); need(co, 'This company was not found. Refresh and try again.');
+      var devs = db.devices.filter(function (d) { return d.active !== false && d.companyId === co.id; });
+      need(!devs.length, co.name + ' still has ' + devs.length + ' device' + (devs.length > 1 ? 's' : '') + ' with it. Check them in first.');
+      var hs = (db.holdings || []).filter(function (h) { return h.companyId === co.id && (+h.qty || 0) > 0; });
+      need(!hs.length, co.name + ' still has loggers or kits with it. Check them in first.');
+      var reqs = db.checkouts.filter(function (c) { return c.status === 'Pending' && c.companyId === co.id; });
+      need(!reqs.length, 'There is a check-out request waiting for ' + co.name + '. Approve or decline it first.');
+      var trs = db.transfers.filter(function (t) { return t.status === 'Pending' && (t.toCompanyId === co.id || t.fromCompanyId === co.id); });
+      need(!trs.length, 'There is a transfer waiting for ' + co.name + '. Confirm or decline it first.');
+      db.companies.splice(db.companies.indexOf(co), 1);
+      touch(db, 'companies');
+      return { ok: true };
+    },
+
     saveUser: function (db, actor, p, now) {
       need(isAdmin(actor), 'Only the admin can manage people.');
       var u = p.user || {}; need(u.name && String(u.name).trim(), 'Write the person\'s name.');

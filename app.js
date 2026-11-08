@@ -150,7 +150,7 @@
   }
   function devTitle(d) { return d.description; }
   function devSub(d) { return [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial; }
-  function coName(id) { return (IDX.co[id] || {}).name || '—'; }
+  function coName(id) { return id && !IDX.co[id] ? 'Removed company' : (IDX.co[id] || {}).name || '—'; }
   function names(list) { return (list || []).map(function (h) { return h.name; }).join(', '); }
   function can(what) {
     var r = S.me && S.me.role;
@@ -687,9 +687,13 @@
       '<button class="row" data-act="refresh"><span class="t"><b>Refresh now</b><small>Last update ' + (S.lastSync ? when(S.lastSync) : '—') + ' · updates every 20 seconds</small></span></button>' +
       '</div>';
     if (can('admin')) {
+      var site = (location.protocol === 'https:' && !DEMO) ? location.origin + '/' : 'https://bishoyloza-sketch.github.io/';
+      h += '<div class="sec"><h2>Website link</h2><small>only the admin sees this</small></div><div class="box linkbox" style="margin-top:0">' +
+        '<div class="url">' + esc(site) + '</div><div class="actions" style="grid-template-columns:1fr 1fr 1fr">' +
+        '<button class="btn sm" data-link="copy">Copy link</button><button class="btn sm ghost" data-link="share">Share</button><a class="btn sm ghost" href="' + esc(site) + '" target="_blank" rel="noopener" style="text-decoration:none">Open</a></div></div>';
       h += '<div class="sec"><h2>Admin</h2></div><div class="list">' +
         '<button class="row" data-act="people"><span class="t"><b>People &amp; PINs</b><small>' + S.data.users.length + ' people · roles, new staff, reset PIN</small></span></button>' +
-        '<button class="row" data-act="companies"><span class="t"><b>Companies</b><small>' + S.data.companies.filter(function (c) { return c.active !== false; }).length + ' active · add or rename</small></span></button>' +
+        '<button class="row" data-act="companies"><span class="t"><b>Companies</b><small>' + S.data.companies.filter(function (c) { return c.active !== false; }).length + ' active · add, rename or remove</small></span></button>' +
         '<button class="row" data-act="devlist"><span class="t"><b>Devices &amp; certificates</b><small>Add devices, due dates, certificate links</small></span></button>' +
         '<button class="row" data-act="stock"><span class="t"><b>Loggers, sensors &amp; kits</b><small>' + stockList().length + ' types counted by quantity · set how many you have</small></span></button>' +
         '</div>';
@@ -1321,7 +1325,13 @@
       $('#c', body).oninput = function (e) { f.code = e.target.value; };
       $('[data-g]', body).onclick = function () { f.group = f.group === 'EVA Group' ? 'Client' : 'EVA Group'; this.classList.toggle('on'); };
       $('[data-act]', body).onclick = function () { f.active = f.active === false; this.classList.toggle('on'); };
-      setFoot('<button class="btn" data-save>Save</button>');
+      setFoot((c ? '<button class="btn danger" data-del>Remove</button>' : '') + '<button class="btn" data-save>Save</button>');
+      var del = $('[data-del]');
+      if (del) del.onclick = function () {
+        askConfirm('Remove ' + c.name + ' from the app? This cannot be undone.', 'Remove', function () {
+          req('deleteCompany', { companyId: c.id }).then(function () { return refresh(true); }).then(function () { closeSheet(); after && after(); toast('Company removed'); }).catch(function (e) { toast(e.message, true); });
+        }, true);
+      };
       $('[data-save]').onclick = function () {
         req('saveCompany', { company: f }).then(function () { return refresh(true); }).then(function () { closeSheet(); after && after(); toast('Saved'); }).catch(function (e) { toast(e.message, true); });
       };
