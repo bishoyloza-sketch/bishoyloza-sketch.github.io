@@ -178,3 +178,4 @@ select.fin{background-image:linear-gradient(45deg,transparent 50%,#8792A2 50%),l
 .cats.three button.hl{border-color:var(--blue);background:var(--blue-soft)}
 .chkline{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);margin:10px 2px 0}.chkline input{width:18px;height:18px}
 .cf .btn.sm svg{width:18px;height:18px;vertical-align:-4px}
+.tiny{font-size:11.5px;color:#8792A2;margin-top:2px}
