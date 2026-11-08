@@ -152,6 +152,7 @@ var Api = { call: function (req) {
     .then(function (r) { if (!r.ok) throw new Error('The server did not answer (' + r.status + '). Check the internet and try again.'); return r.json(); })
     .then(function (j) { if (!j.ok) throw new Error(j.error || 'Something went wrong.'); return j.data; });
 } };
+(function () { try { var pr = JSON.parse(localStorage.getItem('akhc.projects') || '[]'); pr.forEach(function (p) { (p.items || []).forEach(function (it) { if (it.old && it.old.status === 'searching') it.old = null; }); }); localStorage.setItem('akhc.projects', JSON.stringify(pr)); } catch (e) {} })();
 var S = { session: LS.get('session', null), me: null, people: LS.get('people', null), data: LS.get('cache', null), projects: LS.get('projects', []), cur: null, view: 'home' };
 function req(action, payload) { return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
@@ -295,8 +296,8 @@ function renderHome() {
 }
 
 /* ================= wizard ================= */
-var STAGES = ['company', 'dept', 'type', 'order', 'items'];
-var STAGE_T = { company: ['Company', 'Which company is this work for?'], dept: ['Department', 'Which department(s)?'], type: ['Order type', 'What is the work based on?'], order: ['Order document', 'Choose it from SharePoint'], items: ['Items', 'What will be calibrated?'] };
+var STAGES = ['company', 'date', 'dept', 'type', 'order', 'items'];
+var STAGE_T = { company: ['Company', 'Which company is this work for?'], date: ['Calibration date', 'One date for all the items – you can change it for one item later'], dept: ['Department', 'Which department(s)?'], type: ['Order type', 'What is the work based on?'], order: ['Order document', 'Choose it from SharePoint'], items: ['Items', 'What will be calibrated?'] };
 var W = { q: '' };
 function go(p, stage) { p.stage = stage; p.reached = Math.max(p.reached || 0, FIDX[stage] || 0); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
 function renderWizard(p) {
@@ -304,7 +305,7 @@ function renderWizard(p) {
   var dots = stepBar(p);
   $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(t[0], esc(t[1]), dots) + '<main id="wm"></main></div><div class="wiz-foot"><div id="wf"></div></div>';
   bindStepBar(p); bindHome();
-  ({ company: wCompany, dept: wDept, type: wType, order: wOrder, items: wItems })[p.stage](p);
+  ({ company: wCompany, date: wDate, dept: wDept, type: wType, order: wOrder, items: wItems })[p.stage](p);
 }
 function foot(p, nextLabel, nextOk, onNext, extra) {
   var k = STAGES.indexOf(p.stage);
@@ -331,9 +332,9 @@ function wCompany(p) {
   var inp = $('#cq'); inp.oninput = function () { W.q = inp.value; var pos = inp.selectionStart; wCompany(p); var n = $('#cq'); n.focus(); n.setSelectionRange(pos, pos); };
   $$('[data-c]').forEach(function (b) { b.onclick = function () { var c = cos.filter(function (x) { return x.id === b.dataset.c; })[0];
     if (!p.company || p.company.id !== c.id) { p.deptSug = null; p.depts = []; p.orderFiles = null; p.order = null; }
-    p.company = { id: c.id, name: c.name, official: c.official || '', code: c.code || '', group: c.group || '' }; saveProjects(); go(p, 'dept'); }; });
+    p.company = { id: c.id, name: c.name, official: c.official || '', code: c.code || '', group: c.group || '' }; saveProjects(); go(p, 'date'); }; });
   var ac = $('#addCo'); if (ac) ac.onclick = function () { companySheet(p); };
-  foot(p, 'Next', !!p.company, function () { go(p, 'dept'); });
+  foot(p, 'Next', !!p.company, function () { go(p, 'date'); });
 }
 function companySheet(p) { var f = { name: W.q || '', official: '', code: '', group: 'Client' };
   openSheet(function () { return { title: 'Add a company', body:
@@ -348,8 +349,20 @@ function companySheet(p) { var f = { name: W.q || '', official: '', code: '', gr
       $('#coSave').onclick = function () { if (!f.name.trim()) return toast('Write the company name', true); var b = $('#coSave'); b.disabled = true;
         req('saveCompany', { company: f }).then(function (r) { return refresh().then(function () { return r; }); }).then(function (r) {
           var c = S.data.companies.filter(function (x) { return x.id === r.id; })[0]; if (c) { p.company = { id: c.id, name: c.name, official: c.official || '', code: c.code || '', group: c.group || '' }; p.deptSug = null; saveProjects(); }
-          sheetFn = null; renderSheet(); toast('Company saved'); if (c) go(p, 'dept'); else render();
+          sheetFn = null; renderSheet(); toast('Company saved'); if (c) go(p, 'date'); else render();
         }).catch(function (e) { b.disabled = false; toast(e.message, true); }); }; } }; }); }
+
+/* ---- calibration date (all items) ---- */
+function wDate(p) { var inf = ensureInfo(p); if (!inf.cal) { inf.cal = d2s(new Date()); calcDates(inf); saveProjects(); } if (!inf.woPre) inf.woPre = (String(p.company.code || '').match(/^\d+/) || [''])[0];
+  var F = function (k, l, t) { return '<label class="f"><span>' + l + '</span><input class="inp" ' + (t ? 'type="date" ' : '') + 'data-i="' + k + '" value="' + esc(inf[k]) + '"></label>'; };
+  $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3></div>' + F('cal', 'Calibration date', 1) +
+    '<div class="note">Work order ≈ 1 week before · Date of issue = 3 working days after (same month) · Received ≈ issue − 7 · Due = +1 year · working days Sun – Thu. You can change any of them.</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('wo', 'Work order date', 1) + F('woPre', 'WO number prefix (the 10 in 10/21/10/2026)') + F('iss', 'Date of issue', 1) + F('rec', 'Date received', 1) + F('due', 'Due date', 1) + '</div>' +
+    '<div class="note" id="woShow" style="background:var(--office-soft);color:#14603C">WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b></div><div id="dw">' + dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') + '</div>' +
+    '<div class="small">An item calibrated on another day: open the item and set its own date.</div>';
+  $$('[data-i]').forEach(function (e) { e.oninput = function () { inf[e.dataset.i] = e.value; if (e.dataset.i === 'cal') { calcDates(inf); ['wo', 'iss', 'rec', 'due'].forEach(function (k) { $('[data-i="' + k + '"]').value = inf[k]; }); }
+    $('#woShow').innerHTML = 'WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b>'; $('#dw').innerHTML = dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join(''); saveProjects(); }; });
+  foot(p, 'Next', true, function () { go(p, 'dept'); }); }
 
 /* ---- 2. department (suggested from earlier years on SharePoint) ---- */
 var DEPT_WORDS = ['Production', 'Utilities', 'Utility', 'QC', 'Quality Control', 'QA', 'Micro', 'Microbiology', 'Laboratory', 'Labs', 'Lab', 'R&D', 'Warehouse', 'Store', 'Stores', 'Stability', 'Engineering', 'Maintenance', 'Packaging', 'Sterile', 'Solid', 'Semi Solid', 'Liquid', 'Injection', 'Vials', 'Ampoules', 'Insulin', 'Penem', 'Vaccine', 'Water Station', 'Water', 'HVAC', 'Biotech', 'Cosmetics', 'Pilot'];
@@ -481,6 +494,21 @@ function wOrder(p) {
   function okNext() { var b = $('#wn'); if (b) b.disabled = !(has() || !must); }
 }
 
+/* ---- auto-load last year's certificate for every new item ---- */
+var AQ = { busy: false, q: [] };
+function rngNums(t) { var m = tidy(t).match(/(-?\d+(?:\.\d+)?)\s*(?::|to|~)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?$/i), mx = !m && tidy(t).match(/max\.?\s*(-?\d+(?:\.\d+)?)\s*(\S+)?/i);
+  return m ? { lo: m[1], hi: m[2], u: unitKey((m[3] || '').trim()) } : mx ? { lo: '0', hi: mx[1], u: unitKey(mx[2] || '') } : null; }
+function fillEmpty(it) { var f = (it.old || {}).fields || {}; if (!f) return;
+  ['description', 'manufacturer', 'model', 'serial'].forEach(function (k) { if (!it[k] && f[k]) it[k] = f[k]; });
+  var r = rngNums(f.range || ''), c = rngNums(f.calRange || ''); if (!r && c) r = c;
+  if (r && !isNum(it.rMin) && !isNum(it.rMax)) { it.rMin = r.lo; it.rMax = r.hi; if (!it.unit && r.u) it.unit = r.u; }
+  if (c && r && (c.lo !== r.lo || c.hi !== r.hi) && !isNum(it.cMin)) { it.cMin = c.lo; it.cMax = c.hi; }
+  var rs = tidy(f.resolution || '').match(/(\d*\.?\d+)\s*(\S+)?/); if (rs && !isNum(it.res)) { it.res = rs[1]; it.resUnit = unitKey(rs[2] || it.unit || ''); }
+  if (it.unit) it.unit = unitKey(it.unit); }
+function queueOld(p) { if (!spOn()) return; p.items.forEach(function (it) { if ((!it.old || it.old.status === 'searching') && (it.code || it.prevCert) && AQ.q.indexOf(it) < 0) AQ.q.push(it); }); runQ(p); }
+function runQ(p) { if (AQ.busy) return; var it = AQ.q.shift(); if (!it) return; AQ.busy = true; it.old = { status: 'searching' }; if (!sheetFn) render();
+  findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; if (r.status === 'found') fillEmpty(it); saveProjects(); AQ.busy = false; if (!sheetFn) render(); runQ(p); }); }
+
 /* ---- 5. items: photo / Excel / unit or machine ---- */
 var UNITS = ['°C', '°F', '%RH', 'bar', 'mbar', 'psi', 'kPa', 'MPa', 'Pa', 'inH2O', 'mmH2O', 'mmHg', 'g', 'mg', 'kg', 'rpm', 's', 'min', 'h', 'lux', 'm/s', 'm³/h', 'CFM', 'V', 'mV', 'A', 'mA', 'Ω', 'mm', 'µm', 'L', 'mL', 'µL', 'pH', 'µS/cm', '%'];
 function newItem(o) { return Object.assign({ id: uid(), kind: 'unit', machineId: '', code: '', description: '', manufacturer: '', model: '', serial: '', rMin: '', rMax: '', unit: '', cMin: '', cMax: '', res: '', resUnit: '', dept: '', photo: '', ocr: '', src: 'form' }, o); }
@@ -501,10 +529,13 @@ function itemIssues(it) { /* empty list = complete */
 function rangeText(it) { if (!isNum(it.rMin) || !isNum(it.rMax)) return ''; return '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || ''); }
 function calText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + it.cMin + ' : ' + it.cMax + ') ' + (it.unit || ''); return rangeText(it) ? 'Full range' : ''; }
 function wItems(p) {
-  p.items = p.items || []; p.machines = p.machines || [];
+  p.items = p.items || []; p.machines = p.machines || []; setTimeout(function () { queueOld(p); }, 0);
   var loose = p.items.filter(function (i) { return !i.machineId; }), need = p.items.filter(function (i) { return itemIssues(i).length; }).length;
   var irow = function (it) { var iss = itemIssues(it); return '<button class="row" data-it="' + it.id + '">' + (it.photo ? '<img class="thumb" data-ph="' + it.photo + '" alt="">' : '') + '<span class="t"><b>' + esc(it.description || it.code || 'Photo') + '</b><small>' + esc([it.code && it.description ? it.code : '', rangeText(it), it.res && 'res ' + it.res + ' ' + (it.resUnit || it.unit)].filter(Boolean).join(' · ') || 'Tap to add the data') + '</small></span>' +
-    (iss.length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '</button>'; };
+    (it.old && it.old.status === 'searching' ? '<span class="pill" style="--s-fg:var(--blue);--s-bg:var(--blue-soft)"><span class="spin dark" style="width:12px;height:12px;border-width:2px"></span> Last year…</span>'
+      : it.old && it.old.status === 'found' ? '<span class="pill" style="--s-fg:var(--office);--s-bg:var(--office-soft)">' + ((it.old.file && it.old.file.year) || '') + ' cert ✓</span>'
+      : it.old && (it.old.status === 'missing' || it.old.status === 'error') && (it.code || it.prevCert) ? '<span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">No old cert</span>'
+      : iss.length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '</button>'; };
   $('#wm').innerHTML = '<div class="cats one" style="margin-bottom:8px"><button data-a="last">' + I.visit + '<b>Same as last year</b><small>Copy the items of the same month last year from the receipt letters, then edit</small></button></div><div class="cats">' +
     '<button data-a="find"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>' + '<b>Find a code</b><small>Like Find in Excel – codes calibrated before</small></button>' +
     '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Nameplates or a code list</small></button>' +
@@ -553,7 +584,8 @@ function itemSheet(p, id, fresh) {
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center">' + '<input class="inp' + bad('Calibration') + '" data-k="cMin" inputmode="decimal" placeholder="' + esc(it.rMin || 'From') + '" value="' + esc(it.cMin) + '"><input class="inp' + bad('Calibration') + '" data-k="cMax" inputmode="decimal" placeholder="' + esc(it.rMax || 'To') + '" value="' + esc(it.cMax) + '"><span class="small">' + esc(it.unit || '') + '</span></div>' +
       '<div class="sec" style="margin:14px 0 8px"><h2 style="font-size:16px">Resolution</h2><small>required</small></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + '<input class="inp' + bad('Resolution (') + '" data-k="res" inputmode="decimal" placeholder="e.g. 0.1" value="' + esc(it.res) + '"><div>' + unitSelect('ruSel', it.resUnit || it.unit, 'Same unit') + '</div></div>' +
-      '<div style="height:14px"></div>' + (m ? '' : deptField(p, it.dept, 'data-dp')),
+      '<div style="height:14px"></div>' + (m ? '' : deptField(p, it.dept, 'data-dp')) +
+      '<label class="f"><span>Calibration date – only if different from the project (' + dmy((p.info || {}).cal) + ')</span><input class="inp" type="date" data-k="calDate" value="' + esc(it.calDate || '') + '"></label>',
       foot: (isNew ? '' : '<button class="btn danger" id="itDel">Delete</button>') + (it.photo && !hasData(it) ? '<button class="btn ghost" id="itPhOnly">Photo only</button>' : '') + '<button class="btn" id="itOk">' + (isNew ? 'Add' : 'Save') + '</button>',
       mount: function () {
         if (it.photo) IDB.get(it.photo).then(function (d) { var im = $('#itImg'); if (im && d) im.src = d; });
@@ -567,8 +599,10 @@ function itemSheet(p, id, fresh) {
         var po = $('#itPhOnly'); if (po) po.onclick = function () { if (isNew) p.items.push(it); saveProjects(); back(); };
         $('#itOk').onclick = function () { it.unit = String(it.unit || '').trim(); it.resUnit = String(it.resUnit || '').trim();
           if (it.photo && !hasData(it)) { if (isNew) p.items.push(it); saveProjects(); return back(); }
-          var e = itemIssues(it); if (e.length) { tried = true; renderSheet(); return toast('Missing: ' + e[0], true); }
+          var e = itemIssues(it); if (e.length && !(isNew && it.code && !it.rMin && !it.res && spOn())) { tried = true; renderSheet(); return toast('Missing: ' + e[0], true); }
+          if (isNew && it.code && e.length) { p.items.push(it); saveProjects(); back(); toast('Added – loading last year\'s certificate'); queueOld(p); return; }
           if (!it.resUnit) it.resUnit = it.unit; if (isNew) p.items.push(it); saveProjects(); back(); }; } }; });
+  function backQ() {}
   function back() { if (m) machineSheet(p, m.id); else closeSheet(); }
 }
 function machineSheet(p, id, fresh) {
@@ -614,7 +648,7 @@ function codesFromPhotos(p, files) {
       $$('[data-cv]').forEach(function (e) { e.oninput = function () { found[+e.dataset.cv].code = e.value; }; });
       var a = $('#cAdd'); if (a) a.onclick = function () { var have = {}; p.items.forEach(function (i) { have[norm(i.code)] = 1; }); var n = 0;
         found.forEach(function (c) { if (!c.on || !c.code.trim() || have[norm(c.code)]) return; have[norm(c.code)] = 1; p.items.push(newItem({ code: c.code.trim(), src: 'photo', check: true, dept: p.depts[0] || '' })); n++; });
-        saveProjects(); closeSheet(); toast(n + ' items added – open each one to add its description'); }; } }; });
+        saveProjects(); closeSheet(); toast(n + ' items added – loading last year\'s certificates'); queueOld(p); }; } }; });
   var seq = Promise.resolve();
   files.forEach(function (f) { seq = seq.then(function () { return shrink(f, 2000, 0.9).then(ocrText).then(function (t) {
     t.split(/\n/).forEach(function (line) { line.split(/\s{2,}|\t|,|;|\|/).forEach(function (tok) { tok = tok.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
@@ -672,7 +706,7 @@ function xlImport(p, file) { needExcel().then(function () { return file.arrayBuf
     var it = newItem({ machineId: mid, kind: mid ? 'machine-item' : 'unit', code: code, description: desc, manufacturer: get(row, 'man'), model: get(row, 'model'), serial: get(row, 'ser'),
       rMin: get(row, 'rMin'), rMax: get(row, 'rMax'), unit: get(row, 'unit'), cMin: get(row, 'cMin'), cMax: get(row, 'cMax'), res: get(row, 'res'), resUnit: get(row, 'resUnit') || get(row, 'unit'), dept: get(row, 'dept') || p.depts[0] || '', src: 'excel' });
     if (itemIssues(it).length) incomplete++; p.items.push(it); n++; });
-  saveProjects(); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>' + (incomplete ? '<div class="note amber">' + incomplete + ' of them have missing or wrong data (range, unit or resolution) – they are marked “Missing data”.</div>' : '');
+  saveProjects(); queueOld(p); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>' + (incomplete ? '<div class="note amber">' + incomplete + ' of them have missing or wrong data (range, unit or resolution) – they are marked “Missing data”.</div>' : '');
 }).catch(function (e) { var x = $('#xMsg'); if (x) x.innerHTML = '<div class="note warnbox">' + esc(e.message || e) + '</div>'; }); }
 
 /* ================= project (after setup): Overview · Old certs · Readings · Details ================= */
@@ -684,9 +718,9 @@ var NAVI = {
   gen: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg>',
   det: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'
 };
+function ensureInfo(p) { p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String((p.company || {}).code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} }; p.info.refRes = p.info.refRes || {}; return p.info; }
 function renderOverview(p) {
-  p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String(p.company.code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} };
-  p.info.refRes = p.info.refRes || {};
+  ensureInfo(p);
   if (!p.tab || p.tab === 'over') p.tab = 'certs'; PT.tab = p.tab;
   var titles = { certs: ['Old certificates', 'Last year\'s certificate of every item'], refs: ['References', 'A reference for every item'], det: ['Details', 'Technician, dates and conditions'], read: ['Readings', 'New readings next to last year\'s'], gen: ['Certificates', 'Covers, certificates and the receipt letter'] }[p.tab];
   $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div>' + projFoot(p);
@@ -751,20 +785,15 @@ function tDet(p) {
   var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin'; }), ds = labDevices(), q = norm(PT.rq || '');
   var cats = {}; ds.forEach(function (d) { (cats[d.category || 'Other'] = cats[d.category || 'Other'] || []).push(d); });
   $('#pm').innerHTML = '<div class="sec" style="margin-top:4px"><h2>Calibrated by</h2></div><div class="chips">' + people.map(function (u) { return '<button class="chip' + (inf.techId === u.id ? ' on' : '') + '" data-tech="' + u.id + '">' + esc(u.name) + '</button>'; }).join('') + '</div>' +
-    '<div class="sec"><h2>Dates</h2><small>Sun – Thu</small></div>' +
-    '<label class="f"><span>Calibration date</span><input class="inp" type="date" data-i="cal" value="' + esc(inf.cal) + '"></label>' +
-    '<div class="note">Work order ≈ 1 week before · Date of issue = 3 working days after (same month) · Received ≈ issue − 7 · Due = +1 year. You can change any of them.</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Work order date</span><input class="inp" type="date" data-i="wo" value="' + esc(inf.wo) + '"></label><label class="f"><span>WO number prefix (the 10 in 10/21/10/2026)</span><input class="inp" data-i="woPre" value="' + esc(inf.woPre) + '"></label>' +
-    '<label class="f"><span>Date of issue</span><input class="inp" type="date" data-i="iss" value="' + esc(inf.iss) + '"></label><label class="f"><span>Date received</span><input class="inp" type="date" data-i="rec" value="' + esc(inf.rec) + '"></label>' +
-    '<label class="f"><span>Due date</span><input class="inp" type="date" data-i="due" value="' + esc(inf.due) + '"></label></div>' +
-    '<div class="note" id="woShow" style="background:var(--office-soft);color:#14603C">WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b></div><div id="dw">' + dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') + '</div>' +
+    '<div class="sec"><h2>Dates</h2><button class="btn ghost sm" id="chD">Change</button></div><dl class="kv"><dt>Calibration</dt><dd>' + dmy(inf.cal) + '</dd><dt>Work order</dt><dd>' + esc(woNo(inf) || '—') + '</dd><dt>Date of issue</dt><dd>' + dmy(inf.iss) + '</dd><dt>Date received</dt><dd>' + dmy(inf.rec) + '</dd></dl>' +
     '<div class="sec"><h2>Environmental conditions</h2>' + (PT.envEdit ? '<small>editing</small>' : '<button class="btn ghost sm" id="envE">Edit</button>') + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Temperature (°C)</span><input class="inp" inputmode="decimal" data-i="eT" value="' + esc(inf.eT) + '"' + (PT.envEdit ? '' : ' readonly') + '></label><label class="f"><span>Humidity (%RH)</span><input class="inp" inputmode="decimal" data-i="eH" value="' + esc(inf.eH) + '"' + (PT.envEdit ? '' : ' readonly') + '></label></div>' +
     '<label class="f"><span>Location</span><input class="inp" data-i="eLoc" value="' + esc(inf.eLoc) + '"></label>' +
     '';
+  var cd = $('#chD'); if (cd) cd.onclick = function () { gotoStep(p, 'date'); };
   var ee = $('#envE'); if (ee) ee.onclick = function () { PT.envEdit = true; tDet(p); };
   $$('[data-tech]').forEach(function (b) { b.onclick = function () { var u = people.filter(function (x) { return x.id === b.dataset.tech; })[0]; inf.techId = u.id; inf.tech = u.name; saveProjects(); tDet(p); }; });
   $$('[data-i]').forEach(function (e) { e.oninput = function () { inf[e.dataset.i] = e.value; if (e.dataset.i === 'cal') { calcDates(inf); ['wo', 'iss', 'rec', 'due'].forEach(function (k) { $('[data-i="' + k + '"]').value = inf[k]; }); }
-    $('#woShow').innerHTML = 'WORK ORDER No.: <b>' + esc(woNo(inf) || '—') + '</b>'; $('#dw').innerHTML = dateWarns(inf).map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join(''); saveProjects(); }; });
+    saveProjects(); }; });
   var memo = LS.get('refRes', {});
   $$('[data-rr]').forEach(function (e) { e.onchange = function () { var v = e.value.trim(); if (!isNum(v)) { toast('Resolution must be a number', true); return; } inf.refRes[e.dataset.rr] = v; memo[e.dataset.rr] = v; LS.set('refRes', memo); saveProjects(); tDet(p); }; });
   $$('[data-rre]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rre, was = inf.refRes[id];
@@ -1092,7 +1121,7 @@ function certBody(p, it, first) { var inf = p.info, g = genDefaults(p), f = it.o
   var head = function (pb, cont) { return W.p(W.r(' ', { sz: 4 }), { pb: pb, after: 0 }) + topBlock(p, it.certNo, cont); };
   body += head(!first, false);
   body += W.p(W.r('Data of item to be calibrated', { b: true, sz: 18 }), { before: 100, keep: true });
-  body += W.tbl([kvRow('Manufacturer', it.manufacturer || f.manufacturer || 'N/A', 'Calibration Date', monYear(inf.cal)), kvRow('Description', it.description || f.description || '', 'Calibration interval**', g.interval), kvRow('Code', it.code || '', 'Calibration Due Date', monYear(inf.cal, 1)),
+  body += W.tbl([kvRow('Manufacturer', it.manufacturer || f.manufacturer || 'N/A', 'Calibration Date', monYear(it.calDate || inf.cal)), kvRow('Description', it.description || f.description || '', 'Calibration interval**', g.interval), kvRow('Code', it.code || '', 'Calibration Due Date', monYear(it.calDate || inf.cal, 1)),
     kvRow('Range', rangeText(it) || f.range || '', 'Environmental Condition', (inf.eLoc ? inf.eLoc + '  ' : '') + inf.eT + ' °C & ' + inf.eH + ' %R.H.'), kvRow('Cal. Range', calRangeText(it) || f.calRange || f.range || '', 'Model / S/N', [it.model || f.model, it.serial || f.serial].filter(Boolean).join(' / ') || 'N/A'),
     kvRow('Resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : (f.resolution || ''), 'Procedure No.', f.procedure || ''), kvRow('Accepted Limits', f.limits || '', 'Received status', 'In A Good Condition'), kvRow('Data Sheet Ref.', dsRef(p, it), 'Delivered status', out ? 'Out of Tolerance' : 'In Tolerance')], [1900, 3150, 2100, 2950], { sz: 16 });
   var hdr = dirs ? [[{ t: 'Point', b: true, shade: 'E7ECF2' }, { t: 'Reference', b: true, shade: 'E7ECF2' }, { t: 'Reading ↑', b: true, shade: 'E7ECF2' }, { t: 'Deviation ↑', b: true, shade: 'E7ECF2' }, { t: 'Reading ↓', b: true, shade: 'E7ECF2' }, { t: 'Deviation ↓', b: true, shade: 'E7ECF2' }, { t: 'Accepted Limits', b: true, shade: 'E7ECF2' }]]
@@ -1145,7 +1174,7 @@ function printView(p) { var all = buildAll(p), g = genDefaults(p), inf = p.info,
       var top = function (cont) { return htmlTbl([kv('DATE OF ISSUE:', dmy(inf.iss), (cont ? 'CONTINUE ' : '') + 'CERTIFICATE NO.:', it.certNo), kv('CUSTOMER:', p.company.official || p.company.name, 'CUSTOMER ID:', p.company.code)]); };
       for (var k = 0; k < pr.rows.length || k === 0; k += ROWS_PER_PAGE) {
         var h = '<section class="pg">' + hdr + top(k > 0);
-        if (!k) h += '<h4>Data of item to be calibrated</h4>' + htmlTbl([kv('Manufacturer', it.manufacturer || f.manufacturer || 'N/A', 'Calibration Date', monYear(inf.cal)), kv('Description', it.description || f.description, 'Calibration interval**', g.interval), kv('Code', it.code, 'Calibration Due Date', monYear(inf.cal, 1)), kv('Range', rangeText(it) || f.range, 'Environmental Condition', (inf.eLoc ? inf.eLoc + ' ' : '') + inf.eT + ' °C & ' + inf.eH + ' %R.H.'), kv('Cal. Range', calRangeText(it) || f.calRange || f.range, 'Model / S/N', [it.model || f.model, it.serial || f.serial].filter(Boolean).join(' / ') || 'N/A'), kv('Resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution, 'Procedure No.', f.procedure), kv('Accepted Limits', f.limits, 'Received status', 'In A Good Condition'), kv('Data Sheet Ref.', dsRef(p, it), 'Delivered status', out ? 'Out of Tolerance' : 'In Tolerance')]);
+        if (!k) h += '<h4>Data of item to be calibrated</h4>' + htmlTbl([kv('Manufacturer', it.manufacturer || f.manufacturer || 'N/A', 'Calibration Date', monYear(it.calDate || inf.cal)), kv('Description', it.description || f.description, 'Calibration interval**', g.interval), kv('Code', it.code, 'Calibration Due Date', monYear(it.calDate || inf.cal, 1)), kv('Range', rangeText(it) || f.range, 'Environmental Condition', (inf.eLoc ? inf.eLoc + ' ' : '') + inf.eT + ' °C & ' + inf.eH + ' %R.H.'), kv('Cal. Range', calRangeText(it) || f.calRange || f.range, 'Model / S/N', [it.model || f.model, it.serial || f.serial].filter(Boolean).join(' / ') || 'N/A'), kv('Resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution, 'Procedure No.', f.procedure), kv('Accepted Limits', f.limits, 'Received status', 'In A Good Condition'), kv('Data Sheet Ref.', dsRef(p, it), 'Delivered status', out ? 'Out of Tolerance' : 'In Tolerance')]);
         h += '<h4>' + (k ? '' : '1 - ') + 'Calibration Results' + (it.unit ? ' (' + esc(it.unit) + ')' : '') + '</h4>' + htmlTbl([dirs ? ['Point', 'Reference', 'Reading ↑', 'Deviation ↑', 'Reading ↓', 'Deviation ↓', 'Accepted Limits'] : ['Point', 'Reference', 'UUT Reading', 'Deviation', 'Accepted Limits', 'Status']].concat(pr.rows.slice(k, k + ROWS_PER_PAGE).map(function (r) { return dirs ? [r.point, r.ref, r.cells[0], r.cells[1], r.cells[2], r.cells[3], r.limit] : [r.point, r.ref, r.cells[0], r.cells[1], r.limit, 'Accepted']; })), true);
         if (k + ROWS_PER_PAGE >= pr.rows.length) h += '<h4>Remarks</h4>' + htmlTbl([[{ t: 'Calibrated By:', b: 1 }, '', { t: 'Approved By:', b: 1 }, ''], kv('Date:', dmy(inf.iss), 'Position:', g.approverPos), kv('Position:', g.techPos, 'Name:', g.approver), kv('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Signature:', '____________'), kv('Signature:', '____________', '', '')]) +
           '<p class="nt">** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.</p><p class="nt">This Certificate and Readings refers only to the particular item under calibration. The reported uncertainty is based on a standard uncertainty multiplied by a coverage factor k = 2, providing a level of confidence of approximately 95 %.</p>';
@@ -1253,7 +1282,7 @@ function lastYearSheet(p) { var st = { busy: true, rows: [], files: [], err: '',
           var gg = sheetFn && g; (g ? g.list : []).forEach(function (x) { var i = x.i; if (st.on[i] === false) return; var r = st.rows[i]; if (r.code && have[norm(r.code)]) return; if (r.code) have[norm(r.code)] = 1;
             var mid = ''; if (r.machine) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine); })[0]; if (!m) { m = { id: uid(), name: r.machine, code: '', dept: p.depts[0] || '' }; p.machines.push(m); } mid = m.id; }
             p.items.push(newItem({ machineId: mid, code: r.code, description: r.item, prevCert: r.certNo, src: 'last year', dept: p.depts[0] || '' })); n++; });
-          saveProjects(); closeSheet(); toast(n + ' items copied from ' + groups[st.sel].label); }; } }; });
+          saveProjects(); closeSheet(); toast(n + ' items copied from ' + groups[st.sel].label); queueOld(p); }; } }; });
   lyLetterFiles(p).then(function (fs) { st.files = fs; if (!fs.length) return [];
     var use = fs.filter(function (f) { return f.year >= lyYear(-1); }).slice(0, 3); return Promise.all(use.map(function (f) { return lyExtract(f).catch(function () { return []; }); })); })
     .then(function (rs) { st.rows = [].concat.apply([], rs || []); st.busy = false; if (sheetFn) renderSheet(); })
@@ -1277,7 +1306,7 @@ function dueCard() { if (!spOn()) return '';
     (soon.length ? '<div class="list" style="margin-top:10px">' + soon.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.file) + '</b><small>' + x.count + ' items due ' + ml(x.month) + '</small></span></div>'; }).join('') + '</div>' : '<div class="small" style="margin-top:8px">Nothing due this month or next.</div>') +
     '<div class="cf"><button class="btn ghost sm" id="dueGo">Check again</button></div></div>'; }
 /* ================= one flow: step bar from the company to the certificates ================= */
-var FLOW = [['company', 'Company'], ['dept', 'Department'], ['type', 'Order type'], ['order', 'Order'], ['items', 'Items'], ['certs', 'Old certs'], ['refs', 'References'], ['det', 'Details'], ['read', 'Readings'], ['gen', 'Certificates']];
+var FLOW = [['company', 'Company'], ['date', 'Cal. date'], ['dept', 'Department'], ['type', 'Order type'], ['order', 'Order'], ['items', 'Items'], ['certs', 'Old certs'], ['refs', 'References'], ['det', 'Details'], ['read', 'Readings'], ['gen', 'Certificates']];
 var FIDX = {}; FLOW.forEach(function (f, i) { FIDX[f[0]] = i; });
 function curStep(p) { return p.stage !== 'done' ? p.stage : (p.tab || 'certs'); }
 function reach(p) { var i = FIDX[curStep(p)]; if (!(p.reached >= i)) p.reached = i; return p.reached; }
@@ -1295,7 +1324,15 @@ function bindProjFoot(p) { var k = FIDX[curStep(p)];
 
 /* ================= items: find a code that was calibrated before ================= */
 function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer = null;
-  var run = function () { var q = st.q.trim(); if (q.length < 2) { st.res = []; renderSheet(); return; } st.busy = true; renderSheet();
+  var many = function () { return st.q.split(/[\n,;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 2; }); };
+  var runMany = function (list) { st.busy = true; st.multi = []; renderSheet(); var i = 0;
+    var next = function () { if (i >= list.length) { st.busy = false; renderSheet(); return; } var c = list[i++];
+      spSearch('"' + c + '"', 25).then(function (fs) { fs = fs.filter(function (f) { return /cal\.?\s*cert/i.test(f.name) && !/cover/i.test(f.name); }).sort(function (a, b) { return yearOf(b) - yearOf(a); }); var f = fs[0];
+        var txt = f ? (f.summary || '') : '', cn = (txt.match(/CERTI\s*FICATE\s*NO\.?\s*:?\s*([0-9A-Z][0-9A-Z \/\-]{2,24}?\d{4})/i) || [])[1];
+        st.multi.push({ code: c, found: !!f, certNo: cn ? cn.replace(/\s+/g, '') : '', folder: f ? pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') : '', on: !!f }); })
+        .catch(function () { st.multi.push({ code: c, found: false, on: false }); }).then(function () { st.done = i; renderSheet(); next(); }); };
+    next(); };
+  var run = function () { var q = st.q.trim(); if (/[\n,;]/.test(q)) { st.res = []; return runMany(many()); } st.multi = null; if (q.length < 2) { st.res = []; renderSheet(); return; } st.busy = true; renderSheet();
     var terms = companyTerms(p.company), toks = terms.map(function (t) { return t.toLowerCase().split(/[^a-z0-9؀-ۿ]+/).filter(function (w) { return w.length > 2 && !/pharma|company|egypt|for|the|and/.test(w); }); });
     spSearch(q.indexOf(' ') > 0 ? '"' + q + '"' : q + '*', 40).then(function (fs) { var seen = {}, out = [];
       fs.filter(function (f) { return /cal\.?\s*cert/i.test(f.name) && !/cover/i.test(f.name); }).forEach(function (f) {
@@ -1309,17 +1346,27 @@ function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer
       out.sort(function (a, b) { return (b.mine - a.mine) || (b.exact - a.exact) || (b.yr - a.yr); }); st.res = out.slice(0, 30); st.busy = false; st.err = ''; renderSheet(); })
       .catch(function (e) { st.busy = false; st.err = e.message; renderSheet(); }); };
   openSheet(function () { return { title: 'Find a code', body:
-    '<div class="search">' + I.search + '<input id="fq" placeholder="Type a code or part of it – e.g. QIII or PR30-0" value="' + esc(st.q) + '" autocomplete="off"></div>' +
+    '<textarea class="inp" id="fq" rows="2" style="height:auto;min-height:52px" placeholder="Type a code or part of it (e.g. QIII). Several codes: separate them with commas or new lines">' + esc(st.q) + '</textarea>' +
+    (st.multi ? (st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Searching ' + (st.done || 0) + ' of ' + many().length + '…</b></div>' : '') +
+      '<div class="list" style="margin-top:10px">' + st.multi.map(function (r, i) { return '<button class="row' + (r.on ? ' sel' : '') + '" data-mm="' + i + '"' + (r.found ? '' : ' disabled') + '><span class="check">' + (r.on ? '✓' : '') + '</span><span class="t"><b>' + esc(r.code) + '</b><small>' + esc(r.found ? [r.certNo, r.folder].filter(Boolean).join(' · ') : 'No old certificate found') + '</small></span></button>'; }).join('') + '</div>' +
+      (!st.busy && st.multi.some(function (r) { return r.on; }) ? '<div class="cf"><button class="btn" id="mmAdd">Add ' + st.multi.filter(function (r) { return r.on; }).length + ' codes</button></div>' : '') : '') +
+    (st.multi ? '' :
     (!spOn() ? '<div class="note warnbox">SharePoint is not connected.</div>' : st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Searching the old certificates…</b></div>'
       : st.q.trim().length < 2 ? '<div class="small">Searches all old certificates on SharePoint. This company\'s come first.</div>'
       : st.res.length ? '<div class="list">' + st.res.map(function (r, i) { var have = p.items.some(function (x) { return norm(x.code) === norm(r.code); });
           return '<button class="row" data-fr="' + i + '"' + (have ? ' disabled style="opacity:.5"' : '') + '><span class="t"><b>' + esc(r.code) + (r.desc ? ' · ' + esc(r.desc) : '') + '</b><small>' + esc([r.certNo, r.folder].filter(Boolean).join(' · ')) + '</small></span>' + (have ? '<span class="pill">Added</span>' : r.mine ? '<span class="pill" style="--s-fg:var(--office);--s-bg:var(--office-soft)">This company</span>' : '<span class="pill" style="--s-fg:var(--muted);--s-bg:var(--oos-soft)">Other company</span>') + '</button>'; }).join('') + '</div>'
-      : '<div class="empty"><b>Not found</b>Try fewer letters, or add it with “Add an item”.</div>'),
-    foot: '<button class="btn" id="fDone">Done</button>',
-    mount: function () { var i = $('#fq'); i.focus(); var pos = st.q.length; try { i.setSelectionRange(pos, pos); } catch (e) {}
-      i.oninput = function () { st.q = i.value; clearTimeout(timer); timer = setTimeout(run, 450); };
+      : '<div class="empty"><b>Not found</b>Try fewer letters, or add it with “Add an item”.</div>')),
+    foot: '<button class="btn ghost" id="fGo">Search</button><button class="btn" id="fDone">Done</button>',
+    mount: function () { $('#fGo').onclick = function () { st.q = $('#fq').value; run(); }; var i = $('#fq'); if (!st.busy) i.focus(); var pos = st.q.length; try { i.setSelectionRange(pos, pos); } catch (e) {}
+      i.oninput = function () { st.q = i.value; clearTimeout(timer); if (/[\n,;]/.test(st.q)) return; timer = setTimeout(run, 450); };
+      i.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey && /[\n,;]/.test(st.q + '\n') && st.q.indexOf(',') + st.q.indexOf(';') + st.q.indexOf('\n') > -3) { } };
+      i.onblur = function () { if (/[\n,;]/.test(st.q) && !st.busy && !(st.multi && st.multi.length)) run(); };
+      $$('[data-mm]').forEach(function (b) { b.onclick = function () { var r = st.multi[+b.dataset.mm]; r.on = !r.on; renderSheet(); }; });
+      var ma = $('#mmAdd'); if (ma) ma.onclick = function () { var have = {}, n = 0; p.items.forEach(function (x) { have[norm(x.code)] = 1; });
+        st.multi.forEach(function (r) { if (!r.on || have[norm(r.code)]) return; have[norm(r.code)] = 1; p.items.push(newItem({ code: r.code, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' })); n++; });
+        saveProjects(); closeSheet(); toast(n + ' codes added – loading their certificates'); queueOld(p); };
       $$('[data-fr]').forEach(function (b) { b.onclick = function () { var r = st.res[+b.dataset.fr];
-        p.items.push(newItem({ code: r.code, description: r.desc, manufacturer: r.man, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' })); saveProjects(); toast(r.code + ' added'); renderSheet(); }; });
+        p.items.push(newItem({ code: r.code, description: r.desc, manufacturer: r.man, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' })); saveProjects(); toast(r.code + ' added'); renderSheet(); queueOld(p); }; });
       $('#fDone').onclick = closeSheet; } }; }); }
 
 /* ================= references: a suggestion for every item ================= */
