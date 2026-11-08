@@ -517,9 +517,9 @@
       '<div class="search">' + ICON.search + '<input id="q" type="search" placeholder="Name or last digits of serial" value="' + esc(q) + '" autocomplete="off" aria-label="Search devices"></div>' +
       '<div class="filters" role="tablist">' + fl.map(function (x) { return '<button class="fbtn' + (f === x[0] ? ' on' : '') + '" data-filter="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
       '<div class="sortbar"><span>' + list.length + ' device' + (list.length === 1 ? '' : 's') + '</span>' +
-        (list.length ? '<button class="printbtn" data-listpdf aria-label="Print or save this list as PDF">' + ICON.pdf + 'Print</button>' : '') + '<div class="sortseg" role="radiogroup" aria-label="Group devices">' +
-        '<button data-sort="place" class="' + (byPlace ? 'on' : '') + '" role="radio" aria-checked="' + byPlace + '">By location</button>' +
-        '<button data-sort="type" class="' + (byPlace ? '' : 'on') + '" role="radio" aria-checked="' + !byPlace + '">By type</button></div></div>';
+        (list.length ? '<button class="printbtn" data-listpdf aria-label="Save this list as PDF">' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-listxls aria-label="Save this list as Excel">' + ICON.pdf + 'Excel</button>' : '') + '<div class="sortseg" role="radiogroup" aria-label="Group devices">' +
+        '<button data-sort="place" class="' + (byPlace ? 'on' : '') + '" role="radio" aria-checked="' + byPlace + '">Location</button>' +
+        '<button data-sort="type" class="' + (byPlace ? '' : 'on') + '" role="radio" aria-checked="' + !byPlace + '">Type</button></div></div>';
     if (f === 'kits') return h.replace(/<div class="sortbar">[\s\S]*$/, '') + kitsView() + '<div style="height:24px"></div></main>';
     if (!list.length) h += '<div class="empty"><b>' + (q ? 'No device matches “' + esc(q) + '”.' : 'No devices here right now.') + '</b>' + (q ? 'Try the last 2–3 digits of the serial, or a word like “tachometer”.' : '') + '</div>';
     else if (byPlace) {
@@ -613,6 +613,7 @@
     $$('[data-goto-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.gotoFilter; S.q = ''; location.hash = '#devices'; }; });
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
     $$('[data-listpdf]').forEach(function (b) { b.onclick = listPdf; });
+    $$('[data-listxls]').forEach(function (b) { b.onclick = listXls; });
     $$('[data-link]').forEach(function (b) {
       b.onclick = function () {
         var url = $('.linkbox .url').textContent;
@@ -1412,8 +1413,9 @@
   }
 
   /* Shared "PDF ready" sheet: download, open & view (print from the viewer), or share */
-  function pdfSheet(blob, fname, title, headline, sub, shareText) {
-    var file = null; try { file = new File([blob], fname, { type: 'application/pdf' }); } catch (e) {}
+  function pdfSheet(blob, fname, title, headline, sub, shareText, kind) {
+    var xls = kind === 'xlsx';
+    var file = null; try { file = new File([blob], fname, { type: xls ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf' }); } catch (e) {}
     var canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
     var url = URL.createObjectURL(blob);
     function download() {
@@ -1426,8 +1428,8 @@
       body.innerHTML = '<div class="done" style="padding-top:28px"><div class="ok" style="background:var(--blue)">' + ICON.pdf + '</div>' +
         '<h3>' + esc(headline) + '</h3><p>' + esc(sub) + '<br><small>' + esc(fname) + '</small></p>' +
         '<div style="display:grid;gap:10px;max-width:360px;margin:0 auto">' +
-        '<button class="btn blue wide" data-rx="dl">Download PDF</button>' +
-        '<button class="btn ghost wide" data-rx="view">Open & print</button>' +
+        '<button class="btn blue wide" data-rx="dl">Download ' + (xls ? 'Excel' : 'PDF') + '</button>' +
+        (xls ? '' : '<button class="btn ghost wide" data-rx="view">Open & print</button>') +
         (canShare ? '<button class="btn ghost wide" data-rx="share">Share (WhatsApp, email…)</button>' : '') +
         '</div></div>';
       setFoot('<button class="btn ghost" data-rx="close">Close</button>');
@@ -1445,6 +1447,53 @@
   }
 
   /* Printable report of the device list exactly as filtered on the Devices screen */
+  /* Excel copy of the device list exactly as filtered (one row per device, plus loggers & kits) */
+  var xlsxLoading = null;
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!xlsxLoading) xlsxLoading = new Promise(function (ok, bad) {
+      var sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      sc.onload = function () { ok(window.XLSX); }; sc.onerror = function () { xlsxLoading = null; bad(new Error('Could not load the Excel tool. Check the internet and try again.')); };
+      document.head.appendChild(sc);
+    });
+    return xlsxLoading;
+  }
+  function listXls() {
+    var list = filteredDevices();
+    var fLabel = (DEV_FILTERS.filter(function (x) { return x[0] === S.filter; })[0] || ['', 'All'])[1];
+    var title = fLabel === 'All' ? 'All devices' : fLabel, now = new Date();
+    toast('Preparing Excel…');
+    loadXlsx().then(function (X) {
+      function where(d) { if (Core.isCoReq(d)) return 'Lab (waiting approval)'; if (d.pending) return 'Transfer waiting'; if (d.status === 'At Client') return coName(d.companyId); if (d.status === 'In Office') return 'Lab'; return d.note || ''; }
+      var head = ['#', 'Location group', 'Category', 'Device', 'Manufacturer', 'Model', 'Serial no.', 'Status', 'Where', 'With', 'Since', 'Expected back', 'Cal. due', 'Certificate'];
+      var rows = [], n = 0, ordered = [];
+      if (S.sort === 'place') { var G = groupByPlace(list); G.keys.forEach(function (k) { G.groups[k].forEach(function (d) { ordered.push([G.meta[k].title, d]); }); }); }
+      else list.slice().sort(function (a, b) { return a.category.localeCompare(b.category) || bySerial(a, b); }).forEach(function (d) { ordered.push([d.category, d]); });
+      ordered.forEach(function (x) {
+        var d = x[1]; n++;
+        rows.push([n, x[0], d.category, d.description, d.manufacturer || '', d.model && d.model !== 'N/A' ? d.model : '', d.serial, d.pending ? (Core.isCoReq(d) ? 'Requested' : 'Transfer') : d.status,
+          where(d), names(d.holders), d.status === 'In Office' || !d.since ? '' : fmtDate(d.since), d.expectedReturn ? fmtDate(d.expectedReturn) : '',
+          d.certStatus === 'none' ? 'Not required' : (d.calDue ? fmtDate(d.calDue) : ''), d.certUrl || '']);
+      });
+      var wb = X.utils.book_new();
+      var ws = X.utils.aoa_to_sheet([['Akhnaton Lab Devices — ' + title + ' — as of ' + fmtDate(now) + ' ' + fmtTime(now)], [], head].concat(rows));
+      ws['!cols'] = [4, 22, 18, 34, 18, 16, 22, 14, 30, 26, 12, 13, 12, 30].map(function (w) { return { wch: w }; });
+      ws['!autofilter'] = { ref: 'A3:N' + (rows.length + 3) };
+      X.utils.book_append_sheet(wb, ws, 'Devices');
+      var hs = holdings().filter(function (h) { return +h.qty > 0; });
+      var krows = stockList().map(function (st) { return [st.group, st.name, st.note || '', st.total === '' ? '' : +st.total, stockOut(st.id), stockFree(st) == null ? '' : stockFree(st)]; });
+      var ws2 = X.utils.aoa_to_sheet([['Loggers, sensors & kits — as of ' + fmtDate(now)], [], ['Group', 'Item', 'English name', 'Total', 'Out', 'In the lab']].concat(krows)
+        .concat([[], ['Out now'], ['Group', 'Item', 'Qty', 'Company', 'With', 'Since']])
+        .concat(hs.map(function (h) { return [h.group, h.name, +h.qty, coName(h.companyId), names(h.holders), fmtDate(h.since)]; })));
+      ws2['!cols'] = [20, 32, 20, 10, 10, 12].map(function (w) { return { wch: w }; });
+      X.utils.book_append_sheet(wb, ws2, 'Loggers & kits');
+      var out = X.write(wb, { bookType: 'xlsx', type: 'array' });
+      var blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
+      var fname = 'Devices ' + title.replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ' + stamp + '.xlsx';
+      pdfSheet(blob, fname, 'Device list', title, rows.length + ' device' + (rows.length === 1 ? '' : 's') + ' · Excel', 'Akhnaton devices – ' + title, 'xlsx');
+    }).catch(function (e) { toast(e.message, true); });
+  }
   function listPdf() {
     if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
     var list = filteredDevices();

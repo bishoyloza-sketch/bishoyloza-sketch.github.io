@@ -269,3 +269,6 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .cats button.qtile{background:linear-gradient(180deg,#F4F9FE,#fff);border-style:dashed}
 .otherbox{margin-top:14px}.orow{display:flex;gap:8px;align-items:center}.orow .inp{height:42px}.orow .btn{flex:none}
 .kitrow{display:block}.kitrow .kitwhere{color:var(--client)!important;font-weight:500;white-space:normal!important}
+
+.printbtn.xl{color:#1C7C45;margin-left:-4px}
+.sortbar{flex-wrap:nowrap}.sortbar>span{white-space:nowrap;font-size:13px}.sortseg button{white-space:nowrap;padding:6px 10px}
