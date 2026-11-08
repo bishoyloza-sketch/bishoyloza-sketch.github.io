@@ -220,8 +220,8 @@ function calibrationOrders() { /* rows of "Calibration Orders.xlsx" → Main Das
 var sheetFn = null;
 function openSheet(fn) { sheetFn = fn; renderSheet(); }
 function renderSheet() { var root = $('#sheet-root'); if (!sheetFn) { root.innerHTML = ''; return; } var s = sheetFn(); var b = $('.sheet-b'), keep = b ? b.scrollTop : 0;
-  root.innerHTML = '<div class="sheet-bg"><div class="sheet"><div class="sheet-h"><button class="icon-btn" data-close style="color:var(--navy)">' + I.back + '</button><h2>' + s.title + '</h2></div><div class="sheet-b">' + s.body + '</div>' + (s.foot ? '<div class="sheet-f">' + s.foot + '</div>' : '') + '</div></div>';
-  $('.sheet-b').scrollTop = keep; $('[data-close]').onclick = closeSheet; if (s.mount) s.mount(); }
+  root.innerHTML = '<div class="sheet-bg"><div class="sheet"><div class="sheet-h"><button class="icon-btn" data-close style="color:var(--navy)">' + I.back + '</button><h2>' + s.title + '</h2>' + (S.cur ? '<button class="btn ghost sm" data-sheethome style="flex:none;margin-right:6px">All projects</button>' : '') + '</div><div class="sheet-b">' + s.body + '</div>' + (s.foot ? '<div class="sheet-f">' + s.foot + '</div>' : '') + '</div></div>';
+  $('.sheet-b').scrollTop = keep; $('[data-close]').onclick = closeSheet; var shh = $('[data-sheethome]'); if (shh) shh.onclick = goHome; if (s.mount) s.mount(); }
 function closeSheet() { sheetFn = null; renderSheet(); render(); }
 
 /* ================= login ================= */
@@ -256,6 +256,7 @@ function signOut() { S.session = null; S.me = null; LS.del('session'); renderLog
 function top(title, sub, extra) {
   return '<div class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton"><span class="bdiv"></span><span class="bname"><small>Akhnaton</small><b>Certificates</b></span></div>' +
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
+    (S.cur ? '<button class="homebtn" id="goHome2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>All projects</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
 function render() {
   if (!S.session) return renderLogin();
@@ -282,15 +283,20 @@ function renderHome() {
   var mine = S.projects.slice().sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
   $('#app').innerHTML = '<div class="shell">' + top('', '<span>Hello</span><strong>' + esc(S.me ? S.me.name : (S.session && S.session.userId)) + '</strong>') + '<main>' + msCard() + dueCard() +
     '<div class="sec"><h2>Projects</h2><small>' + mine.length + '</small></div>' +
-    (mine.length ? mine.map(function (p) { return '<button class="card bar projcard" style="--c:' + (p.stage === 'done' ? 'var(--office)' : 'var(--service)') + '" data-p="' + p.id + '"><h3>' + esc(projTitle(p)) + '</h3>' +
+    (mine.length ? mine.map(function (p) { var cs = curStep(p), k = FIDX[cs] || 0;
+      return '<div class="card bar" style="--c:' + (cs === 'gen' ? 'var(--office)' : 'var(--service)') + '"><button class="projcard" data-p="' + p.id + '" style="background:none;border:0;padding:0;width:100%"><h3>' + esc(projTitle(p)) + '</h3>' +
       '<div class="meta">' + [p.depts && p.depts.length ? p.depts.join(', ') : '', p.orderType ? TYPES[p.orderType][0] + (p.order && p.order.number ? ' ' + esc(p.order.number) : '') : '', (p.items || []).length ? p.items.length + ' items' : ''].filter(Boolean).join(' · ') + '</div>' +
-      '<div class="meta">' + (p.stage === 'done' ? 'Ready' : 'Setting up…') + ' · ' + fmtDate(p.created) + '</div></button>'; }).join('')
+      '<div class="meta">Step ' + (k + 1) + ' of ' + FLOW.length + ' · <b>' + FLOW[k][1] + '</b> · ' + fmtDate(p.created) + '</div>' +
+      '<div class="prog" style="height:6px;margin-top:8px"><i style="width:' + Math.round((k + 1) / FLOW.length * 100) + '%"></i></div></button>' +
+      '<div class="cf"><button class="btn sm" data-p="' + p.id + '">Open</button><button class="btn ghost sm" data-pd="' + p.id + '" style="flex:none;color:var(--danger)">Delete</button></div></div>'; }).join('')
       : '<div class="empty"><b>No projects yet</b>Tap “New project” to start.</div>') +
     '<div class="cf" style="margin-top:22px"><button class="btn ghost" id="out">Sign out</button></div></main></div>' +
     '<button class="btn fab" id="newP">' + I.plus + ' New project</button>';
   $('#newP').onclick = function () { var p = { id: uid(), created: new Date().toISOString(), by: S.session.userId, stage: 'company', company: null, deptSug: null, depts: [], orderType: '', order: null, orderFiles: null, items: [], machines: [] };
-    S.projects.push(p); saveProjects(); S.cur = p.id; render(); window.scrollTo(0, 0); };
-  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; render(); window.scrollTo(0, 0); }; });
+    S.projects.push(p); saveProjects(); S.cur = p.id; try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); };
+  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
+  $$('[data-pd]').forEach(function (b) { b.onclick = function () { var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0];
+    dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' items. This cannot be undone.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
   var dg = $('#dueGo'); if (dg) dg.onclick = dueScan;
   $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn;
 }
@@ -311,7 +317,7 @@ function foot(p, nextLabel, nextOk, onNext, extra) {
   var k = STAGES.indexOf(p.stage);
   $('#wf').innerHTML = '<button class="btn ghost" id="wb">' + (k ? 'Back' : 'Cancel') + '</button>' + (extra || '') + '<button class="btn blue" id="wn"' + (nextOk ? '' : ' disabled') + '>' + nextLabel + '</button>';
   $('#wb').onclick = function () { if (k) return go(p, STAGES[k - 1]);
-    if (!p.company && !(p.items || []).length) { S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); } S.cur = null; render(); };
+    if (!p.company && !(p.items || []).length) { S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); } goHome(); };
   $('#wn').onclick = onNext; }
 
 /* ---- 1. company (shared list from Akhnaton Devices) ---- */
@@ -727,7 +733,8 @@ function renderOverview(p) {
   bindStepBar(p); bindHome(); bindProjFoot(p);
   ({ certs: tCerts, refs: tRefs, read: tRead, det: tDet, gen: tGen })[p.tab](p);
 }
-function bindHome() { var h = $('#goHome'); if (h) h.onclick = function () { S.cur = null; render(); window.scrollTo(0, 0); }; }
+function goHome() { sheetFn = null; renderSheet(); $('#dlg-root').innerHTML = ''; S.cur = null; render(); window.scrollTo(0, 0); }
+function bindHome() { var h = $('#goHome2'); if (h) h.onclick = goHome; }
 function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; p.items.forEach(function (it) { var s = (it.old || {}).status; if (s === 'found') c.found++; else if (s === 'similar') c.similar++; else if (s === 'missing' || s === 'error') c.missing++; else c.todo++; }); return c; }
 
 /* ---- overview ---- */
@@ -1311,7 +1318,7 @@ var FIDX = {}; FLOW.forEach(function (f, i) { FIDX[f[0]] = i; });
 function curStep(p) { return p.stage !== 'done' ? p.stage : (p.tab || 'certs'); }
 function reach(p) { var i = FIDX[curStep(p)]; if (!(p.reached >= i)) p.reached = i; return p.reached; }
 function stepBar(p) { var cur = FIDX[curStep(p)], r = reach(p);
-  return '<div class="stepbar" id="stepbar"><button id="goHome" class="ok"><i>⌂</i><span>Projects</span></button>' + FLOW.map(function (f, i) { var cls = i === cur ? 'on' : (i <= r ? 'ok' : '');
+  return '<div class="stepbar" id="stepbar">' + FLOW.map(function (f, i) { var cls = i === cur ? 'on' : (i <= r ? 'ok' : '');
     return '<button class="' + cls + '" data-step="' + f[0] + '"' + (i > r ? ' disabled' : '') + '><i>' + (i !== cur && i <= r ? '✓' : i + 1) + '</i><span>' + f[1] + '</span></button>'; }).join('') + '</div>'; }
 function bindStepBar(p) { var sb = $('#stepbar'); if (!sb) return; var on = sb.querySelector('.on'); if (on) sb.scrollLeft = on.offsetLeft - 40;
   $$('[data-step]').forEach(function (b) { b.onclick = function () { gotoStep(p, b.dataset.step); }; }); }
@@ -1421,6 +1428,6 @@ function pickRef(p, it, done) { var q = '';
         $$('[data-pk]').forEach(function (b) { b.onclick = function () { var id = b.dataset.pk, a = it.refs || (it.refs = []), k = a.indexOf(id); if (k >= 0) a.splice(k, 1); else a.push(id); it.refAuto = false; saveProjects(); renderSheet(); }; });
         $('#pkD').onclick = function () { closeSheet(); done(); }; } }; }); }
 /* ================= start ================= */
-window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); } });
+window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
 Promise.all([MS.ready, CL.ready]).then(function () { if (S.session) boot(); else renderLogin(); });
 })();
