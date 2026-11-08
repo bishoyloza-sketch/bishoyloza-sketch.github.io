@@ -104,3 +104,10 @@
 .rt input{min-width:0;padding:0 2px;font-size:16px}
 .rt td.pt small{display:block;font:500 11px var(--font);color:var(--muted);white-space:normal}
 .rt td.dv{min-width:0;font-size:15px}.rt td.rs{width:auto;font-size:14px}
+.cart{background:var(--navy);color:#fff;border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.cart-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.cart-h small{color:#AFC0D8;font-size:12px}
+.cartchip{display:inline-flex;align-items:center;gap:4px;background:#fff !important;color:var(--navy) !important;border-color:#fff !important;padding-right:4px}
+.cartchip button{border:0;background:var(--oos-soft);color:var(--danger);width:22px;height:22px;border-radius:50%;font:700 14px/1 var(--font);cursor:pointer}
+.guide{background:var(--blue-soft);border:1px solid #BFD9EF;border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:14px;color:var(--navy)}
+.guide .g-old{margin-bottom:6px}.guide ol{margin:4px 0 6px;padding-left:20px}.guide li{margin:2px 0}.guide li.ok{color:var(--office)}.guide li.ok::marker{content:'✓  '}
+.rt input{font-size:15px;letter-spacing:-.2px}

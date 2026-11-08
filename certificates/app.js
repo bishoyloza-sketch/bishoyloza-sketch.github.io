@@ -884,7 +884,7 @@ function codeHits(p, code) { code = String(code || '').trim(); if (!code) return
 function findOldCert(p, it) {
   var key = it.code || it.prevCert; if (!key) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
   var mine = (p.deptSug && p.deptSug.certFolders) || [];
-  return codeHits(p, it.code || it.prevCert).then(function (fs) { fs = fs.slice();
+  return codeHits(p, it.code || it.prevCert).then(function (fs) { return fs.length || !it.prevCert || !it.code ? fs : codeHits(p, it.prevCert); }).then(function (fs) { fs = fs.slice();
     fs.forEach(function (f) { f.yr = yearOf(f); f.mine = mine.some(function (m) { return pathOf(f).indexOf(m) >= 0; }) ? 1 : 0; });
     fs.sort(function (a, b) { return b.mine - a.mine || b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
     if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
@@ -1213,7 +1213,7 @@ function printView(p) { var all = buildAll(p), g = genDefaults(p), inf = p.info,
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(p.company.name) + ' – certificates</title><style>' + css + '</style></head><body>' + pages.join('') + '</body></html>'; }
 
 /* --- the Certificates tab --- */
-function tGen(p) { var g = genDefaults(p), groups = genGroups(p), iss = genIssues(p), ph = phList(p), inf = p.info || {};
+function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'gen' && !sheetFn) tGen(p); }); var g = genDefaults(p), groups = genGroups(p), iss = genIssues(p), ph = phList(p), inf = p.info || {};
   if (!g.addr && !p.genAddrTried && spOn()) { p.genAddrTried = true; findAddress(p).then(function () { if (PT.tab === 'gen' && !sheetFn) tGen(p); }); }
   var F = function (k, l, ph2) { return '<label class="f"><span>' + l + '</span><input class="inp" data-g="' + k + '" value="' + esc(g[k]) + '"' + (ph2 ? ' placeholder="' + esc(ph2) + '"' : '') + '></label>'; };
   $('#pm').innerHTML = (iss.length ? '<div class="note warnbox"><b>Before the final PDF:</b><br>' + iss.map(esc).join('<br>') + '</div>' : '<div class="note" style="background:var(--office-soft);color:#14603C">Everything needed is filled in.</div>') +
@@ -1605,7 +1605,9 @@ function lySearch(p, mode) {
   var add = function () { var h = have(), n = 0; st.rows.forEach(function (r, i) { if (!st.on[i] || !r.code || h[norm(r.code)]) return; h[norm(r.code)] = 1; var mid = '';
       if (r.machine) { var mm = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine) && norm(x.code) === norm(r.machineCode); })[0]; if (!mm) { mm = { id: uid(), name: r.machine, code: r.machineCode || '', dept: p.depts[0] || '' }; p.machines.push(mm); } mid = mm.id; }
       p.items.push(newItem({ machineId: mid, code: r.code, description: r.description, manufacturer: r.manufacturer || '', prevCert: r.certNo, src: 'last year', dept: p.depts[0] || '' })); n++; });
-    saveProjects(); closeSheet(); toast(n + (n === 1 ? ' code added' : ' codes added') + ' – loading their certificates'); queueOld(p); };
+    saveProjects(); st.on = {}; toast(n + (n === 1 ? ' code added to the project' : ' codes added to the project')); queueOld(p); renderSheet(); };
+  var cart = function () { var L = p.items.filter(function (i) { return i.code || i.description; }); return '<div class="cart"><div class="cart-h"><b>In this project: ' + L.length + (L.length === 1 ? ' code' : ' codes') + '</b>' + (L.length ? '<small>tap × to remove</small>' : '<small>choose codes below</small>') + '</div>' +
+    (L.length ? '<div class="chips" style="margin:6px 0 0">' + L.map(function (i) { return '<span class="chip on cartchip">' + esc(i.code || i.description) + '<button data-rm="' + i.id + '">×</button></span>'; }).join('') + '</div>' : '') + '</div>'; };
   var selBar = function (n, on, kind) { return '<div class="selbar"><span><b>' + on + '</b> of ' + n + ' chosen</span><button class="chip" data-sa="' + kind + '">Select all</button><button class="chip" data-sn="' + kind + '">Select none</button></div>'; };
   openSheet(function () { var h = have(), years = [], ny = new Date().getFullYear(); for (var y = ny; y >= ny - 3; y--) years.push(y);
     var tabs = '<div class="seg">' + [['month', 'By month'], ['code', 'By code'], ['cert', 'By certificate no.']].map(function (t) { return '<button class="' + (st.mode === t[0] ? 'on' : '') + '" data-md="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
@@ -1622,9 +1624,12 @@ function lySearch(p, mode) {
       res = nb ? '<div class="note" style="margin-top:12px">' + nb + (nb === 1 ? ' batch' : ' batches') + ' in ' + MFULL[st.m] + ' ' + st.y + '. Choose the ones in this year\'s order, then “Show codes”.</div>' + selBar(nb, ob, 'b') +
         '<div class="list">' + st.batches.map(function (f) { var on = !!st.bon[f.id]; return '<button class="row' + (on ? ' sel' : '') + '" data-bb="' + esc(f.id) + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(f.descs.slice(0, 3).join(' · ') || f.base) + (f.descs.length > 3 ? ' …' : '') + '</b><small>' + esc(f.base) + '</small></span></button>'; }).join('') + '</div>'
         : '<div class="empty"><b>Nothing in ' + MFULL[st.m] + ' ' + st.y + '</b>Try the month before.</div>'; }
-    var foot = st.rows && !st.prog ? (st.mode === 'month' ? '<button class="btn ghost" id="lbk">Back to batches</button>' : '') + '<button class="btn" id="ladd"' + (st.rows.some(function (r, i) { return st.on[i]; }) ? '' : ' disabled') + '>Add ' + st.rows.filter(function (r, i) { return st.on[i] && !(r.code && h[norm(r.code)]); }).length + ' codes</button>'
-      : st.batches && st.batches.length && !st.prog ? '<button class="btn" id="lshow"' + (st.batches.some(function (f) { return st.bon[f.id]; }) ? '' : ' disabled') + '>Show codes</button>' : '<button class="btn ghost" id="lx">Close</button>';
-    return { title: 'Search last year', body: tabs + form + res, foot: foot,
+    var nAdd = st.rows ? st.rows.filter(function (r, i) { return st.on[i] && !(r.code && h[norm(r.code)]); }).length : 0, nIn = p.items.length;
+    var cont = '<button class="btn blue" id="lgoOn"' + (nIn ? '' : ' disabled') + '>Continue with ' + nIn + ' ›</button>';
+    var foot = st.rows && !st.prog && nAdd ? '<button class="btn" id="ladd">Add ' + nAdd + (nAdd === 1 ? ' code' : ' codes') + '</button>'
+      : st.batches && !st.rows && !st.prog && st.batches.some(function (f) { return st.bon[f.id]; }) ? '<button class="btn" id="lshow">Show codes</button>' + cont
+      : (st.rows && st.mode === 'month' && !st.prog ? '<button class="btn ghost" id="lbk">Batches</button>' : '') + cont;
+    return { title: 'Search last year', body: cart() + tabs + form + res, foot: foot,
       mount: function () { $$('[data-md]').forEach(function (b) { b.onclick = function () { st.mode = b.dataset.md; st.q = ''; st.miss = null; reset(); renderSheet(); }; });
         var lq = $('#lq'); if (lq) { lq.oninput = function () { st.q = lq.value; }; if (!st.rows && !st.prog) lq.focus(); }
         var lm = $('#lm'), ly = $('#ly'); if (lm) { lm.onchange = function () { st.m = +lm.value; }; ly.onchange = function () { st.y = +ly.value; }; }
@@ -1634,23 +1639,44 @@ function lySearch(p, mode) {
         $$('[data-sa]').forEach(function (b) { b.onclick = function () { if (b.dataset.sa === 'b') st.batches.forEach(function (f) { st.bon[f.id] = true; }); else st.rows.forEach(function (r, i) { st.on[i] = true; }); renderSheet(); }; });
         $$('[data-sn]').forEach(function (b) { b.onclick = function () { if (b.dataset.sn === 'b') st.bon = {}; else st.on = {}; renderSheet(); }; });
         var sh = $('#lshow'); if (sh) sh.onclick = showCodes; var bk = $('#lbk'); if (bk) bk.onclick = function () { st.rows = null; st.on = {}; renderSheet(); };
-        var ad = $('#ladd'); if (ad) ad.onclick = add; var lx = $('#lx'); if (lx) lx.onclick = closeSheet;
+        var ad = $('#ladd'); if (ad) ad.onclick = add;
+        var go2 = $('#lgoOn'); if (go2) go2.onclick = function () { closeSheet(); p.stage = 'done'; p.tab = 'certs'; p.reached = Math.max(p.reached || 0, FIDX.certs); saveProjects(); render(); window.scrollTo(0, 0); };
+        $$('[data-rm]').forEach(function (b) { b.onclick = function () { var it = p.items.filter(function (x) { return x.id === b.dataset.rm; })[0]; p.items = p.items.filter(function (x) { return x.id !== b.dataset.rm; }); saveProjects(); toast((it && (it.code || it.description)) + ' removed'); renderSheet(); }; });
         if (st.mode === 'month' && !st.batches && !st.busy && !st.err && !st.auto0) { st.auto0 = 1; searchMonth(); } } }; }); }
 
 /* ---------- certificates: one at a time, on paper, last year faint ---------- */
-function tCertEd(p) { var L = readyItems(p), inf = ensureInfo(p), g = genDefaults(p);
-  if (!L.length) { $('#pm').innerHTML = '<div class="empty"><b>No codes with last year\'s readings yet</b>Go back to Codes and add them.</div>'; $('#cf').innerHTML = '<button class="btn ghost" id="cb">Back</button>'; $('#cb').onclick = function () { gotoStep(p, 'det'); }; return; }
+function tCertEd(p) { var L = p.items.filter(function (i) { return i.code || i.description || i.old; }), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
+  if (!L.length) { $('#pm').innerHTML = '<div class="empty"><b>No codes yet</b>Go back to Codes and add them.</div>'; $('#cf').innerHTML = '<button class="btn ghost" id="cb">Back</button>'; $('#cb').onclick = function () { gotoStep(p, 'det'); }; return; }
   genGroups(p); p.ci = Math.min(Math.max(p.ci || 0, 0), L.length - 1);
-  var it = L[p.ci], o = it.old, f = o.fields || {}, d = resDec(it); it.nv = it.nv || {};
+  var it = L[p.ci], nav0 = '<div class="certnav"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + '>‹</button><select class="inp" id="cj">' + L.map(function (x, i) { var rd = x.old && (x.old.points || []).length; return '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + (i + 1) + ' / ' + L.length + ' · ' + esc(x.code || x.description) + (rd ? (certDone(x) ? '  ✓' : '') : '  (no old cert)') + '</option>'; }).join('') + '</select><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + '>›</button></div>';
+  var to0 = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
+  if (!(it.old && (it.old.points || []).length)) { var os = (it.old || {}).status;
+    $('#pm').innerHTML = nav0 + '<div class="paper"><div class="ph-top"><div><b>' + esc(it.code || it.description) + '</b><small>' + esc(it.description || '') + '</small></div><span>No old certificate</span></div>' +
+      (os === 'searching' ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking for last year\'s certificate…</b></div>'
+        : '<div class="note warnbox">' + (os === 'found' ? 'Last year\'s certificate was found but its readings could not be read.' : 'Last year\'s certificate of this code was not found' + ((it.old && it.old.note) ? ' – ' + esc(it.old.note) : '') + '.') + '</div>' +
+          '<div class="cf"><button class="btn" id="oAgain">Search again</button><button class="btn ghost" id="oCert">Use an old cert. no.</button></div>' +
+          '<div class="small" style="margin-top:10px">If it is a new device, start with “Edit item” and add its points later.</div><div class="cf"><button class="btn ghost" id="eItem">Edit item</button></div>') + '</div>';
+    $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : 'Back') + '</button><button class="btn blue" id="cnx">' + (p.ci === L.length - 1 ? 'Make the files' : 'Skip ›') + '</button>';
+    var bind0 = function () { var x; if ((x = $('#cp'))) x.onclick = function () { to0(p.ci - 1); }; if ((x = $('#cn'))) x.onclick = function () { to0(p.ci + 1); }; $('#cj').onchange = function () { to0(+$('#cj').value); };
+      $('#cbk').onclick = function () { if (p.ci) to0(p.ci - 1); else gotoStep(p, 'det'); }; $('#cnx').onclick = function () { if (p.ci === L.length - 1) { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); } else to0(p.ci + 1); };
+      if ((x = $('#oAgain'))) x.onclick = function () { it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
+      if ((x = $('#oCert'))) x.onclick = function () { var v = window.prompt('Old certificate number (e.g. 10/EP-3107-2025)', it.prevCert || ''); if (!v) return; it.prevCert = v.trim(); it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
+      if ((x = $('#eItem'))) x.onclick = function () { itemSheet(p, it.id); }; };
+    bind0(); return; }
+  var o = it.old, f = o.fields || {}, d = resDec(it), rdq = refDec(p, it); it.nv = it.nv || {};
   var byId = {}; labDevices().forEach(function (x) { byId[x.id] = x; }); if (it.refs == null) { var op = refOptions(p, it)[0]; it.refs = op ? [op.d.id] : []; }
   var cal = it.calDate || inf.cal, cdt = s2d(cal), due = cdt ? MON[cdt.getMonth()] + ' ' + (cdt.getFullYear() + 1) : '', mon = cdt ? MON[cdt.getMonth()] + ' ' + cdt.getFullYear() : '';
   var kv = function (a, b, c, e) { return '<tr><th>' + a + '</th><td>' + (b || '—') + '</td>' + (c ? '<th>' + c + '</th><td>' + (e || '—') + '</td>' : '<td colspan="2"></td>') + '</tr>'; };
   var dirs = o.dirs === 2 ? [1, 2] : [1];
   var rows = o.points.map(function (q, i) { return dirs.map(function (dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] || {}, oR = dr === 2 ? q.reading2 : q.reading;
       return '<tr data-pt="' + i + '|' + dr + '"><td class="pt">' + esc(q.point) + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : '') + '<small>' + esc(ptLimit(it, q) || '') + '</small></td><td><input data-k="ref" inputmode="decimal" enterkeyhint="next" value="' + esc(v.ref || '') + '" placeholder="' + esc(q.ref || '') + '"></td><td><input data-k="reading" inputmode="decimal" enterkeyhint="next" value="' + esc(v.reading || '') + '" placeholder="' + esc(oR || '') + '"></td><td data-dv class="dv"></td><td data-rs class="rs"></td></tr><tr class="wn"><td colspan="5" data-wn></td></tr>'; }).join(''); }).join('');
-  $('#pm').innerHTML = '<div class="certnav"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + '>‹</button><select class="inp" id="cj">' + L.map(function (x, i) { return '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + (i + 1) + ' / ' + L.length + ' · ' + esc(x.code || x.description) + (certDone(x) ? '  ✓' : '') + '</option>'; }).join('') + '</select><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + '>›</button></div>' +
+  var pr0 = itemProg(it), ofile = o.file || {};
+  $('#pm').innerHTML = nav0 +
+    '<div class="guide"><div class="g-old">Last year: <b>' + esc(f.certNo || ofile.name || '—') + '</b>' + (ofile.folder ? ' · ' + esc(ofile.folder) : '') + (ofile.webUrl ? ' · <a href="' + esc(ofile.webUrl) + '" target="_blank" rel="noopener">open</a>' : '') + '</div>' +
+      '<ol><li' + (it.refs.length ? ' class="ok"' : '') + '>Check the standard</li><li' + (pr0.fil === pr0.tot ? ' class="ok"' : '') + '>Type the new <b>Ref</b> and <b>Reading</b> in the yellow boxes (' + pr0.fil + ' / ' + pr0.tot + ')</li><li>Next certificate</li></ol>' +
+      '<div class="small">Resolution <b>' + esc(it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution || '—') + '</b> – readings get ' + (d == null ? 'the typed' : d) + ' decimal' + (d === 1 ? '' : 's') + ' automatically.</div></div>' +
     '<div class="paper"><div class="ph-top"><div><b>AKHNATON</b><small>Trading and Representation · Calibration Lab.</small></div><span>Calibration Certificate</span></div>' +
-    '<table class="kvt">' + kv('Certificate No.', '<b>' + esc(it.certNo || '—') + '</b>', 'Date of issue', esc(dmy(inf.iss))) + kv('Customer', esc(p.company.official || p.company.name), 'Customer ID', esc(p.company.code || '')) + kv('Date received', esc(dmy(inf.rec)), 'Work order No.', esc(woNo(inf))) + '</table>' +
+    '<table class="kvt">' + kv('Certificate No.', '<b>' + esc(it.certNo || (g.autoTried || !spOn() ? '— set it in Files' : 'finding…')) + '</b>', 'Date of issue', esc(dmy(inf.iss))) + kv('Customer', esc(p.company.official || p.company.name), 'Customer ID', esc(p.company.code || '')) + kv('Date received', esc(dmy(inf.rec)), 'Work order No.', esc(woNo(inf))) + '</table>' +
     '<h5>Data of item to be calibrated</h5><table class="kvt">' + kv('Manufacturer', esc(it.manufacturer || f.manufacturer), 'Calibration date', esc(mon)) + kv('Description', esc(it.description || f.description), 'Due date', esc(due)) + kv('Code', '<b>' + esc(it.code || '') + '</b>', 'Interval', esc(g.interval)) + kv('Model', esc(it.model || f.model), 'Serial', esc(it.serial || f.serial)) + kv('Range', esc(rangeText(it) || f.range), 'Cal. range', esc(calText(it) || f.calRange || 'Full range')) + kv('Resolution', '<b>' + esc(it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution) + '</b>', 'Limits', esc(f.limits)) + '</table>' +
     '<h5>Standard(s) used</h5><div class="chips" style="margin:0">' + refOptions(p, it).slice(0, 5).map(function (x) { var on = it.refs.indexOf(x.d.id) >= 0; return '<button class="chip' + (on ? ' on' : '') + '" data-rf="' + x.d.id + '">' + esc(x.d.manufacturer + ' ' + x.d.model) + ' · ' + esc(String(x.d.serial).slice(-6)) + (x.ex ? ' · expired' : '') + '</button>'; }).join('') +
       it.refs.filter(function (id) { return !refOptions(p, it).some(function (x) { return x.d.id === id; }); }).map(function (id) { var x = byId[id]; return x ? '<button class="chip on" data-rf="' + id + '">' + esc(x.manufacturer + ' ' + x.model) + '</button>' : ''; }).join('') + '<button class="chip" id="rOther">Other…</button></div>' +
@@ -1675,10 +1701,30 @@ function tCertEd(p) { var L = readyItems(p), inf = ensureInfo(p), g = genDefault
   var inputs = $$('.rt input');
   $$('.rt tr[data-pt]').forEach(function (tr) { upd(tr); tr.querySelectorAll('input').forEach(function (inp) {
     inp.oninput = function () { var a = tr.dataset.pt.split('|'), k = a[0] + (a[1] === '2' ? 'd' : ''); (it.nv[k] = it.nv[k] || {})[inp.dataset.k] = inp.value.trim(); saveProjects(); var r = upd(tr); if (r.res === 'OUT' && inp.dataset.k === 'reading') toast('OUT – deviation ' + r.dev + ' is beyond ±' + r.lim, true); };
+    inp.onblur = function () { var dd = inp.dataset.k === 'reading' ? d : rdq, nv = padTo(inp.value, dd); if (nv !== inp.value) { inp.value = nv; inp.oninput(); } };
     inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); var i = inputs.indexOf(inp); if (inputs[i + 1]) inputs[i + 1].focus(); else $('#cnx').focus(); } }; }); });
   var firstEmpty = inputs.filter(function (x) { return !x.value; })[0]; if (firstEmpty && !CERT_NOFOCUS) setTimeout(function () { try { firstEmpty.focus({ preventScroll: true }); } catch (e) {} }, 50);
 }
 var CERT_NOFOCUS = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+/* ---------- next certificate number: continue after the last one of this year ---------- */
+var LASTNO = LS.get('lastNo', {});
+function lastCertNo(p) { var pre = String(p.company.code || '').replace(/[^A-Za-z0-9]/g, ''), yr = s2d(p.info && p.info.cal) ? s2d(p.info.cal).getFullYear() : new Date().getFullYear(); if (!pre) return Promise.resolve(null);
+  var key = pre + '|' + yr, c = LASTNO[key]; if (c && Date.now() - c.at < 3600e3) return Promise.resolve(c);
+  var path = CFG.SP_SITE_URL ? ' path:"' + CFG.SP_SITE_URL + '/Shared Documents/General/Certificates/Cert ' + yr + '"' : '';
+  var rx = new RegExp('^\\s*' + pre.replace(/(\d+)([A-Z]+)/i, '$1\\s*$2') + '\\s*-\\s*(\\d+)\\s*(?:,\\s*(\\d+)[A-Z]?)?\\s*,?\\s*-\\s*' + yr + '\\b', 'i');
+  var nums = function (fs) { var m = 0, f0 = null; fs.forEach(function (f) { var x = f.name.match(rx); if (!x) return; var n = Math.max(+x[1], x[2] ? +x[2] : 0); if (n > m) { m = n; f0 = f; } }); return { n: m, f: f0 }; };
+  var probe = function (stem) { return spSearch('filename:' + pre + '-' + stem + '*' + path, 50).catch(function () { return []; }); };
+  var digits = [9, 8, 7, 6, 5, 4, 3, 2, 1];
+  return Promise.all(digits.map(function (d) { return probe(String(d)); })).then(function (rs) { var best = { n: 0 }, top = null;
+    var per = rs.map(function (fs) { return nums(fs); }); per.forEach(function (r) { if (r.n > best.n) best = r; }); if (!best.n) return null;
+    var L0 = String(best.n).length; for (var i = 0; i < per.length; i++) if (per[i].n && String(per[i].n).length === L0) { top = digits[i]; break; }
+    return Promise.all([9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map(function (d) { return probe(String(top) + d); })).then(function (rs2) { rs2.forEach(function (fs) { var r = nums(fs); if (r.n > best.n) best = r; });
+      var out = { n: best.n, file: best.f ? best.f.name : '', at: Date.now() }; LASTNO[key] = out; LS.set('lastNo', LASTNO); return out; }); }); }
+function autoStart(p, done) { var g = genDefaults(p); if (String(g.start).trim() || g.autoTried) return done && done();
+  g.autoTried = 1; lastCertNo(p).then(function (r) { if (r && r.n && !String(g.start).trim()) { g.start = String(r.n + 1); g.lastSeen = r; saveProjects(); toast('Certificate numbers continue after ' + certNo(g, r.n)); } done && done(); }).catch(function () { done && done(); }); }
+function padTo(v, d) { if (d == null || !isNum(v)) return v; var s = String(v).trim().replace(',', '.'); return decOf(s) < d ? numv(s).toFixed(d) : s; }
+function refDec(p, it) { var id = (it.refs || [])[0], r = id && p.info.refRes && p.info.refRes[id]; return isNum(r) ? decOf(r) : null; }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
