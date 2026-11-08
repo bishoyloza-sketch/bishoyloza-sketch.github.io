@@ -560,7 +560,7 @@ function wItems(p) {
   $$('[data-a]').forEach(function (b) { b.onclick = function () { var k = b.dataset.a; if (k === 'month' || k === 'code' || k === 'cert') { if (!spOn()) return toast('SharePoint is not connected', true); return lySearch(p, k); } ({ photo: photoChoice, excel: excelSheet, add: addChoice })[k](p); }; });
   $$('[data-it]').forEach(function (b) { b.onclick = function () { itemSheet(p, b.dataset.it); }; });
   $$('[data-m]').forEach(function (b) { b.onclick = function () { machineSheet(p, b.dataset.m); }; });
-  foot(p, 'Next: Old certificates', p.items.length > 0, function () { p.stage = 'done'; p.tab = 'certs'; p.reached = Math.max(p.reached || 0, FIDX.certs); saveProjects(); render(); window.scrollTo(0, 0); });
+  foot(p, 'Next: Certificates ›', p.items.length > 0, function () { toHub(p); });
 }
 function addChoice(p) {
   $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>What are you calibrating?</h3><p>Choose the type.</p><div class="cats one">' +
@@ -1570,7 +1570,7 @@ function renderHome() {
     '<div class="cf" style="margin-top:26px"><button class="btn ghost" id="out">Sign out</button></div></main></div>';
   $('#newP').onclick = function () { newProject(); };
   $$('[data-ht]').forEach(function (b) { b.onclick = function () { HOME.tab = b.dataset.ht; render(); }; });
-  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
+  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; var pp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (pp && pp.stage === 'done') { pp.tab = 'cert'; pp.ci = null; } try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
   $$('[data-pd]').forEach(function (b) { b.onclick = function () { var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0];
     dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' codes. This cannot be undone.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
   $$('[data-sg]').forEach(function (b) { b.onclick = function () { var a = b.dataset.sg.split('|').map(Number), mo = SUG.months[a[0]], x = mo.list[a[1]], co = ((S.data && S.data.companies) || []).filter(function (c) { return c.id === x.coId; })[0];
@@ -1640,28 +1640,32 @@ function lySearch(p, mode) {
         $$('[data-sn]').forEach(function (b) { b.onclick = function () { if (b.dataset.sn === 'b') st.bon = {}; else st.on = {}; renderSheet(); }; });
         var sh = $('#lshow'); if (sh) sh.onclick = showCodes; var bk = $('#lbk'); if (bk) bk.onclick = function () { st.rows = null; st.on = {}; renderSheet(); };
         var ad = $('#ladd'); if (ad) ad.onclick = add;
-        var go2 = $('#lgoOn'); if (go2) go2.onclick = function () { closeSheet(); p.stage = 'done'; p.tab = 'certs'; p.reached = Math.max(p.reached || 0, FIDX.certs); saveProjects(); render(); window.scrollTo(0, 0); };
+        var go2 = $('#lgoOn'); if (go2) go2.onclick = function () { closeSheet(); toHub(p); };
         $$('[data-rm]').forEach(function (b) { b.onclick = function () { var it = p.items.filter(function (x) { return x.id === b.dataset.rm; })[0]; p.items = p.items.filter(function (x) { return x.id !== b.dataset.rm; }); saveProjects(); toast((it && (it.code || it.description)) + ' removed'); renderSheet(); }; });
         if (st.mode === 'month' && !st.batches && !st.busy && !st.err && !st.auto0) { st.auto0 = 1; searchMonth(); } } }; }); }
 
 /* ---------- certificates: one at a time, on paper, last year faint ---------- */
-function tCertEd(p) { var L = p.items.filter(function (i) { return i.code || i.description || i.old; }), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
+function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
   if (!L.length) { $('#pm').innerHTML = '<div class="empty"><b>No codes yet</b>Go back to Codes and add them.</div>'; $('#cf').innerHTML = '<button class="btn ghost" id="cb">Back</button>'; $('#cb').onclick = function () { gotoStep(p, 'det'); }; return; }
   genGroups(p); p.ci = Math.min(Math.max(p.ci || 0, 0), L.length - 1);
-  var it = L[p.ci], nav0 = '<div class="certnav"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + '>‹</button><select class="inp" id="cj">' + L.map(function (x, i) { var rd = x.old && (x.old.points || []).length; return '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + (i + 1) + ' / ' + L.length + ' · ' + esc(x.code || x.description) + (rd ? (certDone(x) ? '  ✓' : '') : '  (no old cert)') + '</option>'; }).join('') + '</select><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + '>›</button></div>';
+  var it = L[p.ci], nav0 = '<div class="certtop"><button class="btn ghost sm" id="toHub" style="flex:none">‹ All certificates</button><span><b>' + savedN(p) + '</b> of ' + L.length + ' saved</span></div><div class="bp-bar thin"><i style="width:' + Math.round(savedN(p) / L.length * 100) + '%"></i></div><div class="certnav"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + '>‹</button><select class="inp" id="cj">' + L.map(function (x, i) { var rd = x.old && (x.old.points || []).length; return '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + (i + 1) + ' / ' + L.length + ' · ' + esc(x.code || x.description) + (x.saved ? '  ✓ saved' : rd ? '' : '  (no old cert)') + '</option>'; }).join('') + '</select><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + '>›</button></div>';
   var to0 = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
   if (!(it.old && (it.old.points || []).length)) { var os = (it.old || {}).status;
     $('#pm').innerHTML = nav0 + '<div class="paper"><div class="ph-top"><div><b>' + esc(it.code || it.description) + '</b><small>' + esc(it.description || '') + '</small></div><span>No old certificate</span></div>' +
       (os === 'searching' ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking for last year\'s certificate…</b></div>'
         : '<div class="note warnbox">' + (os === 'found' ? 'Last year\'s certificate was found but its readings could not be read.' : 'Last year\'s certificate of this code was not found' + ((it.old && it.old.note) ? ' – ' + esc(it.old.note) : '') + '.') + '</div>' +
           '<div class="cf"><button class="btn" id="oAgain">Search again</button><button class="btn ghost" id="oCert">Use an old cert. no.</button></div>' +
-          '<div class="small" style="margin-top:10px">If it is a new device, start with “Edit item” and add its points later.</div><div class="cf"><button class="btn ghost" id="eItem">Edit item</button></div>') + '</div>';
-    $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : 'Back') + '</button><button class="btn blue" id="cnx">' + (p.ci === L.length - 1 ? 'Make the files' : 'Skip ›') + '</button>';
+          '<h5>Similar devices from last year</h5>' + (it.simBusy ? '<div class="okline"><span class="spin dark"></span> Looking for similar devices…</div>' : (it.simList || []).length ? '<div class="list">' + it.simList.map(function (x, i) { return '<button class="row" data-sim="' + i + '"><span class="t"><b>' + esc(x.name) + '</b><small>' + esc([x.folder, x.snip].filter(Boolean).join(' · ').slice(0, 140)) + '</small></span><span class="pill">Use</span></button>'; }).join('') + '</div>' : '<div class="small">' + (it.description ? 'None found.' : 'Write the description (Edit item) to find similar devices.') + '</div>') +
+          '<div class="cf"><button class="btn ghost" id="eItem">Edit item</button></div>') + '</div>';
+    $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (p.ci === L.length - 1 ? 'All certificates' : 'Skip ›') + '</button>';
     var bind0 = function () { var x; if ((x = $('#cp'))) x.onclick = function () { to0(p.ci - 1); }; if ((x = $('#cn'))) x.onclick = function () { to0(p.ci + 1); }; $('#cj').onchange = function () { to0(+$('#cj').value); };
-      $('#cbk').onclick = function () { if (p.ci) to0(p.ci - 1); else gotoStep(p, 'det'); }; $('#cnx').onclick = function () { if (p.ci === L.length - 1) { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); } else to0(p.ci + 1); };
+      $('#cbk').onclick = function () { if (p.ci) to0(p.ci - 1); else toHub(p); }; $('#cnx').onclick = function () { if (p.ci === L.length - 1) toHub(p); else to0(p.ci + 1); };
       if ((x = $('#oAgain'))) x.onclick = function () { it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
       if ((x = $('#oCert'))) x.onclick = function () { var v = window.prompt('Old certificate number (e.g. 10/EP-3107-2025)', it.prevCert || ''); if (!v) return; it.prevCert = v.trim(); it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
-      if ((x = $('#eItem'))) x.onclick = function () { itemSheet(p, it.id); }; };
+      if ((x = $('#eItem'))) x.onclick = function () { itemSheet(p, it.id); };
+      $('#toHub').onclick = function () { toHub(p); };
+      $$('[data-sim]').forEach(function (b) { b.onclick = function () { var sm = it.simList[+b.dataset.sim]; it.old = { status: 'searching' }; tCertEd(p); useSimilar(p, it, sm).catch(function (e) { it.old = { status: 'missing', note: e.message }; toast(e.message, true); }).then(function () { if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); }; });
+      if (os !== 'searching' && it.description && !it.simList && !it.simBusy && spOn()) { it.simBusy = true; findSimilar(p, it).then(function (l) { it.simList = l; }).catch(function () { it.simList = []; }).then(function () { it.simBusy = false; if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); }); } };
     bind0(); return; }
   var o = it.old, f = o.fields || {}, d = resDec(it), rdq = refDec(p, it); it.nv = it.nv || {};
   var byId = {}; labDevices().forEach(function (x) { byId[x.id] = x; }); if (it.refs == null) { var op = refOptions(p, it)[0]; it.refs = op ? [op.d.id] : []; }
@@ -1685,12 +1689,13 @@ function tCertEd(p) { var L = p.items.filter(function (i) { return i.code || i.d
     '<div class="cf" style="margin-top:10px"><button class="btn ghost sm" id="sameRef">Ref = last year\'s points</button><button class="btn ghost sm" id="eItem">Edit item</button></div>' +
     '<table class="kvt" style="margin-top:12px">' + kv('Calibrated by', esc(inf.tech || '—'), 'Approved by', esc(g.approver)) + '</table></div>';
   var last = p.ci === L.length - 1;
-  $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : 'Back') + '</button><button class="btn blue" id="cnx">' + (last ? 'Make the files' : 'Next certificate ›') + '</button>';
+  $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (it.saved ? 'Saved ✓ · Preview' : 'Preview & save') + '</button>';
   var to = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
   $('#cp').onclick = function () { to(p.ci - 1); }; $('#cn').onclick = function () { to(p.ci + 1); }; $('#cj').onchange = function () { to(+$('#cj').value); };
-  $('#cbk').onclick = function () { if (p.ci) to(p.ci - 1); else gotoStep(p, 'det'); };
+  $('#cbk').onclick = function () { if (p.ci) to(p.ci - 1); else toHub(p); }; $('#toHub').onclick = function () { toHub(p); };
   $('#cnx').onclick = function () { if (!certDone(it) && !confirm0) { confirm0 = 1; return dialog('Some readings are empty', 'Go on anyway? You can come back to this certificate.', 'Go on').then(function (y) { confirm0 = 0; if (y) nx(); }); } nx(); };
-  var confirm0 = 0, nx = function () { if (last) { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); } else to(p.ci + 1); };
+  var confirm0 = 0, nx = function () { certPreview(p, it, function () { var k = -1; for (var i = 0; i < L.length; i++) { var j = (p.ci + 1 + i) % L.length; if (!L[j].saved) { k = j; break; } }
+      toast('Saved – ' + savedN(p) + ' of ' + L.length + ' done'); if (k < 0) toHub(p); else to(k); }); };
   $$('[data-rf]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rf, k = it.refs.indexOf(id); if (k >= 0) it.refs.splice(k, 1); else { it.refs.push(id); var x = byId[id]; if (x && refExpired(x, inf)) toast('This reference\'s certificate is expired!', true); } it.refAuto = false; syncRefs(p); tCertEd(p); }; });
   $('#rOther').onclick = function () { pickRef(p, it, function () { syncRefs(p); tCertEd(p); }); };
   $('#eItem').onclick = function () { itemSheet(p, it.id); };
@@ -1725,6 +1730,70 @@ function autoStart(p, done) { var g = genDefaults(p); if (String(g.start).trim()
   g.autoTried = 1; lastCertNo(p).then(function (r) { if (r && r.n && !String(g.start).trim()) { g.start = String(r.n + 1); g.lastSeen = r; saveProjects(); toast('Certificate numbers continue after ' + certNo(g, r.n)); } done && done(); }).catch(function () { done && done(); }); }
 function padTo(v, d) { if (d == null || !isNum(v)) return v; var s = String(v).trim().replace(',', '.'); return decOf(s) < d ? numv(s).toFixed(d) : s; }
 function refDec(p, it) { var id = (it.refs || [])[0], r = id && p.info.refRes && p.info.refRes[id]; return isNum(r) ? decOf(r) : null; }
+
+/* ---------- v4: project hub – what is done, what is left ---------- */
+PHASES = [{ t: 'Company', s: ['company', 'date', 'dept', 'type', 'order'] }, { t: 'Codes', s: ['items'] }, { t: 'Certificates', s: ['cert', 'gen'] }];
+function phaseOf(s) { if (['certs', 'refs', 'det', 'cert', 'gen'].indexOf(s) >= 0) return 2; if (s === 'items') return 1; return 0; }
+function certList(p) { return (p.items || []).filter(function (i) { return i.code || i.description || i.old; }); }
+function cState(it) { var o = it.old || {}; if (it.saved) return 'saved'; if (o.status === 'searching') return 'loading'; if (!(o.points || []).length) return 'none'; var x = itemProg(it); return x.fil ? 'progress' : 'ready'; }
+var CST = { saved: ['Saved ✓', 'var(--office)', 'var(--office-soft)'], progress: ['In progress', 'var(--blue)', 'var(--blue-soft)'], ready: ['To do', 'var(--muted)', 'var(--oos-soft)'], loading: ['Loading…', 'var(--blue)', 'var(--blue-soft)'], none: ['No old cert', 'var(--danger)', 'var(--danger-soft)'] };
+function cPill(it) { var s = CST[cState(it)]; return '<span class="pill" style="--s-fg:' + s[1] + ';--s-bg:' + s[2] + '">' + s[0] + '</span>'; }
+function savedN(p) { return certList(p).filter(function (i) { return i.saved; }).length; }
+function phaseSum(p, i) {
+  if (i === 0) return p.company ? p.company.name + (p.info && p.info.cal ? ' · ' + dmy(p.info.cal) : '') : 'Choose the company';
+  if (i === 1) return (p.items || []).length ? p.items.length + (p.items.length === 1 ? ' code' : ' codes') : 'No codes yet';
+  var L = certList(p); return L.length ? savedN(p) + ' of ' + L.length + ' saved' : 'After the codes'; }
+function stepBar(p) { var cur = curStep(p), ci = phaseOf(cur), r = reach(p);
+  return '<div class="rail">' + PHASES.map(function (ph, i) { var first = ph.s[0], can = FIDX[first] <= r, done = i < ci;
+      return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
+    (PHASES[ci].s.length > 1 && ci === 0 ? '<div class="substeps">' + PHASES[ci].s.map(function (s) { var i = FIDX[s]; return '<button class="' + (s === cur ? 'on' : i <= r ? 'ok' : '') + '" data-step="' + s + '"' + (i > r ? ' disabled' : '') + '>' + (i < FIDX[cur] ? '✓ ' : '') + FLOW[i][1] + '</button>'; }).join('') + '</div>' : ''); }
+function gotoStep(p, s) { if (FIDX[s] > reach(p) && s !== 'cert') return; if (FIDX[s] <= FIDX.items) { p.stage = s; } else { p.stage = 'done'; p.tab = s; if (s === 'cert') p.ci = null; } p.reached = Math.max(p.reached || 0, FIDX[s]); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
+function toHub(p) { p.stage = 'done'; p.tab = 'cert'; p.ci = null; p.reached = Math.max(p.reached || 0, FIDX.cert); saveProjects(); render(); window.scrollTo(0, 0); }
+function renderOverview(p) {
+  ensureInfo(p); if (!p.tab || p.tab === 'over' || p.tab === 'read') p.tab = 'cert'; PT.tab = p.tab;
+  var L = certList(p), hub = p.tab === 'cert' && p.ci == null;
+  var titles = { certs: ['Old certificates', 'Last year\'s certificate of every code'], refs: ['References', 'A reference for every code'], det: ['Project details', 'Dates, technician and conditions'], cert: hub ? ['Certificates', savedN(p) + ' of ' + L.length + ' saved'] : ['Certificate ' + ((p.ci || 0) + 1) + ' of ' + L.length, savedN(p) + ' of ' + L.length + ' saved'], gen: ['Files', 'Covers, certificates and the receipt letter'] }[p.tab];
+  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div><div class="wiz-foot"><div id="cf"></div></div>';
+  bindStepBar(p); bindHome();
+  if (p.tab === 'det' || p.tab === 'certs' || p.tab === 'refs') { $('#cf').innerHTML = '<button class="btn blue" id="bh">‹ Back to the certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
+  if (p.tab === 'gen') { $('#cf').innerHTML = '<button class="btn ghost" id="bh">‹ Certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
+  if (p.tab === 'cert' && hub) return tHub(p);
+  ({ certs: tCerts, refs: tRefs, det: tDet, cert: tCertEd, gen: tGen })[p.tab](p);
+}
+function tHub(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p), n = savedN(p), left = L.length - n; queueOld(p); genGroups(p);
+  if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && p.ci == null && !sheetFn) tHub(p); });
+  var nxt = -1; for (var i = 0; i < L.length; i++) if (!L[i].saved) { nxt = i; break; }
+  var pct = L.length ? Math.round(n / L.length * 100) : 0;
+  var kv = function (a, b) { return '<div><small>' + a + '</small><b>' + (b || '—') + '</b></div>'; };
+  $('#pm').innerHTML = '<div class="bigprog"><div class="bp-top"><div><b>' + n + '</b><span> of ' + L.length + ' certificates saved</span></div><span class="bp-left">' + (L.length ? (left ? left + ' left' : 'All done ✓') : '') + '</span></div><div class="bp-bar"><i style="width:' + pct + '%"></i></div>' +
+      (L.length ? (nxt >= 0 ? '<button class="btn blue" id="hNext" style="width:100%;margin-top:12px">' + (n ? 'Continue: ' : 'Start: ') + esc(L[nxt].code || L[nxt].description) + ' ›</button>' : '<button class="btn" id="hFiles" style="width:100%;margin-top:12px">Make the files ›</button>') : '<button class="btn blue" id="hAdd0" style="width:100%;margin-top:12px">Add the codes ›</button>') + '</div>' +
+    '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Project details</h3><button class="btn ghost sm" id="hDet" style="flex:none">Edit</button></div>' +
+      '<div class="kvgrid">' + kv('Calibration', esc(dmy(inf.cal))) + kv('Date of issue', esc(dmy(inf.iss))) + kv('Received', esc(dmy(inf.rec))) + kv('Work order', esc(woNo(inf))) + kv('Technician', esc(inf.tech)) + kv('Conditions', esc(inf.eT + ' °C · ' + inf.eH + ' %RH')) + kv('Order', esc(p.orderType ? TYPES[p.orderType][0] + (p.order && p.order.number ? ' ' + p.order.number : '') : '')) + kv('First cert. no.', esc(String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : (g.autoTried || !spOn() ? 'not set' : 'finding…'))) + '</div></div>' +
+    '<div class="sec"><h2>Certificates</h2><small>' + L.length + '</small></div>' +
+    (L.length ? '<div class="list">' + L.map(function (it, i) { var f = (it.old || {}).fields || {};
+      return '<button class="row crow" data-ci="' + i + '"><span class="num' + (it.saved ? ' ok' : '') + '">' + (it.saved ? '✓' : i + 1) + '</span><span class="t"><b>' + esc(it.code || '—') + ' · ' + esc(it.description || f.description || '') + '</b><small>' + esc([it.certNo || '', (it.old && it.old.points && it.old.points.length) ? itemProg(it).fil + '/' + itemProg(it).tot + ' readings' : ''].filter(Boolean).join(' · ')) + '</small></span>' + cPill(it) + '</button>'; }).join('') + '</div>'
+      : '<div class="empty"><b>No codes yet</b>Add the codes first.</div>') +
+    '<div class="cf"><button class="btn ghost" id="hAdd">+ Add codes</button><button class="btn ghost" id="hFiles2">Make the files</button></div>';
+  $('#cf').innerHTML = '<button class="btn ghost" id="hBack">‹ Codes</button>' + (nxt >= 0 ? '<button class="btn blue" id="hGo">' + (n ? 'Continue ›' : 'Start ›') + '</button>' : '<button class="btn blue" id="hGo">Make the files ›</button>');
+  var open = function (i) { p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }, files = function () { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); };
+  $$('[data-ci]').forEach(function (b) { b.onclick = function () { open(+b.dataset.ci); }; });
+  var x; if ((x = $('#hNext'))) x.onclick = function () { open(nxt); }; if ((x = $('#hFiles'))) x.onclick = files; $('#hFiles2').onclick = files;
+  $('#hGo').onclick = function () { if (nxt >= 0) open(nxt); else files(); };
+  $('#hDet').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); };
+  var add = function () { go(p, 'items'); }; $('#hAdd').onclick = add; $('#hBack').onclick = add; if ((x = $('#hAdd0'))) x.onclick = add; }
+/* preview one certificate (cover + certificate) */
+function certPreview(p, it, onSave) { var n = parseInt(String(it.certNo || '').replace(/-\d{4}$/, '').match(/(\d+)$/) ? String(it.certNo).replace(/-\d{4}$/, '').match(/(\d+)$/)[1] : genDefaults(p).start, 10);
+  var p2 = Object.assign({}, p, { items: [it], machines: (p.machines || []).filter(function (m) { return m.id === it.machineId; }), gen: Object.assign({}, p.gen, { start: isNaN(n) ? '' : String(n) }) });
+  var html; try { html = printView(p2); } catch (e) { return toast('Preview failed: ' + e.message, true); }
+  genGroups(p);
+  openSheet(function () { return { title: 'Preview · ' + esc(it.code || it.description), body: '<div class="note">This is how the cover and the certificate will look. Check it, then <b>Save</b>.</div><iframe class="pv" id="pvf"></iframe>',
+    foot: '<button class="btn ghost" id="pvE">‹ Edit</button><button class="btn" id="pvS">' + (it.saved ? 'Saved ✓ – next' : 'Save ✓') + '</button>',
+    mount: function () { var f = $('#pvf'); f.srcdoc = html; f.onload = function () { try { var d = f.contentDocument; f.style.height = Math.max(600, d.documentElement.scrollHeight + 20) + 'px'; } catch (e) {} };
+      $('#pvE').onclick = closeSheet; $('#pvS').onclick = function () { it.saved = Date.now(); saveProjects(); closeSheet(); onSave(); }; } }; }); }
+function useSimilar(p, it, s) { return pdfPages(s.driveId, s.id).then(function (pages) { var toks = String((it.description || '') + ' ' + (it.manufacturer || '')).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = 0, bs = -1;
+    pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (sc > bs) { bs = sc; best = i; } });
+    var sec = [pages[best]]; for (var k = best + 1; k < pages.length && sec.length < 5 && /continue/i.test(pages[k].join(' ')); k++) sec.push(pages[k]);
+    return readSec(sec, 'Use the certificate whose description best matches "' + it.description + ' ' + (it.manufacturer || '') + '".').then(function (x) { it.old = { status: 'similar', file: s, fields: x.fields, points: x.points, dirs: x.dirs, at: Date.now() }; saveProjects(); }); }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
