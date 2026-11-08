@@ -74,8 +74,9 @@ var Core = (function () {
   function iso(now) { return new Date(now).toISOString(); }
   function pad(n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; }
   function personRef(u) { return { id: u.id, name: u.name }; }
-  function canKeep(actor) { return actor.role === 'admin' || actor.role === 'keeper'; }
-  function isAdmin(actor) { return actor.role === 'admin'; }
+  function isSuper(actor) { return actor.role === 'superadmin'; }
+  function canKeep(actor) { return actor.role === 'admin' || actor.role === 'keeper' || isSuper(actor); }
+  function isAdmin(actor) { return actor.role === 'admin' || isSuper(actor); }
   function devName(d) { return d.description + ' (S/N ' + d.serial + ')'; }
 
   function log(db, now, actor, d, action, extra) {
@@ -384,14 +385,21 @@ var Core = (function () {
     saveUser: function (db, actor, p, now) {
       need(isAdmin(actor), 'Only the admin can manage people.');
       var u = p.user || {}; need(u.name && String(u.name).trim(), 'Write the person\'s name.');
-      need(['admin', 'keeper', 'engineer'].indexOf(u.role) >= 0, 'Choose a role.');
+      need(['superadmin', 'admin', 'keeper', 'engineer'].indexOf(u.role) >= 0, 'Choose a role.');
       var ex = u.id ? byId(db.users, u.id) : null, pin = null;
+      /* Super admin: the safety account (e.g. the general manager). Only a super admin can change one,
+       * except that an admin may create the very first super admin. */
+      if (ex && isSuper(ex)) need(isSuper(actor), 'Only the super admin can change this account.');
+      if (u.role === 'superadmin' && !isSuper(actor)) {
+        var supers = db.users.filter(function (x) { return isSuper(x) && x.active !== false && (!ex || x.id !== ex.id); });
+        need(!supers.length, 'Only the super admin can make another super admin.');
+      }
       if (!ex) {
         ex = { id: 'U' + now }; pin = String(1000 + Math.floor(Math.random() * 9000));
         ex.pinHash = pinHash(ex.id, pin); ex.mustChange = true; db.users.push(ex);
       }
-      if (ex.id === actor.id) need(u.role === 'admin' && u.active !== false, 'You cannot remove your own admin access.');
-      ex.name = String(u.name).trim(); ex.role = u.role; ex.active = u.active !== false; ex.phone = u.phone || '';
+      if (ex.id === actor.id) need(u.role === actor.role && u.active !== false, 'You cannot change your own role or deactivate yourself.');
+      ex.name = String(u.name).trim(); ex.role = u.role; ex.active = u.active !== false; ex.phone = u.phone != null ? u.phone : (ex.phone || '');
       touch(db, 'users');
       return { id: ex.id, pin: pin };
     },
@@ -399,6 +407,7 @@ var Core = (function () {
     resetPin: function (db, actor, p) {
       need(isAdmin(actor), 'Only the admin can reset a PIN.');
       var u = byId(db.users, p.userId); need(u, 'Unknown person.');
+      need(!isSuper(u) || isSuper(actor), 'Only the super admin can reset this PIN.');
       var pin = String(1000 + Math.floor(Math.random() * 9000));
       u.pinHash = pinHash(u.id, pin); u.mustChange = true; touch(db, 'users');
       return { pin: pin };

@@ -154,8 +154,9 @@
   function names(list) { return (list || []).map(function (h) { return h.name; }).join(', '); }
   function can(what) {
     var r = S.me && S.me.role;
-    if (what === 'keep') return r === 'admin' || r === 'keeper';
-    if (what === 'admin') return r === 'admin';
+    if (what === 'super') return r === 'superadmin';
+    if (what === 'keep') return r === 'admin' || r === 'keeper' || r === 'superadmin';
+    if (what === 'admin') return r === 'admin' || r === 'superadmin';
     return true;
   }
   function matches(d, q) {
@@ -189,9 +190,9 @@
     var app = $('#app');
     function draw() {
       var people = (S.people || []).slice();
-      var order = { admin: 0, keeper: 1, engineer: 2 };
+      var order = { superadmin: -1, admin: 0, keeper: 1, engineer: 2 };
       people.sort(function (a, b) { return order[a.role] - order[b.role] || a.name.localeCompare(b.name); });
-      var roleName = { admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
+      var roleName = { superadmin: 'Super admin', admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
       app.innerHTML =
         (DEMO ? '<div class="demo">Preview with sample data — every PIN is 1234</div>' : '') +
         '<div class="login"><div class="login-top"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation">' +
@@ -680,7 +681,7 @@
 
   /* ---------- Me / admin ---------- */
   function viewMore() {
-    var role = { admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' }[S.me.role];
+    var role = { superadmin: 'Super admin', admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' }[S.me.role];
     var h = header('Me') + '<p class="hello">' + role + '<strong>' + esc(S.me.name) + '</strong></p></header><main>';
     h += '<div class="list" style="margin-top:6px">' +
       '<button class="row" data-act="pin"><span class="t"><b>Change my PIN</b><small>4 digits, only you know it</small></span></button>' +
@@ -899,7 +900,7 @@
     function draw() {
       container.innerHTML = '<div class="list">' + people.map(function (u) {
         var on = selected.indexOf(u.id) >= 0;
-        return '<button class="row' + (on ? ' sel' : '') + '" data-p="' + u.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span><span class="t"><b>' + esc(u.name) + '</b><small>' + ({ admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' })[u.role] + '</small></span></button>';
+        return '<button class="row' + (on ? ' sel' : '') + '" data-p="' + u.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span><span class="t"><b>' + esc(u.name) + '</b><small>' + ({ superadmin: 'Super admin', admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' })[u.role] + '</small></span></button>';
       }).join('') + '</div>';
       $$('[data-p]', container).forEach(function (b) {
         b.onclick = function () {
@@ -1250,10 +1251,10 @@
     openSheet(function (body, setFoot, setTitle) {
       setTitle('People & PINs');
       function draw() {
-        var order = { admin: 0, keeper: 1, engineer: 2 };
+        var order = { superadmin: -1, admin: 0, keeper: 1, engineer: 2 };
         var list = S.data.users.slice().sort(function (a, b) { return order[a.role] - order[b.role] || a.name.localeCompare(b.name); });
         body.innerHTML = '<div class="list">' + list.map(function (u) {
-          return '<button class="row" data-u="' + u.id + '"><span class="t"><b>' + esc(u.name) + (u.active === false ? ' (inactive)' : '') + '</b><small>' + ({ admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' })[u.role] + '</small></span></button>';
+          return '<button class="row" data-u="' + u.id + '"><span class="t"><b>' + esc(u.name) + (u.active === false ? ' (inactive)' : '') + '</b><small>' + ({ superadmin: 'Super admin', admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' })[u.role] + '</small></span></button>';
         }).join('') + '</div>';
         $$('[data-u]', body).forEach(function (b) { b.onclick = function () { editUser(IDX.user[b.dataset.u], draw); }; });
       }
@@ -1268,8 +1269,14 @@
       setTitle(u ? 'Edit person' : 'Add a person');
       body.innerHTML = '<label class="f"><span>Full name</span><input class="inp" id="nm" value="' + esc(f.name) + '"></label>' +
         '<div class="f"><span style="display:block;font-size:14px;color:var(--muted);margin-bottom:6px">Role</span><div class="seg" id="rl">' +
-        [['engineer', 'Engineer'], ['keeper', 'Lab keeper'], ['admin', 'Admin']].map(function (r) { return '<button data-r="' + r[0] + '" class="' + (f.role === r[0] ? 'on' : '') + '">' + r[1] + '</button>'; }).join('') + '</div></div>' +
-        '<div class="note" style="margin-top:14px">Engineers see everything and can move devices between companies. Lab keepers also check devices out and in. Admins manage people, companies and devices.</div>' +
+        (function () {
+          var rs = [['engineer', 'Engineer'], ['keeper', 'Lab keeper'], ['admin', 'Admin']];
+          var noSuper = !S.data.users.some(function (x) { return x.role === 'superadmin' && x.active !== false; });
+          if (can('super') || noSuper || f.role === 'superadmin') rs.push(['superadmin', 'Super admin']);
+          return rs;
+        })().map(function (r) { return '<button data-r="' + r[0] + '" class="' + (f.role === r[0] ? 'on' : '') + '">' + r[1] + '</button>'; }).join('') + '</div></div>' +
+        '<div class="note" style="margin-top:14px">Engineers see everything and can move devices between companies. Lab keepers also check devices out and in. Admins manage people, companies and devices. The super admin can do everything an admin does and is the only one who can change the super admin account — keep it for the general manager, to reset the admin PIN if it is forgotten.</div>' +
+        (u && u.role === 'superadmin' && !can('super') ? '<div class="note warnbox">Only the super admin can change this account.</div>' : '') +
         (u ? '<div class="seg"><button data-active class="' + (f.active ? '' : 'on') + '">' + (f.active ? 'Deactivate this person' : 'Inactive — tap to reactivate') + '</button><button data-reset>Reset PIN</button></div>' : '');
       $('#nm', body).oninput = function (e) { f.name = e.target.value; };
       $$('[data-r]', body).forEach(function (b) { b.onclick = function () { f.role = b.dataset.r; $$('[data-r]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });

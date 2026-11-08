@@ -158,7 +158,7 @@ function req(action, payload) { return Api.call({ action: action, userId: S.sess
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
   S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; return d; }); }
 function saveProjects() { LS.set('projects', S.projects); }
-var isAdmin = function () { return S.me && S.me.role === 'admin'; };
+var isAdmin = function () { return S.me && (S.me.role === 'admin' || S.me.role === 'superadmin'); };
 
 /* ================= Microsoft / SharePoint ================= */
 var SCOPES = ['User.Read', 'Files.ReadWrite.All', 'Sites.Read.All'];
@@ -228,7 +228,7 @@ function closeSheet() { sheetFn = null; renderSheet(); render(); }
 function renderLogin() {
   var pick = null, pin = '', app = $('#app');
   function draw() {
-    var people = (S.people || []).slice(), order = { admin: 0, keeper: 1, engineer: 2 }, roleName = { admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
+    var people = (S.people || []).slice(), order = { superadmin: -1, admin: 0, keeper: 1, engineer: 2 }, roleName = { superadmin: 'Super admin', admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
     people.sort(function (a, b) { return (order[a.role] - order[b.role]) || a.name.localeCompare(b.name); });
     app.innerHTML = '<div class="login"><div class="login-top"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation">' +
       '<h1><small>Akhnaton</small>Certificates</h1><p>Calibration certificates from last year\'s data.</p></div><div class="login-card"><div>' +
@@ -793,7 +793,7 @@ function suggestRefs(p) { var out = {}; labDevices().forEach(function (d) { var 
   return out; }
 function refResWarn(p) { return (p.info.refs || []).filter(function (id) { return !isNum(p.info.refRes[id]); }).length; }
 function tDet(p) {
-  var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin'; }), ds = labDevices(), q = norm(PT.rq || '');
+  var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin' || u.role === 'superadmin'; }), ds = labDevices(), q = norm(PT.rq || '');
   var cats = {}; ds.forEach(function (d) { (cats[d.category || 'Other'] = cats[d.category || 'Other'] || []).push(d); });
   $('#pm').innerHTML = '<div class="sec" style="margin-top:4px"><h2>Calibrated by</h2></div><div class="chips">' + people.map(function (u) { return '<button class="chip' + (inf.techId === u.id ? ' on' : '') + '" data-tech="' + u.id + '">' + esc(u.name) + '</button>'; }).join('') + '</div>' +
     '<div class="sec"><h2>Dates</h2><button class="btn ghost sm" id="chD">Change</button></div><dl class="kv"><dt>Calibration</dt><dd>' + dmy(inf.cal) + '</dd><dt>Work order</dt><dd>' + esc(woNo(inf) || '—') + '</dd><dt>Date of issue</dt><dd>' + dmy(inf.iss) + '</dd><dt>Date received</dt><dd>' + dmy(inf.rec) + '</dd></dl>' +
