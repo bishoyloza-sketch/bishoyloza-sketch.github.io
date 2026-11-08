@@ -773,7 +773,7 @@ function dmy(s) { var d = s2d(s); if (!d) return '—'; var z = function (n) { r
 function calcDates(inf) { var c = s2d(inf.cal); if (!c) return; inf.wo = d2s(prevWork(addDays(c, -7)));
   var iss = addWork(c, 3); if (iss.getMonth() !== c.getMonth()) { iss = prevWork(new Date(c.getFullYear(), c.getMonth() + 1, 0)); if (iss < c) iss = c; }
   inf.iss = d2s(iss); inf.rec = d2s(prevWork(addDays(iss, -7))); var du = new Date(c); du.setFullYear(du.getFullYear() + 1); inf.due = d2s(du); }
-function woNo(inf) { return inf.wo ? (inf.woPre ? inf.woPre + '/' : '') + dmy(inf.wo) : ''; }
+function woNo(inf) { if (inf.woText) return inf.woText; return inf.wo ? (inf.woPre ? inf.woPre + '/' : '') + dmy(inf.wo) : ''; }
 function dateWarns(inf) { var w = [], yr = new Date().getFullYear(), nm = { wo: 'Work order', iss: 'Date of issue', rec: 'Date received', cal: 'Calibration date' };
   ['wo', 'iss', 'rec', 'cal'].forEach(function (k) { var d = s2d(inf[k]); if (d && d.getFullYear() < yr) w.push(nm[k] + ' is from an old year (' + d.getFullYear() + ')'); if (d && !isWork(d) && k !== 'cal') w.push(nm[k] + ' is not a working day'); });
   var c = s2d(inf.cal), i = s2d(inf.iss); if (c && i && i.getMonth() !== c.getMonth()) w.push('Date of issue is not in the calibration month'); if (c && i && i < c) w.push('Date of issue is before the calibration date'); return w; }
@@ -1675,6 +1675,8 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   var cal = it.calDate || inf.cal, cdt = s2d(cal), due = cdt ? MON[cdt.getMonth()] + ' ' + (cdt.getFullYear() + 1) : '', mon = cdt ? MON[cdt.getMonth()] + ' ' + cdt.getFullYear() : '';
   var kv = function (a, b, c, e) { return '<tr><th>' + a + '</th><td>' + (b || '—') + '</td>' + (c ? '<th>' + c + '</th><td>' + (e || '—') + '</td>' : '<td colspan="2"></td>') + '</tr>'; };
   var kv2 = function (a, b, c, e) { return '<tr><th>' + a + '</th><td>' + (b || '—') + '</td></tr>' + (c ? '<tr><th>' + c + '</th><td>' + (e || '—') + '</td></tr>' : ''); };
+  var DT = function (k, v) { return '<input type="date" class="pin" data-ef="' + k + '" value="' + esc(v || '') + '">'; };
+  var SEL = function (k, v) { var names = peopleNames(); if (v && names.indexOf(cleanName(v)) < 0) names.unshift(cleanName(v)); return '<select class="pin" data-ef="' + k + '"><option value="">— choose —</option>' + names.map(function (n) { return '<option' + (cleanName(v) === n ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>'; };
   var E = function (k, v, bold) { return '<input class="pin' + (bold ? ' b' : '') + '" data-ef="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="—">'; };
   if (!o.cleaned) { Object.keys(f).forEach(function (k) { if (typeof f[k] === 'string') f[k] = cleanVal(f[k]); }); o.cleaned = 1; saveProjects(); }
   var dirs = o.dirs === 2 ? [1, 2] : [1];
@@ -1686,14 +1688,14 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
       '<ol><li' + (it.refs.length ? ' class="ok"' : '') + '>Check the standard</li><li' + (pr0.fil === pr0.tot ? ' class="ok"' : '') + '>Type the new <b>Ref</b> and <b>Reading</b> in the yellow boxes (' + pr0.fil + ' / ' + pr0.tot + ')</li><li>Next certificate</li></ol>' +
       '<div class="small">Resolution <b>' + esc(it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution || '—') + '</b> – readings get ' + (d == null ? 'the typed' : d) + ' decimal' + (d === 1 ? '' : 's') + ' automatically.</div></div>' +
     '<div class="paper"><div class="ph-top"><div><b>AKHNATON</b><small>Trading and Representation · Calibration Lab.</small></div><span>Calibration Certificate</span></div>' +
-    '<table class="kvt">' + kv('Certificate No.', '<b>' + esc(it.certNo || (g.autoTried || !spOn() ? '— set it in Files' : 'finding…')) + '</b>', 'Date of issue', esc(dmy(inf.iss))) + kv('Customer', esc(p.company.official || p.company.name), 'Customer ID', esc(p.company.code || '')) + kv('Date received', esc(dmy(inf.rec)), 'Work order No.', esc(woNo(inf))) + '</table>' +
-    '<h5>Data of item to be calibrated <small>tap any value to change it</small></h5><table class="kvt">' + kv2('Manufacturer', E('manufacturer', it.manufacturer || f.manufacturer), 'Calibration date', esc(mon)) + kv2('Description', E('description', it.description || f.description), 'Due date', esc(due)) + kv2('Code', E('code', it.code), 'Interval', E('interval', g.interval)) + kv2('Model', E('model', it.model || f.model), 'Serial', E('serial', it.serial || f.serial)) + kv2('Range', E('range', rangeText(it) || f.range), 'Cal. range', E('calRange', calText(it) || f.calRange || 'Full range')) + kv2('Resolution', E('resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution, 1), 'Accepted limits', E('limits', f.limits)) + kv2('Procedure No.', E('procedure', f.procedure), 'Data sheet ref.', E('dsr', dsRef(p, it))) + kv2('Location', E('loc', g.loc), 'Received status', 'In A Good Condition') + '</table>' +
+    '<table class="kvt kv2">' + kv2('Certificate No.', '<b>' + esc(it.certNo || (g.autoTried || !spOn() ? '— set it in Files' : 'finding…')) + '</b>', 'Calibration date', DT('calDate', it.calDate || inf.cal)) + kv2('Date of issue', DT('iss', inf.iss), 'Date received', DT('rec', inf.rec)) + kv2('Work order No.', E('wo', woNo(inf)), 'Customer', E('customer', p.company.official || p.company.name)) + kv2('Customer ID', E('custId', p.company.code), 'Due date', esc(due)) + '</table>' +
+    '<h5>Data of item to be calibrated <small>tap any value to change it</small></h5><table class="kvt">' + kv2('Manufacturer', E('manufacturer', it.manufacturer || f.manufacturer)) + kv2('Description', E('description', it.description || f.description)) + kv2('Code', E('code', it.code), 'Interval', E('interval', g.interval)) + kv2('Model', E('model', it.model || f.model), 'Serial', E('serial', it.serial || f.serial)) + kv2('Range', E('range', rangeText(it) || f.range), 'Cal. range', E('calRange', calText(it) || f.calRange || 'Full range')) + kv2('Resolution', E('resolution', it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution, 1), 'Accepted limits', E('limits', f.limits)) + kv2('Procedure No.', E('procedure', f.procedure), 'Data sheet ref.', E('dsr', dsRef(p, it))) + kv2('Location', E('loc', g.loc), 'Received status', 'In A Good Condition') + '</table>' +
     '<h5>Standard(s) used</h5><div class="chips" style="margin:0">' + refOptions(p, it).slice(0, 5).map(function (x) { var on = it.refs.indexOf(x.d.id) >= 0; return '<button class="chip' + (on ? ' on' : '') + '" data-rf="' + x.d.id + '">' + esc(x.d.manufacturer + ' ' + x.d.model) + ' · ' + esc(String(x.d.serial).slice(-6)) + (x.ex ? ' · expired' : '') + '</button>'; }).join('') +
       it.refs.filter(function (id) { return !refOptions(p, it).some(function (x) { return x.d.id === id; }); }).map(function (id) { var x = byId[id]; return x ? '<button class="chip on" data-rf="' + id + '">' + esc(x.manufacturer + ' ' + x.model) + '</button>' : ''; }).join('') + '<button class="chip" id="rOther">Other…</button></div>' +
-    '<div class="small" style="margin-top:8px">Environment: ' + esc(inf.eT) + ' °C · ' + esc(inf.eH) + ' %RH · ' + esc(inf.eLoc || '') + '</div>' +
+    '<h5>Environmental conditions</h5><table class="kvt kv2">' + kv2('Temperature (°C)', E('eT', inf.eT), 'Humidity (%RH)', E('eH', inf.eH)) + kv2('Place', E('eLoc', inf.eLoc)) + '</table>' +
     '<h5>Results <small>grey = last year · type the new values</small></h5><div style="overflow-x:auto"><table class="rt"><tr><th>Point / limit</th><th>Ref</th><th>Reading</th><th>Dev</th><th></th></tr>' + rows + '</table></div>' +
     '<div class="cf" style="margin-top:10px"><button class="btn ghost sm" id="sameRef">Ref = last year\'s points</button><button class="btn ghost sm" id="eItem">Edit item</button></div>' +
-    '<table class="kvt" style="margin-top:12px">' + kv('Calibrated by', esc(inf.tech || '—'), 'Approved by', esc(g.approver)) + '</table></div>';
+    '<h5>Signatures</h5><table class="kvt kv2">' + kv2('Calibrated by', SEL('tech', inf.tech), 'Position', E('techPos', g.techPos)) + kv2('Approved by', SEL('approver', g.approver), 'Position', E('approverPos', g.approverPos)) + '</table></div>';
   var last = p.ci === L.length - 1;
   $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (it.saved ? 'Saved ✓ · Preview' : 'Preview & save') + '</button>';
   var to = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
@@ -1811,6 +1813,9 @@ function useSimilar(p, it, s) { return pdfPages(s.driveId, s.id).then(function (
 
 
 /* ---------- editable certificate fields ---------- */
+function cleanName(n) { return String(n || '').replace(/^\s*(eng\.?|m\/|dr\.?)\s*/i, '').trim(); }
+function peopleNames() { var a = []; (S.people || []).forEach(function (u) { var n = cleanName(u.name); if (n && a.indexOf(n) < 0) a.push(n); }); return a; }
+
 function cleanVal(v) { return String(v).replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').replace(/(\d)\s*:\s*(-?\d)/g, '$1 : $2').replace(/\bn\s*\/\s*a\b/ig, 'N/A').replace(/\s+([,.;])(\s|$)/g, '$1$2').trim(); }
 function setField(p, it, k, v, done) { var o = it.old || (it.old = { fields: {}, points: [] }), f = o.fields || (o.fields = {}), g = genDefaults(p); v = cleanVal(v);
   var one = function (x) { var fx = (x.old && x.old.fields) || null;
@@ -1818,6 +1823,17 @@ function setField(p, it, k, v, done) { var o = it.old || (it.old = { fields: {},
   var ask = function (label) { var others = certList(p).filter(function (x) { return x !== it; }).length; if (!others) { one(it); saveProjects(); return done(); }
     dialog('Change ' + label + ' in all certificates?', '<b>' + esc(v || '(empty)') + '</b><br>Use it for all ' + (others + 1) + ' certificates of this project, or only this one?', 'All certificates', 'Only this one').then(function (all) { (all ? certList(p) : [it]).forEach(one); saveProjects(); toast(label + (all ? ' changed in all certificates' : ' changed in this certificate')); done(); }); };
   if (k === 'procedure') return ask('Procedure No.'); if (k === 'dsr') return ask('Data sheet ref.'); if (k === 'limits') return ask('Accepted limits');
+  var inf = ensureInfo(p);
+  if (k === 'calDate') { if (!v) return done(); if (!certList(p).some(function (x) { return x !== it; })) { inf.cal = v; calcDates(inf); saveProjects(); return done(); }
+    return dialog('Change the calibration date?', '<b>' + esc(dmy(v)) + '</b> – for all certificates (issue date, work order and received date follow it), or only this one?', 'All certificates', 'Only this one').then(function (all) { if (all) { inf.cal = v; calcDates(inf); certList(p).forEach(function (x) { delete x.calDate; }); toast('Dates updated for all certificates'); } else { it.calDate = v; toast('Calibration date changed for this certificate'); } saveProjects(); done(); }); }
+  if (k === 'iss' || k === 'rec') { if (!v) return done(); inf[k] = v; toast((k === 'iss' ? 'Date of issue' : 'Date received') + ' changed for all certificates'); saveProjects(); return done(); }
+  if (k === 'wo') { inf.woText = v; toast('Work order No. changed for all certificates'); saveProjects(); return done(); }
+  if (k === 'customer') { p.company.official = v; toast('Customer name changed for all certificates'); saveProjects(); return done(); }
+  if (k === 'custId') { p.company.code = v; saveProjects(); return done(); }
+  if (k === 'eT' || k === 'eH' || k === 'eLoc') { if (k !== 'eLoc' && !isNum(v)) { toast('Write a number', true); return done(); } inf[k] = v; toast('Conditions changed for all certificates'); saveProjects(); return done(); }
+  if (k === 'tech') { inf.tech = v; var u = (S.people || []).filter(function (x) { return cleanName(x.name) === v; })[0]; inf.techId = u ? u.id : ''; saveProjects(); return done(); }
+  if (k === 'approver') { g.approver = v ? 'Eng. ' + v : ''; saveProjects(); return done(); }
+  if (k === 'techPos' || k === 'approverPos') { g[k] = v; saveProjects(); return done(); }
   if (k === 'interval') { g.interval = v; toast('Interval changed for all certificates'); }
   else if (k === 'loc') { g.loc = v; toast('Location changed for all certificates'); }
   else if (k === 'range') { var r = rngNums(v); if (!r) { toast('Write the range like (0 : 5200) g', true); return done(); } it.rMin = r.lo; it.rMax = r.hi; if (r.u) it.unit = r.u; f.range = v; }
@@ -1825,6 +1841,31 @@ function setField(p, it, k, v, done) { var o = it.old || (it.old = { fields: {},
   else if (k === 'resolution') { var m = v.match(/(\d*\.?\d+)\s*(.*)$/); if (!m) { toast('Resolution must be a number + unit, e.g. 0.01 g', true); return done(); } it.res = m[1]; it.resUnit = unitKey(m[2] || it.unit || ''); f.resolution = v; }
   else { it[k] = v; }
   saveProjects(); done(); }
+
+function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNames();
+  var sel = function (k, v) { var n = names.slice(); if (v && n.indexOf(cleanName(v)) < 0) n.unshift(cleanName(v)); return '<select class="fin" data-d="' + k + '"><option value="">— choose —</option>' + n.map(function (x) { return '<option' + (cleanName(v) === x ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>'; };
+  var fld = function (label, inner, hint) { return '<label class="fld"><span>' + label + '</span>' + inner + (hint ? '<em>' + hint + '</em>' : '') + '</label>'; };
+  var inp = function (k, v, t, extra) { return '<input class="fin" data-d="' + k + '" type="' + (t || 'text') + '" value="' + esc(v == null ? '' : v) + '"' + (extra || '') + '>'; };
+  $('#pm').innerHTML =
+    '<div class="dcard"><div class="dh"><b>Dates</b><small>Changing the calibration date updates the others</small></div><div class="dgrid">' +
+      fld('Calibration date', inp('cal', inf.cal, 'date')) + fld('Date of issue', inp('iss', inf.iss, 'date'), '3–4 working days after') +
+      fld('Date received', inp('rec', inf.rec, 'date')) + fld('Work order date', inp('wo', inf.wo, 'date'), 'about a week before') + '</div>' +
+      '<div class="dgrid one">' + fld('Work order No.', inp('woText', woNo(inf))) + '</div></div>' +
+    '<div class="dcard"><div class="dh"><b>Signatures</b><small>Shown at the end of every certificate</small></div><div class="dgrid">' +
+      fld('Calibrated by', sel('tech', inf.tech)) + fld('Position', inp('techPos', g.techPos)) + fld('Approved by', sel('approver', g.approver)) + fld('Position', inp('approverPos', g.approverPos)) + '</div></div>' +
+    '<div class="dcard"><div class="dh"><b>Environmental conditions</b><small>Default 21 °C · 55 %RH</small></div><div class="dgrid three">' +
+      fld('Temperature °C', inp('eT', inf.eT, 'text', ' inputmode="decimal"')) + fld('Humidity %RH', inp('eH', inf.eH, 'text', ' inputmode="decimal"')) + fld('Place', inp('eLoc', inf.eLoc)) + '</div></div>' +
+    '<div class="dcard"><div class="dh"><b>For every certificate</b><small>You can still change one certificate on its page</small></div><div class="dgrid">' +
+      fld('Calibration interval', inp('interval', g.interval)) + fld('Location', inp('loc', g.loc)) + '</div></div>';
+  $$('[data-d]').forEach(function (e) { e.onchange = function () { var k = e.dataset.d, v = e.value.trim();
+    if (k === 'cal') { if (!v) return; inf.cal = v; calcDates(inf); saveProjects(); toast('Issue, received and work order dates updated'); return tDet(p); }
+    if (k === 'iss' || k === 'rec' || k === 'wo') { if (v) inf[k] = v; if (k === 'wo') inf.woText = ''; saveProjects(); return tDet(p); }
+    if (k === 'woText') { inf.woText = v === woNo(Object.assign({}, inf, { woText: '' })) ? '' : v; }
+    else if (k === 'tech') { inf.tech = v; var u = (S.people || []).filter(function (x) { return cleanName(x.name) === v; })[0]; inf.techId = u ? u.id : ''; }
+    else if (k === 'approver') g.approver = v ? 'Eng. ' + v : '';
+    else if (k === 'eT' || k === 'eH') { if (!isNum(v)) { toast('Write a number', true); return tDet(p); } inf[k] = v; }
+    else if (k === 'eLoc') inf.eLoc = v; else g[k] = v;
+    saveProjects(); toast('Saved'); }; }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
