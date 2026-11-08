@@ -1,5 +1,5 @@
 /* App shell cache: the app opens instantly; data always comes live from the server. */
-var CACHE = 'akh-devices-v15';
+var CACHE = 'akh-devices-v16';
 var SHELL = ['./', './index.html', './app.css', './app.js', './core.js', './config.js', './logo.png', './logo-en-light.png', './jspdf.umd.min.js', './icon-192.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
@@ -9,7 +9,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== location.origin) return; // API + fonts go to network
-  e.respondWith(fetch(e.request).then(function (r) {
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(function (r) {
     var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, copy); }); return r;
   }).catch(function () { return caches.match(e.request); }));
 });
