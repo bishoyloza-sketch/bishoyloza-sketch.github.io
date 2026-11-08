@@ -272,3 +272,12 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 
 .printbtn.xl{color:#1C7C45;margin-left:-4px}
 .sortbar{flex-wrap:nowrap}.sortbar>span{white-space:nowrap;font-size:13px}.sortseg button{white-space:nowrap;padding:6px 10px}
+
+.placesum .ks{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.placesum .ks.out b{color:var(--client)}
+.kitnums{display:flex;gap:10px;margin-top:3px;font-size:13.5px;flex-wrap:wrap}
+.kitnums em{font-style:normal;color:var(--muted)}
+.kitnums em.in{color:var(--office);font-weight:700}.kitnums em.ot{color:var(--client);font-weight:700}
+.kbar{display:block;height:6px;border-radius:3px;background:var(--office-soft);margin-top:7px;overflow:hidden}
+.kbar i{display:block;height:100%;background:var(--client)}
+.nav a{font-size:11.5px}

@@ -176,6 +176,7 @@
     activity: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>',
     more: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
     pdf: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 14h6M9 17h4"/></svg>',
+    kits: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 8V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3M4 12h16M10 12v2h4v-2"/></svg>',
     link: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>'
   };
 
@@ -308,11 +309,12 @@
     if (v === 'home') html += viewHome();
     else if (v === 'devices') html += viewDevices();
     else if (v === 'activity') html += viewActivity();
+    else if (v === 'kits') html += viewKits();
     else html += viewMore();
     html += '</div>';
-    if (v === 'home' || v === 'devices') html += '<button class="btn fab" id="fab">' + ICON.out + (can('keep') ? 'Check out' : 'Request devices') + '</button>';
+    if (v === 'home' || v === 'devices' || v === 'kits') html += '<button class="btn fab" id="fab">' + ICON.out + (can('keep') ? 'Check out' : 'Request devices') + '</button>';
     html += '<nav class="nav" aria-label="Main"><div>' + [
-      ['home', 'Today', ICON.home], ['devices', 'Devices', ICON.devices], ['activity', 'Activity', ICON.activity], ['more', 'Me', ICON.more]
+      ['home', 'Today', ICON.home], ['devices', 'Devices', ICON.devices], ['kits', 'Loggers', ICON.kits], ['activity', 'Activity', ICON.activity], ['more', 'Me', ICON.more]
     ].map(function (n) {
       return '<a href="#' + n[0] + '" class="' + (v === n[0] ? 'on' : '') + '"' + (v === n[0] ? ' aria-current="page"' : '') + '>' + n[2] + n[1] +
         (n[0] === 'home' && pend ? '<span class="badge">' + pend + '</span>' : '') + '</a>';
@@ -453,7 +455,103 @@
   }
 
   /* ---------- Devices ---------- */
-  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['kits', 'Loggers & kits'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+  /* ---------- Loggers & kits tab: each group with in / out and who has what ---------- */
+  var KIT_TABS = [['Data Loggers', 'Loggers'], ['Validator Sensors', 'Validation'], ['Connections', 'Connections'], ['Tools & Accessories', 'Tools']];
+  function kitGroup() { return S.kgrp || 'Data Loggers'; }
+  function kitData(g) {
+    var types = stockList().filter(function (x) { return x.group === g; }).map(function (st) {
+      var out = stockOut(st.id), free = stockFree(st);
+      return { st: st, out: out, free: free, total: st.total === '' ? null : +st.total };
+    });
+    var hs = holdings().filter(function (h) { return h.group === g && +h.qty > 0; });
+    var byCo = {};
+    hs.forEach(function (h) { (byCo[h.companyId] = byCo[h.companyId] || []).push(h); });
+    var sites = Object.keys(byCo).map(function (k) {
+      var list = byCo[k], people = {}, since = '';
+      list.forEach(function (h) { (h.holders || []).forEach(function (p) { people[p.name] = 1; }); if (!since || h.since < since) since = h.since; });
+      return { coId: k, name: coName(k), list: list, qty: list.reduce(function (a, h) { return a + (+h.qty); }, 0), people: Object.keys(people), since: since };
+    }).sort(function (a, b) { return b.qty - a.qty; });
+    var out = hs.reduce(function (a, h) { return a + (+h.qty); }, 0);
+    var known = types.filter(function (t) { return t.total != null; });
+    var inLab = known.reduce(function (a, t) { return a + t.free; }, 0);
+    var total = known.reduce(function (a, t) { return a + t.total; }, 0);
+    return { types: types, sites: sites, out: out, inLab: known.length ? inLab : null, total: known.length ? total : null };
+  }
+  function viewKits() {
+    var g = kitGroup(), K = kitData(g);
+    var h = header('Loggers & kits') + '</header><main>' +
+      '<div class="filters" role="tablist">' + KIT_TABS.map(function (t) { return '<button class="fbtn' + (g === t[0] ? ' on' : '') + '" data-kgrp="' + esc(t[0]) + '">' + esc(t[1]) + '</button>'; }).join('') + '</div>' +
+      '<div class="placesum"><div class="ks"><b>' + (K.inLab == null ? '—' : K.inLab) + '</b><span>in the lab</span></div><div class="ks out"><b>' + K.out + '</b><span>outside</span></div><div class="ks"><b>' + (K.total == null ? '—' : K.total) + '</b><span>total</span></div></div>' +
+      '<div class="sortbar" style="margin-top:12px"><span>' + esc(g) + '</span><button class="printbtn" data-kpdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-kxls>' + ICON.pdf + 'Excel</button></div>' +
+      '<div class="sec"><h2>In the lab / outside</h2></div><div class="list">' +
+      (K.types.length ? K.types.map(function (t) {
+        var pct = t.total ? Math.round(t.out / t.total * 100) : 0;
+        return '<div class="row kitrow"><span class="t"><b>' + esc(t.st.name) + '</b>' +
+          '<span class="kitnums"><em class="in">' + (t.free == null ? '—' : t.free) + ' in</em><em class="ot">' + t.out + ' out</em><em>' + (t.total == null ? 'total not set' : t.total + ' total') + '</em></span>' +
+          (t.total ? '<span class="kbar"><i style="width:' + Math.min(100, pct) + '%"></i></span>' : '') + '</span></div>';
+      }).join('') : '<div class="row"><span class="t"><small>No types yet — the admin adds them from Me › Loggers, sensors &amp; kits.</small></span></div>') + '</div>' +
+      '<div class="sec"><h2>Who has them</h2><small>' + K.out + ' outside</small></div>';
+    if (!K.sites.length) h += '<div class="empty"><b>Everything is in the lab.</b>Nothing from this group is outside right now.</div>';
+    K.sites.forEach(function (st) {
+      h += '<div class="site" style="--c:var(--client)"><div class="site-h"><div><h3>' + esc(st.name) + '</h3>' +
+        '<div class="meta">With <b>' + esc(st.people.join(', ')) + '</b>' + (st.since ? ' · since ' + esc(when(st.since)) : '') + '</div></div><span class="cnt">' + st.qty + ' out</span></div>' +
+        '<div class="chips">' + itemChips(st.list) + '</div>' +
+        (can('keep') ? '<div class="site-f"><button class="btn sm" data-checkin="' + esc(st.coId) + '">Check in</button></div>' : '') + '</div>';
+    });
+    return h + '<div style="height:24px"></div></main>';
+  }
+  function kitsXls() {
+    var now = new Date(); toast('Preparing Excel…');
+    loadXlsx().then(function (X) {
+      var wb = X.utils.book_new();
+      KIT_TABS.forEach(function (t) {
+        var K = kitData(t[0]);
+        var aoa = [[t[0] + ' — as of ' + fmtDate(now) + ' ' + fmtTime(now)], [], ['Type', 'English name', 'Total', 'In the lab', 'Outside']]
+          .concat(K.types.map(function (x) { return [x.st.name, x.st.note || '', x.total == null ? '' : x.total, x.free == null ? '' : x.free, x.out]; }))
+          .concat([[], ['OUTSIDE NOW'], ['Company', 'Type', 'Qty', 'With', 'Since']]);
+        K.sites.forEach(function (st) { st.list.forEach(function (h) { aoa.push([st.name, h.name, +h.qty, names(h.holders), fmtDate(h.since)]); }); });
+        var ws = X.utils.aoa_to_sheet(aoa); ws['!cols'] = [30, 26, 10, 26, 12].map(function (w) { return { wch: w }; });
+        X.utils.book_append_sheet(wb, ws, t[1].slice(0, 30));
+      });
+      var blob = new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
+      pdfSheet(blob, 'Loggers and kits ' + stamp + '.xlsx', 'Loggers & kits', 'Loggers & kits', 'One sheet per group · in / out / who has them', 'Akhnaton loggers & kits', 'xlsx');
+    }).catch(function (e) { toast(e.message, true); });
+  }
+  function kitsPdf() {
+    if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
+    var g = kitGroup(), K = kitData(g), now = new Date();
+    loadLogo().then(function (logo) {
+      function lat(t) { return String(t || '').replace(/[^\x20-\x7E\u00A0-\u024F\u2013\u2014]/g, '').replace(/\s+/g, ' ').trim(); }
+      function nm(stockId, name) { var st = stockList().filter(function (x) { return x.id === stockId; })[0]; return lat(name) || (st && st.note) || 'Other item'; }
+      var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4' }), W = 210, M = 14, y = 14;
+      if (logo) { var lw = 46, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(19, 41, 75); doc.text(g + ' — in / out', W - M, y + 6, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90, 104, 121);
+      doc.text('As of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 12, { align: 'right' });
+      y += 22; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 8;
+      doc.setFontSize(11); doc.setTextColor(19, 41, 75); doc.setFont('helvetica', 'bold');
+      doc.text('In the lab: ' + (K.inLab == null ? '-' : K.inLab) + '     Outside: ' + K.out + '     Total: ' + (K.total == null ? '-' : K.total), M, y); y += 8;
+      function table(head, widths, rows) {
+        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9.5); doc.setFont('helvetica', 'bold');
+        var x = M + 2; head.forEach(function (t, i) { doc.text(t, x, y + 4.8); x += widths[i]; }); y += 7; doc.setFont('helvetica', 'normal'); doc.setTextColor(23, 34, 51);
+        rows.forEach(function (r, ri) {
+          var wr = r.map(function (t, i) { return doc.splitTextToSize(String(t), widths[i] - 2.5); }), hh = Math.max.apply(null, wr.map(function (w) { return w.length; })) * 4.3 + 3;
+          if (y + hh > 282) { doc.addPage(); y = 16; }
+          if (ri % 2) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, hh, 'F'); }
+          var x2 = M + 2; wr.forEach(function (w, i) { doc.text(w, x2, y + 4.6); x2 += widths[i]; }); y += hh;
+        });
+        y += 6;
+      }
+      table(['Type', 'Total', 'In the lab', 'Outside'], [92, 30, 30, 30], K.types.map(function (t) { return [nm(t.st.id, t.st.name), t.total == null ? '-' : t.total, t.free == null ? '-' : t.free, t.out]; }));
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(19, 41, 75); doc.text('Outside now', M, y); y += 4;
+      var rows = []; K.sites.forEach(function (st) { st.list.forEach(function (h) { rows.push([lat(st.name), nm(h.stockId, h.name), h.qty, lat(names(h.holders)), fmtDate(h.since)]); }); });
+      if (rows.length) table(['Company', 'Type', 'Qty', 'With', 'Since'], [52, 46, 14, 46, 24], rows); else { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('Nothing outside.', M, y + 5); }
+      var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
+      pdfSheet(doc.output('blob'), g.replace(/[^\w ]+/g, '').trim() + ' in-out ' + stamp + '.pdf', 'Loggers & kits', g, K.out + ' outside', 'Akhnaton ' + g);
+    });
+  }
   function kitsView() {
     var h = '';
     Core.STOCK_GROUPS.forEach(function (g) {
@@ -473,6 +571,7 @@
   }
   function bySerial(a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); }
   function filteredDevices() {
+    if (S.filter === 'kits') S.filter = 'all';
     var f = S.filter, q = S.q;
     return S.data.devices.filter(function (d) {
       if (d.active === false) return false;
@@ -587,10 +686,6 @@
       '<button class="row" data-act="pin"><span class="t"><b>Change my PIN</b><small>4 digits, only you know it</small></span></button>' +
       '<button class="row" data-act="refresh"><span class="t"><b>Refresh now</b><small>Last update ' + (S.lastSync ? when(S.lastSync) : '—') + ' · updates every 20 seconds</small></span></button>' +
       '</div>';
-    var site = (location.protocol === 'https:' && !DEMO) ? location.origin + '/' : 'https://bishoyloza-sketch.github.io/';
-    h += '<div class="sec"><h2>Website link</h2><small>open the app on any computer</small></div><div class="box linkbox" style="margin-top:0">' +
-      '<div class="url">' + esc(site) + '</div><div class="actions" style="grid-template-columns:1fr 1fr 1fr">' +
-      '<button class="btn sm" data-link="copy">Copy link</button><button class="btn sm ghost" data-link="share">Share</button><a class="btn sm ghost" href="' + esc(site) + '" target="_blank" rel="noopener" style="text-decoration:none">Open</a></div></div>';
     if (can('admin')) {
       h += '<div class="sec"><h2>Admin</h2></div><div class="list">' +
         '<button class="row" data-act="people"><span class="t"><b>People &amp; PINs</b><small>' + S.data.users.length + ' people · roles, new staff, reset PIN</small></span></button>' +
@@ -614,6 +709,9 @@
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
     $$('[data-listpdf]').forEach(function (b) { b.onclick = listPdf; });
     $$('[data-listxls]').forEach(function (b) { b.onclick = listXls; });
+    $$('[data-kgrp]').forEach(function (b) { b.onclick = function () { S.kgrp = b.dataset.kgrp; render(); }; });
+    $$('[data-kpdf]').forEach(function (b) { b.onclick = kitsPdf; });
+    $$('[data-kxls]').forEach(function (b) { b.onclick = kitsXls; });
     $$('[data-link]').forEach(function (b) {
       b.onclick = function () {
         var url = $('.linkbox .url').textContent;
@@ -1567,7 +1665,7 @@
   /* ================= boot ================= */
   function route() {
     var v = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0];
-    if (['home', 'devices', 'activity', 'more'].indexOf(v) < 0) v = 'home';
+    if (['home', 'devices', 'kits', 'activity', 'more'].indexOf(v) < 0) v = 'home';
     if (v !== S.view) { S.view = v; closeAll(); }
     render();
   }
