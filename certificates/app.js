@@ -27,7 +27,7 @@ function toast(t, bad) { var e = $('#toast'); e.textContent = t; e.className = (
 function dialog(title, msg, yes, no) { return new Promise(function (r) {
   $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>' + esc(title) + '</h3><p>' + msg + '</p><div class="cf"><button class="btn ghost" id="dN">' + esc(no || 'Cancel') + '</button><button class="btn" id="dY">' + esc(yes || 'Yes') + '</button></div></div></div>';
   var done = function (v) { $('#dlg-root').innerHTML = ''; r(v); }; $('#dY').onclick = function () { done(true); }; $('#dN').onclick = function () { done(false); }; }); }
-function pickFiles(accept, multi) { return new Promise(function (r) { var f = $('#fileIn'); f.accept = accept; f.multiple = !!multi; f.value = ''; f.onchange = function () { r(Array.prototype.slice.call(f.files)); }; f.click(); }); }
+function pickFiles(accept, multi, cam) { return new Promise(function (r) { var f = $('#fileIn'); f.accept = accept; f.multiple = !!multi && !cam; if (cam) f.setAttribute('capture', 'environment'); else f.removeAttribute('capture'); f.value = ''; f.onchange = function () { r(Array.prototype.slice.call(f.files)); }; f.click(); }); }
 function shrink(file, max, q) { return new Promise(function (res) { var img = new Image(), url = URL.createObjectURL(file);
   img.onload = function () { var k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', q || 0.8)); };
@@ -423,8 +423,9 @@ function wDept(p) {
 function wType(p) {
   $('#wm').innerHTML = '<div class="cats big">' + Object.keys(TYPES).map(function (k) { return '<button data-t="' + k + '" class="' + (p.orderType === k ? 'on' : '') + '">' + TYPES[k][1] + '<b>' + TYPES[k][0] + '</b><small>' +
     { contract: 'Yearly contract', po: 'The customer\'s PO', offer: 'Separate price offer', approval: 'General approval', visit: 'Single visit' }[k] + '</small></button>'; }).join('') + '</div>';
-  $$('[data-t]').forEach(function (b) { b.onclick = function () { if (p.orderType !== b.dataset.t) { p.orderFiles = null; p.order = null; } p.orderType = b.dataset.t; saveProjects(); go(p, 'order'); }; });
-  foot(p, 'Next', !!p.orderType, function () { go(p, 'order'); });
+  var next = function () { if (p.orderType === 'po') return go(p, 'order'); checkOrder(p); p.reached = Math.max(p.reached || 0, FIDX.order); go(p, 'items'); };
+  $$('[data-t]').forEach(function (b) { b.onclick = function () { if (p.orderType !== b.dataset.t) { p.orderFiles = null; p.order = null; } p.orderType = b.dataset.t; saveProjects(); next(); }; });
+  foot(p, 'Next', !!p.orderType, next);
 }
 
 /* ---- 4. order document from SharePoint ---- */
@@ -538,25 +539,23 @@ function rangeText(it) { if (!isNum(it.rMin) || !isNum(it.rMax)) return ''; retu
 function calText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + it.cMin + ' : ' + it.cMax + ') ' + (it.unit || ''); return rangeText(it) ? 'Full range' : ''; }
 function wItems(p) {
   p.items = p.items || []; p.machines = p.machines || []; setTimeout(function () { queueOld(p); }, 0);
-  if (!p.items.length && !p.lyAuto && spOn()) { p.lyAuto = 1; saveProjects(); setTimeout(function () { if (!sheetFn) lySearch(p, 'month'); }, 300); }
+  if (spOn() && !p.sugBat && !p.sugBusy) { p.sugBusy = 1; var cd1 = s2d((p.info && p.info.cal) || '') || new Date(), mo1 = p.sugMonth || { y: cd1.getFullYear() - 1, m: cd1.getMonth() }; certBatches(p, mo1.y, mo1.m).then(function (l) { p.sugBat = { y: mo1.y, m: mo1.m, n: l.length }; }).catch(function () { p.sugBat = { y: mo1.y, m: mo1.m, n: 0 }; }).then(function () { p.sugBusy = 0; saveProjects(); if (S.cur === p.id && p.stage === 'items' && !sheetFn) render(); }); }
   var loose = p.items.filter(function (i) { return !i.machineId; }), need = p.items.filter(function (i) { return itemIssues(i).length; }).length;
   var irow = function (it) { var iss = itemIssues(it); return '<button class="row" data-it="' + it.id + '">' + (it.photo ? '<img class="thumb" data-ph="' + it.photo + '" alt="">' : '') + '<span class="t"><b>' + esc(it.description || it.code || 'Photo') + '</b><small>' + esc([it.code && it.description ? it.code : '', rangeText(it), it.res && 'res ' + it.res + ' ' + (it.resUnit || it.unit)].filter(Boolean).join(' · ') || 'Tap to add the data') + '</small></span>' +
     (it.old && it.old.status === 'searching' ? '<span class="pill" style="--s-fg:var(--blue);--s-bg:var(--blue-soft)"><span class="spin dark" style="width:12px;height:12px;border-width:2px"></span> Last year…</span>'
       : it.old && it.old.status === 'found' ? '<span class="pill" style="--s-fg:var(--office);--s-bg:var(--office-soft)">' + ((it.old.file && it.old.file.year) || '') + ' cert ✓</span>'
       : it.old && (it.old.status === 'missing' || it.old.status === 'error') && (it.code || it.prevCert) ? '<span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">No old cert</span>'
       : iss.length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '</button>'; };
-  $('#wm').innerHTML = '<div class="card bar" style="--c:var(--blue)"><h3>Search last year</h3><div class="meta">Find what was calibrated before – then choose the codes</div><div class="cats three" style="margin-top:10px">' +
-    '<button data-a="month">' + I.visit + '<b>By month</b><small>Same month last year</small></button>' +
-    '<button data-a="code"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><b>By code</b><small>One or many codes</small></button>' +
-    '<button data-a="cert">' + I.doc + '<b>By cert. no.</b><small>Old certificate number</small></button></div></div>' +
-    '<div class="sec"><h2>Other ways</h2></div><div class="cats three">' +
-    '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Nameplates or a list</small></button>' +
-    '<button data-a="excel">' + I.xls + '<b>Excel</b><small>Fixed template</small></button>' +
-    '<button data-a="add">' + I.plus.replace(/22/g, '28') + '<b>Add item</b><small>Typed in</small></button></div>' +
+  var sb = p.sugBat;
+  $('#wm').innerHTML = '<div class="sec" style="margin-top:2px"><h2>Add the codes</h2><small>choose one way</small></div><div class="cats three">' +
+    '<button data-a="month" class="hl">' + I.visit + '<b>Suggested</b><small>' + (sb ? (sb.n ? sb.n + ' batches · ' + MON[sb.m] + ' ' + sb.y : 'Nothing in ' + MON[sb.m] + ' ' + sb.y) : spOn() ? 'Checking last year…' : 'Same month last year') + '</small></button>' +
+    '<button data-a="code"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><b>Search</b><small>By code or cert. no.</small></button>' +
+    '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Opens the camera</small></button></div>' +
+    '<div class="cf" style="margin-top:8px"><button class="btn ghost sm" data-a="excel">' + I.xls.replace(/width="\d+"|height="\d+"/g, '') + ' Excel template</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
     '<div class="sec"><h2>Codes</h2><small>' + p.items.length + (need ? ' · ' + need + ' need data' : '') + '</small></div>' +
     (p.machines.map(function (m) { var its = p.items.filter(function (i) { return i.machineId === m.id; });
       return '<div class="mach"><div class="mach-h"><span class="kind m">Machine</span><b>' + esc(m.name) + (m.code ? ' · ' + esc(m.code) : '') + '</b><button class="btn ghost sm" data-m="' + m.id + '">Open</button></div>' + (its.length ? its.map(irow).join('') : '<div class="row"><span class="t"><small>No instruments yet</small></span></div>') + '</div>'; }).join('')) +
-    (loose.length ? '<div class="list">' + loose.map(irow).join('') + '</div>' : (!p.machines.length ? '<div class="empty"><b>No codes yet</b>Search last year above, or use another way.</div>' : '')) +
+    (loose.length ? '<div class="list">' + loose.map(irow).join('') + '</div>' : (!p.machines.length ? '<div class="empty"><b>No codes yet</b>Use Suggested, Search or Photo above.</div>' : '')) +
     (need ? '<div class="small" style="margin-top:10px">Items with “Photo only” or “Missing data” can be completed later – before the readings.</div>' : '');
   $$('[data-ph]').forEach(function (im) { IDB.get(im.dataset.ph).then(function (d) { if (d) im.src = d; }); });
   $$('[data-a]').forEach(function (b) { b.onclick = function () { var k = b.dataset.a; if (k === 'month' || k === 'code' || k === 'cert') { if (!spOn()) return toast('SharePoint is not connected', true); return lySearch(p, k); } ({ photo: photoChoice, excel: excelSheet, add: addChoice })[k](p); }; });
@@ -637,13 +636,17 @@ function machineSheet(p, id, fresh) {
 
 /* photos: code list (read the codes) or nameplates (one item per photo) */
 function photoChoice(p) {
-  $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>What is in the photo?</h3><div class="cats one">' +
-    '<button id="phL">' + I.doc + '<b>List of codes</b><small>A paper with the codes that were calibrated</small></button>' +
-    '<button id="phN">' + I.cam + '<b>Nameplates</b><small>Photos of the instruments\' labels – one item per photo, many at once</small></button></div>' +
+  $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>Take a photo of…</h3><div class="cats one">' +
+    '<button id="phN">' + I.cam + '<b>Nameplates</b><small>One instrument per photo – you can take several</small></button>' +
+    '<button id="phL">' + I.doc + '<b>A list of codes</b><small>A paper or screen with the codes</small></button></div>' +
+    '<label class="chkline"><input type="checkbox" id="phG"> Choose from the gallery instead</label>' +
     '<div class="cf"><button class="btn ghost" id="phX">Cancel</button></div></div></div>';
+  var gal = function () { var g = $('#phG'); return g && g.checked; };
   $('#phX').onclick = function () { $('#dlg-root').innerHTML = ''; };
-  $('#phL').onclick = function () { $('#dlg-root').innerHTML = ''; pickFiles('image/*', true).then(function (fs) { if (fs.length) codesFromPhotos(p, fs); }); };
-  $('#phN').onclick = function () { $('#dlg-root').innerHTML = ''; pickFiles('image/*', true).then(function (fs) { if (fs.length) nameplates(p, fs); }); };
+  $('#phL').onclick = function () { var g0 = gal(); $('#dlg-root').innerHTML = ''; pickFiles('image/*', g0, !g0).then(function (fs) { if (fs.length) codesFromPhotos(p, fs); }); };
+  $('#phN').onclick = function () { var g0 = gal(); $('#dlg-root').innerHTML = ''; if (g0) return pickFiles('image/*', true).then(function (fs) { if (fs.length) nameplates(p, fs); });
+    var shots = [], more = function () { pickFiles('image/*', false, true).then(function (fs) { if (fs.length) shots = shots.concat(fs);
+      if (!shots.length) return; dialog(shots.length + (shots.length === 1 ? ' photo taken' : ' photos taken'), 'Take another nameplate?', 'Another photo', 'Done – read them').then(function (y) { if (y) more(); else nameplates(p, shots); }); }); }; more(); };
 }
 var OCR = null;
 function ocrText(dataUrl) {
@@ -1875,10 +1878,10 @@ function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNa
       fld('Calibrated by', sel('tech', inf.tech)) + fld('Position', inp('techPos', g.techPos)) + fld('Approved by', sel('approver', g.approver)) + fld('Position', inp('approverPos', g.approverPos)) + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>Environmental conditions</b><small>Default 21 °C · 55 %RH</small></div><div class="dgrid three">' +
       fld('Temperature °C', inp('eT', inf.eT, 'text', ' inputmode="decimal"')) + fld('Humidity %RH', inp('eH', inf.eH, 'text', ' inputmode="decimal"')) + fld('Place', inp('eLoc', inf.eLoc)) + '</div></div>' +
-    '<div class="dcard"><div class="dh"><b>Order</b><small>' + esc(p.orderType ? TYPES[p.orderType][0] : 'Not chosen') + '</small></div><div class="ordrow"><span>' + (p.order && p.order.fileName ? '<b>' + esc(p.order.fileName) + '</b>' + (p.order.number ? '<small>No. ' + esc(p.order.number) + '</small>' : '') : '<small>No document chosen</small>') + '</span>' + (p.order && p.order.webUrl ? '<a class="btn ghost sm" href="' + esc(p.order.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + '<button class="btn ghost sm" id="dOrd">Change</button></div></div>' +
+    '<div class="dcard"><div class="dh"><b>' + esc(p.orderType ? TYPES[p.orderType][0] : 'Order') + '</b><small>' + ({ checking: 'Checking SharePoint…', found: 'Found on SharePoint ✓', missing: 'Not found on SharePoint', error: 'Could not check SharePoint' }[p.orderCheck] || (p.orderType ? '' : 'Not chosen')) + '</small></div><div class="ordrow"><span>' + (p.order && p.order.fileName ? '<b>' + esc(p.order.fileName) + '</b>' + (p.order.number ? '<small>No. ' + esc(p.order.number) + '</small>' : '') : '<small>No document chosen</small>') + '</span>' + (p.order && p.order.webUrl ? '<a class="btn ghost sm" href="' + esc(p.order.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + '<button class="btn ghost sm" id="dOrd">Change</button></div></div>' +
     '<div class="dcard"><div class="dh"><b>For every certificate</b><small>You can still change one certificate on its page</small></div><div class="dgrid">' +
       fld('Calibration interval', inp('interval', g.interval)) + fld('Location', inp('loc', g.loc)) + '</div></div>';
-  $('#dOrd').onclick = function () { p.orderAsked = 1; if (p.order) p.order.auto = false; go(p, 'type'); };
+  $('#dOrd').onclick = function () { p.orderAsked = 1; if (p.order) p.order.auto = false; go(p, p.orderType === 'po' ? 'order' : 'type'); };
   $$('[data-d]').forEach(function (e) { e.onchange = function () { var k = e.dataset.d, v = e.value.trim();
     if (k === 'cal') { if (!v) return; inf.cal = v; calcDates(inf); saveProjects(); toast('Issue, received and work order dates updated'); return tDet(p); }
     if (k === 'iss' || k === 'rec' || k === 'wo') { if (v) inf[k] = v; if (k === 'wo') inf.woText = ''; saveProjects(); return tDet(p); }
@@ -1888,6 +1891,14 @@ function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNa
     else if (k === 'eT' || k === 'eH') { if (!isNum(v)) { toast('Write a number', true); return tDet(p); } inf[k] = v; }
     else if (k === 'eLoc') inf.eLoc = v; else g[k] = v;
     saveProjects(); toast('Saved'); }; }); }
+
+
+/* contract / approval / offer / visit: only check that it exists on SharePoint – no questions */
+function checkOrder(p) { if (!spOn() || p.orderType === 'po') return; p.orderCheck = 'checking'; saveProjects();
+  findOrderFiles(p).then(function () { var l = (p.orderFiles && p.orderFiles.list) || [], f = l[0];
+    if (f && (f.score || 0) >= 4) { p.order = { fileId: f.id, driveId: f.driveId, fileName: f.name, webUrl: f.webUrl, number: f.number, value: f.value, date: f.date }; p.orderCheck = 'found'; }
+    else { p.orderCheck = 'missing'; if (p.order && p.order.auto) p.order = null; } })
+    .catch(function () { p.orderCheck = 'error'; }).then(function () { saveProjects(); if (S.cur === p.id && p.tab === 'det' && !sheetFn) render(); }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
