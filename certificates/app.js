@@ -551,7 +551,7 @@ function wItems(p) {
     '<button data-a="month" class="hl">' + I.visit + '<b>Suggested</b><small>' + (sb ? (sb.n ? sb.n + ' batches · ' + MON[sb.m] + ' ' + sb.y : 'Nothing in ' + MON[sb.m] + ' ' + sb.y) : spOn() ? 'Checking last year…' : 'Same month last year') + '</small></button>' +
     '<button data-a="code"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><b>Search</b><small>By code or cert. no.</small></button>' +
     '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Opens the camera</small></button></div>' +
-    '<div class="cf" style="margin-top:8px"><button class="btn ghost sm" data-a="excel">' + I.xls.replace(/width="\d+"|height="\d+"/g, '') + ' Excel template</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
+    '<div class="cf" style="margin-top:8px"><button class="btn ghost sm" data-a="excel">Excel template</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
     '<div class="sec"><h2>Codes</h2><small>' + p.items.length + (need ? ' · ' + need + ' need data' : '') + '</small></div>' +
     (p.machines.map(function (m) { var its = p.items.filter(function (i) { return i.machineId === m.id; });
       return '<div class="mach"><div class="mach-h"><span class="kind m">Machine</span><b>' + esc(m.name) + (m.code ? ' · ' + esc(m.code) : '') + '</b><button class="btn ghost sm" data-m="' + m.id + '">Open</button></div>' + (its.length ? its.map(irow).join('') : '<div class="row"><span class="t"><small>No instruments yet</small></span></div>') + '</div>'; }).join('')) +
