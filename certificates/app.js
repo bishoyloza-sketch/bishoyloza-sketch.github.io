@@ -158,7 +158,7 @@ function req(action, payload) { return Api.call({ action: action, userId: S.sess
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
   S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; return d; }); }
 function saveProjects() { LS.set('projects', S.projects); }
-var isAdmin = function () { return S.me && (S.me.role === 'admin' || S.me.role === 'superadmin'); };
+var isAdmin = function () { return S.me && S.me.role === 'admin'; };
 
 /* ================= Microsoft / SharePoint ================= */
 var SCOPES = ['User.Read', 'Files.ReadWrite.All', 'Sites.Read.All'];
@@ -228,7 +228,7 @@ function closeSheet() { sheetFn = null; renderSheet(); render(); }
 function renderLogin() {
   var pick = null, pin = '', app = $('#app');
   function draw() {
-    var people = (S.people || []).slice(), order = { superadmin: -1, admin: 0, keeper: 1, engineer: 2 }, roleName = { superadmin: 'Super admin', admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
+    var people = (S.people || []).slice(), order = { admin: 0, keeper: 1, engineer: 2 }, roleName = { admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
     people.sort(function (a, b) { return (order[a.role] - order[b.role]) || a.name.localeCompare(b.name); });
     app.innerHTML = '<div class="login"><div class="login-top"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation">' +
       '<h1><small>Akhnaton</small>Certificates</h1><p>Calibration certificates from last year\'s data.</p></div><div class="login-card"><div>' +
@@ -728,12 +728,12 @@ var NAVI = {
   gen: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13l-2 8 5-3 5 3-2-8"/></svg>',
   det: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'
 };
-function ensureInfo(p) { p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String((p.company || {}).code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} }; p.info.refRes = p.info.refRes || {}; return p.info; }
+function ensureInfo(p) { p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String((p.company || {}).code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} }; var d0 = { cal: '', wo: '', iss: '', rec: '', due: '', tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [] }; Object.keys(d0).forEach(function (k) { if (p.info[k] == null) p.info[k] = d0[k]; }); p.info.refRes = p.info.refRes || {}; return p.info; }
 function renderOverview(p) {
   ensureInfo(p);
   if (!p.tab || p.tab === 'over') p.tab = 'certs'; PT.tab = p.tab;
   var titles = { certs: ['Old certificates', 'Last year\'s certificate of every item'], refs: ['References', 'A reference for every item'], det: ['Details', 'Technician, dates and conditions'], read: ['Readings', 'New readings next to last year\'s'], gen: ['Certificates', 'Covers, certificates and the receipt letter'] }[p.tab];
-  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div>' + projFoot(p);
+  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(hub ? titles[1] : p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div>' + projFoot(p);
   bindStepBar(p); bindHome(); bindProjFoot(p);
   ({ certs: tCerts, refs: tRefs, read: tRead, det: tDet, gen: tGen })[p.tab](p);
 }
@@ -793,7 +793,7 @@ function suggestRefs(p) { var out = {}; labDevices().forEach(function (d) { var 
   return out; }
 function refResWarn(p) { return (p.info.refs || []).filter(function (id) { return !isNum(p.info.refRes[id]); }).length; }
 function tDet(p) {
-  var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin' || u.role === 'superadmin'; }), ds = labDevices(), q = norm(PT.rq || '');
+  var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin'; }), ds = labDevices(), q = norm(PT.rq || '');
   var cats = {}; ds.forEach(function (d) { (cats[d.category || 'Other'] = cats[d.category || 'Other'] || []).push(d); });
   $('#pm').innerHTML = '<div class="sec" style="margin-top:4px"><h2>Calibrated by</h2></div><div class="chips">' + people.map(function (u) { return '<button class="chip' + (inf.techId === u.id ? ' on' : '') + '" data-tech="' + u.id + '">' + esc(u.name) + '</button>'; }).join('') + '</div>' +
     '<div class="sec"><h2>Dates</h2><button class="btn ghost sm" id="chD">Change</button></div><dl class="kv"><dt>Calibration</dt><dd>' + dmy(inf.cal) + '</dd><dt>Work order</dt><dd>' + esc(woNo(inf) || '—') + '</dd><dt>Date of issue</dt><dd>' + dmy(inf.iss) + '</dd><dt>Date received</dt><dd>' + dmy(inf.rec) + '</dd></dl>' +
@@ -1243,7 +1243,7 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
   $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); };
   $('#gP').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); openPrint(p, iss.length || ph.length); };
 }
-function dlZip(files, name) { var z = zipFiles(files.map(function (f) { return { name: f.name, data: f.data }; }));
+function dlZip(files, name) { var cp = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (cp) { cp.filesAt = new Date().toISOString(); saveProjects(); } var z = zipFiles(files.map(function (f) { return { name: f.name, data: f.data }; }));
   if (CL.on) return clSave(new Blob([z], { type: 'application/zip' }), name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); });
   var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([z], { type: 'application/zip' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 function openPrint(p, draft) { var html = printView(p);
@@ -1516,7 +1516,7 @@ function phaseSum(p, i) {
   var L = readyItems(p); return L.length ? L.filter(certDone).length + ' of ' + L.length + ' done' : 'After the codes'; }
 function stepBar(p) { var cur = curStep(p), ci = phaseOf(cur), r = reach(p);
   return '<div class="rail">' + PHASES.map(function (ph, i) { var first = ph.s[0], can = FIDX[first] <= r, done = i < ci;
-      return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
+      done = done && (i !== 1 || (p.items || []).length > 0); return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
     '<div class="substeps">' + PHASES[ci].s.map(function (s) { var i = FIDX[s]; return '<button class="' + (s === cur ? 'on' : i <= r ? 'ok' : '') + '" data-step="' + s + '"' + (i > r ? ' disabled' : '') + '>' + (i < FIDX[cur] ? '✓ ' : '') + FLOW[i][1] + '</button>'; }).join('') + '</div>'; }
 function bindStepBar(p) { $$('[data-step]').forEach(function (b) { b.onclick = function () { gotoStep(p, b.dataset.step); }; }); }
 function renderOverview(p) {
@@ -1573,7 +1573,7 @@ function renderHome() {
     '<div class="cf" style="margin-top:26px"><button class="btn ghost" id="out">Sign out</button></div></main></div>';
   $('#newP').onclick = function () { newProject(); };
   $$('[data-ht]').forEach(function (b) { b.onclick = function () { HOME.tab = b.dataset.ht; render(); }; });
-  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; var pp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (pp && pp.stage === 'done') { pp.tab = 'cert'; pp.ci = null; } try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
+  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; var pp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (pp) openProjectPage(pp); try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
   $$('[data-pd]').forEach(function (b) { b.onclick = function () { var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0];
     dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' codes. This cannot be undone.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
   $$('[data-sg]').forEach(function (b) { b.onclick = function () { var a = b.dataset.sg.split('|').map(Number), mo = SUG.months[a[0]], x = mo.list[a[1]], co = ((S.data && S.data.companies) || []).filter(function (c) { return c.id === x.coId; })[0];
@@ -1756,42 +1756,45 @@ function phaseSum(p, i) {
   var L = certList(p); return L.length ? savedN(p) + ' of ' + L.length + ' saved' : 'After the codes'; }
 function stepBar(p) { var cur = curStep(p), ci = phaseOf(cur), r = reach(p);
   return '<div class="rail">' + PHASES.map(function (ph, i) { var first = ph.s[0], can = FIDX[first] <= r, done = i < ci;
-      return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
+      done = done && (i !== 1 || (p.items || []).length > 0); return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
     (PHASES[ci].s.length > 1 && ci === 0 ? '<div class="substeps">' + PHASES[ci].s.map(function (s) { var i = FIDX[s]; return '<button class="' + (s === cur ? 'on' : i <= r ? 'ok' : '') + '" data-step="' + s + '"' + (i > r ? ' disabled' : '') + '>' + (i < FIDX[cur] ? '✓ ' : '') + FLOW[i][1] + '</button>'; }).join('') + '</div>' : ''); }
 function gotoStep(p, s) { if (FIDX[s] > reach(p) && s !== 'cert') return; if (FIDX[s] <= FIDX.items) { p.stage = s; } else { p.stage = 'done'; p.tab = s; if (s === 'cert') p.ci = null; } p.reached = Math.max(p.reached || 0, FIDX[s]); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
 function toHub(p) { p.stage = 'done'; p.tab = 'cert'; p.ci = null; p.reached = Math.max(p.reached || 0, FIDX.cert); saveProjects(); render(); window.scrollTo(0, 0); }
 function renderOverview(p) {
   ensureInfo(p); if (!p.tab || p.tab === 'over' || p.tab === 'read') p.tab = 'cert'; PT.tab = p.tab;
   var L = certList(p), hub = p.tab === 'cert' && p.ci == null;
-  var titles = { certs: ['Old certificates', 'Last year\'s certificate of every code'], refs: ['References', 'A reference for every code'], det: ['Project details', 'Dates, technician and conditions'], cert: hub ? ['Certificates', savedN(p) + ' of ' + L.length + ' saved'] : ['Certificate ' + ((p.ci || 0) + 1) + ' of ' + L.length, savedN(p) + ' of ' + L.length + ' saved'], gen: ['Files', 'Covers, certificates and the receipt letter'] }[p.tab];
-  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div><div class="wiz-foot"><div id="cf"></div></div>';
+  var titles = { certs: ['Old certificates', 'Last year\'s certificate of every code'], refs: ['References', 'A reference for every code'], det: ['Project details', 'Dates, technician and conditions'], cert: hub ? [p.company.name, savedN(p) + ' done · ' + (L.length - savedN(p)) + ' pending'] : ['Certificate ' + ((p.ci || 0) + 1) + ' of ' + L.length, savedN(p) + ' of ' + L.length + ' saved'], gen: ['Files', 'Covers, certificates and the receipt letter'] }[p.tab];
+  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(hub ? titles[1] : p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div><div class="wiz-foot"><div id="cf"></div></div>';
   bindStepBar(p); bindHome();
   if (p.tab === 'det' || p.tab === 'certs' || p.tab === 'refs') { $('#cf').innerHTML = '<button class="btn blue" id="bh">‹ Back to the certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
   if (p.tab === 'gen') { $('#cf').innerHTML = '<button class="btn ghost" id="bh">‹ Certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
   if (p.tab === 'cert' && hub) return tHub(p);
   ({ certs: tCerts, refs: tRefs, det: tDet, cert: tCertEd, gen: tGen })[p.tab](p);
 }
+function openProjectPage(p) { if (!p.company) return; if (p.stage !== 'done') p.wizStage = p.stage; p.stage = 'done'; p.tab = 'cert'; p.ci = null; p.reached = Math.max(p.reached || 0, FIDX.cert); saveProjects(); }
 function tHub(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p), n = savedN(p), left = L.length - n; queueOld(p); genGroups(p);
   if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && p.ci == null && !sheetFn) tHub(p); });
   var nxt = -1; for (var i = 0; i < L.length; i++) if (!L[i].saved) { nxt = i; break; }
-  var pct = L.length ? Math.round(n / L.length * 100) : 0;
-  var kv = function (a, b) { return '<div><small>' + a + '</small><b>' + (b || '—') + '</b></div>'; };
-  $('#pm').innerHTML = '<div class="bigprog"><div class="bp-top"><div><b>' + n + '</b><span> of ' + L.length + ' certificates saved</span></div><span class="bp-left">' + (L.length ? (left ? left + ' left' : 'All done ✓') : '') + '</span></div><div class="bp-bar"><i style="width:' + pct + '%"></i></div>' +
-      (L.length ? (nxt >= 0 ? '<button class="btn blue" id="hNext" style="width:100%;margin-top:12px">' + (n ? 'Continue: ' : 'Start: ') + esc(L[nxt].code || L[nxt].description) + ' ›</button>' : '<button class="btn" id="hFiles" style="width:100%;margin-top:12px">Make the files ›</button>') : '<button class="btn blue" id="hAdd0" style="width:100%;margin-top:12px">Add the codes ›</button>') + '</div>' +
+  var pct = L.length ? Math.round(n / L.length * 100) : 0, setupOk = !!(p.company && inf.cal), codesOk = L.length > 0, certsOk = L.length > 0 && !left, filesOk = !!p.filesAt;
+  var tl = function (ok, cur, num, title, sub, btn) { return '<div class="tl' + (ok ? ' ok' : cur ? ' cur' : '') + '"><i>' + (ok ? '✓' : num) + '</i><div class="tl-b"><b>' + title + '</b><small>' + sub + '</small></div>' + (btn || '') + '</div>'; };
+  var curK = !codesOk ? 2 : !certsOk ? 3 : 4;
+  $('#pm').innerHTML = '<div class="card timeline">' +
+      tl(setupOk, false, 1, esc(p.company.name), 'Calibration ' + esc(dmy(inf.cal)) + ' · issue ' + esc(dmy(inf.iss)) + (p.orderType ? ' · ' + esc(TYPES[p.orderType][0]) + (p.order && p.order.number ? ' ' + esc(p.order.number) : '') : ''), '<button class="btn ghost sm" id="tEditCo">Edit</button>') +
+      tl(codesOk, curK === 2, 2, L.length + (L.length === 1 ? ' code chosen' : ' codes chosen'), codesOk ? esc(L.slice(0, 4).map(function (x) { return x.code || x.description; }).join(', ') + (L.length > 4 ? ' …' : '')) : 'Choose what will be calibrated', '<button class="btn ' + (codesOk ? 'ghost' : 'blue') + ' sm" id="tCodes">' + (codesOk ? '+ Add' : 'Choose') + '</button>') +
+      tl(certsOk, curK === 3, 3, codesOk ? n + ' done · ' + left + ' pending' : 'Certificates', codesOk ? '<span class="tl-bar"><em style="width:' + pct + '%"></em></span>' : 'After the codes', codesOk && nxt >= 0 ? '<button class="btn blue sm" id="tNext">' + (n ? 'Continue' : 'Start') + '</button>' : '') +
+      tl(filesOk, curK === 4, 4, 'Files', filesOk ? 'Made ' + esc(fmtDate(p.filesAt)) : certsOk ? 'Ready to make' : 'When all certificates are saved', certsOk || filesOk ? '<button class="btn ' + (filesOk ? 'ghost' : 'blue') + ' sm" id="tFiles">' + (filesOk ? 'Again' : 'Make') + '</button>' : '') + '</div>' +
+    (L.length ? '<div class="sec"><h2>Certificates</h2><small>' + n + ' done · ' + left + ' pending</small></div>' +
+      '<div class="letter"><table><tr><th>No.</th><th>Code / description</th><th>Cert. No.</th><th>Status</th></tr>' + L.map(function (it, i) { var f = (it.old || {}).fields || {}, st = cState(it), pr = it.old && it.old.points && it.old.points.length ? itemProg(it) : null;
+        return '<tr data-ci="' + i + '" class="' + (it.saved ? 'lt-done' : '') + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.code || '—') + '</b><small>' + esc(it.description || f.description || '') + '</small></td><td class="cn">' + esc(it.certNo || '—') + '</td><td>' + (it.saved ? '<span class="st lt-ok">Done ✓</span>' : st === 'none' ? '<span class="st bad">No old cert</span>' : st === 'loading' ? '<span class="st">Loading…</span>' : '<span class="st pend">Pending' + (pr && pr.fil ? ' · ' + pr.fil + '/' + pr.tot : '') + '</span>') + '</td></tr>'; }).join('') + '</table></div>' : '') +
     '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Project details</h3><button class="btn ghost sm" id="hDet" style="flex:none">Edit</button></div>' +
-      '<div class="kvgrid">' + kv('Calibration', esc(dmy(inf.cal))) + kv('Date of issue', esc(dmy(inf.iss))) + kv('Received', esc(dmy(inf.rec))) + kv('Work order', esc(woNo(inf))) + kv('Technician', esc(inf.tech)) + kv('Conditions', esc(inf.eT + ' °C · ' + inf.eH + ' %RH')) + kv('Order', esc(p.orderType ? TYPES[p.orderType][0] + (p.order && p.order.number ? ' ' + p.order.number : '') : '')) + kv('First cert. no.', esc(String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : (g.autoTried || !spOn() ? 'not set' : 'finding…'))) + '</div></div>' +
-    '<div class="sec"><h2>Certificates</h2><small>' + L.length + '</small></div>' +
-    (L.length ? '<div class="list">' + L.map(function (it, i) { var f = (it.old || {}).fields || {};
-      return '<button class="row crow" data-ci="' + i + '"><span class="num' + (it.saved ? ' ok' : '') + '">' + (it.saved ? '✓' : i + 1) + '</span><span class="t"><b>' + esc(it.code || '—') + ' · ' + esc(it.description || f.description || '') + '</b><small>' + esc([it.certNo || '', (it.old && it.old.points && it.old.points.length) ? itemProg(it).fil + '/' + itemProg(it).tot + ' readings' : ''].filter(Boolean).join(' · ')) + '</small></span>' + cPill(it) + '</button>'; }).join('') + '</div>'
-      : '<div class="empty"><b>No codes yet</b>Add the codes first.</div>') +
-    '<div class="cf"><button class="btn ghost" id="hAdd">+ Add codes</button><button class="btn ghost" id="hFiles2">Make the files</button></div>';
-  $('#cf').innerHTML = '<button class="btn ghost" id="hBack">‹ Codes</button>' + (nxt >= 0 ? '<button class="btn blue" id="hGo">' + (n ? 'Continue ›' : 'Start ›') + '</button>' : '<button class="btn blue" id="hGo">Make the files ›</button>');
-  var open = function (i) { p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }, files = function () { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); };
+      '<div class="kvgrid">' + [['Calibration', dmy(inf.cal)], ['Date of issue', dmy(inf.iss)], ['Received', dmy(inf.rec)], ['Work order', woNo(inf)], ['Technician', inf.tech], ['Conditions', inf.eT + ' °C · ' + inf.eH + ' %RH'], ['First cert. no.', String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : (g.autoTried || !spOn() ? 'not set' : 'finding…')], ['Department', (p.depts || []).join(', ')]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + esc(x[1] || '—') + '</b></div>'; }).join('') + '</div></div>';
+  $('#cf').innerHTML = !codesOk ? '<button class="btn blue" id="hGo">Choose the codes ›</button>' : nxt >= 0 ? '<button class="btn blue" id="hGo">' + (n ? 'Continue: ' : 'Start: ') + esc(L[nxt].code || L[nxt].description) + ' ›</button>' : '<button class="btn blue" id="hGo">Make the files ›</button>';
+  var open = function (i) { p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }, files = function () { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); }, codes = function () { go(p, 'items'); };
   $$('[data-ci]').forEach(function (b) { b.onclick = function () { open(+b.dataset.ci); }; });
-  var x; if ((x = $('#hNext'))) x.onclick = function () { open(nxt); }; if ((x = $('#hFiles'))) x.onclick = files; $('#hFiles2').onclick = files;
-  $('#hGo').onclick = function () { if (nxt >= 0) open(nxt); else files(); };
-  $('#hDet').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); };
-  var add = function () { go(p, 'items'); }; $('#hAdd').onclick = add; $('#hBack').onclick = add; if ((x = $('#hAdd0'))) x.onclick = add; }
+  var x; if ((x = $('#tNext'))) x.onclick = function () { open(nxt); }; if ((x = $('#tFiles'))) x.onclick = files; $('#tCodes').onclick = codes;
+  $('#tEditCo').onclick = function () { go(p, p.wizStage && FIDX[p.wizStage] < FIDX.items ? p.wizStage : 'date'); };
+  $('#hGo').onclick = function () { if (!codesOk) codes(); else if (nxt >= 0) open(nxt); else files(); };
+  $('#hDet').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); }; }
 /* preview one certificate (cover + certificate) */
 function certPreview(p, it, onSave) { var n = parseInt(String(it.certNo || '').replace(/-\d{4}$/, '').match(/(\d+)$/) ? String(it.certNo).replace(/-\d{4}$/, '').match(/(\d+)$/)[1] : genDefaults(p).start, 10);
   var p2 = Object.assign({}, p, { items: [it], machines: (p.machines || []).filter(function (m) { return m.id === it.machineId; }), gen: Object.assign({}, p.gen, { start: isNaN(n) ? '' : String(n) }) });
