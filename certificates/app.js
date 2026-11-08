@@ -27,7 +27,8 @@ function toast(t, bad) { var e = $('#toast'); e.textContent = t; e.className = (
 function dialog(title, msg, yes, no) { return new Promise(function (r) {
   $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>' + esc(title) + '</h3><p>' + msg + '</p><div class="cf"><button class="btn ghost" id="dN">' + esc(no || 'Cancel') + '</button><button class="btn" id="dY">' + esc(yes || 'Yes') + '</button></div></div></div>';
   var done = function (v) { $('#dlg-root').innerHTML = ''; r(v); }; $('#dY').onclick = function () { done(true); }; $('#dN').onclick = function () { done(false); }; }); }
-function pickFiles(accept, multi, cam) { return new Promise(function (r) { var f = $('#fileIn'); f.accept = accept; f.multiple = !!multi && !cam; if (cam) f.setAttribute('capture', 'environment'); else f.removeAttribute('capture'); f.value = ''; f.onchange = function () { r(Array.prototype.slice.call(f.files)); }; f.click(); }); }
+function pickFiles(accept, multi, cam) { var opened = false, onBlur = function () { opened = true; }; window.addEventListener('blur', onBlur, { once: true }); document.addEventListener('visibilitychange', onBlur, { once: true }); setTimeout(function () { if (!opened && document.hasFocus()) toast(CL.on ? 'The Claude app does not open the camera or files here – open the program from the Chrome link to take photos and attach files' : 'If nothing opened, allow camera / files for this site in Chrome settings', true); }, 1500);
+  return new Promise(function (r) { var f = $('#fileIn'); f.accept = accept; f.multiple = !!multi && !cam; if (cam) f.setAttribute('capture', 'environment'); else f.removeAttribute('capture'); f.value = ''; f.onchange = function () { r(Array.prototype.slice.call(f.files)); }; f.click(); }); }
 function shrink(file, max, q) { return new Promise(function (res) { var img = new Image(), url = URL.createObjectURL(file);
   img.onload = function () { var k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', q || 0.8)); };
@@ -305,7 +306,7 @@ function renderHome() {
 var STAGES = ['company', 'date', 'dept', 'type', 'order', 'items'];
 var STAGE_T = { company: ['Company', 'Which company is this work for?'], date: ['Calibration date', 'One date for all the items – you can change it for one item later'], dept: ['Department', 'Which department(s)?'], type: ['Order type', 'What is the work based on?'], order: ['Order document', 'Choose it from SharePoint'], items: ['Codes', 'What will be calibrated?'] };
 var W = { q: '' };
-function go(p, stage) { p.stage = stage; p.reached = Math.max(p.reached || 0, FIDX[stage] || 0); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
+function go(p, stage) { if (stage === 'order' && p.orderType && p.orderType !== 'po') { checkOrder(p); stage = 'items'; } p.stage = stage; p.reached = Math.max(p.reached || 0, FIDX[stage] || 0); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
 function renderWizard(p) {
   var k = STAGES.indexOf(p.stage), t = STAGE_T[p.stage];
   var dots = stepBar(p);
@@ -316,7 +317,7 @@ function renderWizard(p) {
 function foot(p, nextLabel, nextOk, onNext, extra) {
   var k = STAGES.indexOf(p.stage);
   $('#wf').innerHTML = '<button class="btn ghost" id="wb">' + (k ? 'Back' : 'Cancel') + '</button>' + (extra || '') + '<button class="btn blue" id="wn"' + (nextOk ? '' : ' disabled') + '>' + nextLabel + '</button>';
-  $('#wb').onclick = function () { if (k) return go(p, STAGES[k - 1]);
+  $('#wb').onclick = function () { if (p.stage === 'items' && (p.reached || 0) >= FIDX.cert) return toHub(p); if (k) { var pv = STAGES[k - 1]; if (pv === 'order' && p.orderType !== 'po') pv = 'type'; return go(p, pv); }
     if (!p.company && !(p.items || []).length) { S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); } goHome(); };
   $('#wn').onclick = onNext; }
 
@@ -496,9 +497,9 @@ function wOrder(p) {
       if (!spOn()) { setO(rec); return toast('Attached – it will be saved on SharePoint once it is connected'); }
       toast('Saving…'); return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; setO(rec); toast('Saved'); })
         .catch(function (e) { setO(rec); toast(e.message + ' – kept on this phone', true); }); }); }); };
-  var must = isPO; /* a PO is needed; contract / offer / approval / visit can be skipped for now */
+  var must = false; /* PO: choose from SharePoint, attach it, or skip for now */
   var has = function () { var x = p.order || {}; return !!(x.fileName && !x.auto); };
-  foot(p, 'Next', has() || !must, function () { if (!has() && p.order && p.order.auto) { p.order.auto = false; } if (!has() && !(p.order && p.order.fileName)) p.order = { skipped: true }; go(p, 'items'); }, must ? '' : '<button class="btn ghost" id="wSkip">Skip</button>');
+  foot(p, has() ? 'Next' : 'Next without PO', true, function () { if (!has() && p.order && p.order.auto) { p.order.auto = false; } if (!has() && !(p.order && p.order.fileName)) p.order = { skipped: true }; go(p, 'items'); }, '');
   var sk = $('#wSkip'); if (sk) sk.onclick = function () { p.order = { skipped: true }; go(p, 'items'); };
   function okNext() { var b = $('#wn'); if (b) b.disabled = !(has() || !must); }
 }
@@ -1878,9 +1879,10 @@ function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNa
       fld('Calibrated by', sel('tech', inf.tech)) + fld('Position', inp('techPos', g.techPos)) + fld('Approved by', sel('approver', g.approver)) + fld('Position', inp('approverPos', g.approverPos)) + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>Environmental conditions</b><small>Default 21 °C · 55 %RH</small></div><div class="dgrid three">' +
       fld('Temperature °C', inp('eT', inf.eT, 'text', ' inputmode="decimal"')) + fld('Humidity %RH', inp('eH', inf.eH, 'text', ' inputmode="decimal"')) + fld('Place', inp('eLoc', inf.eLoc)) + '</div></div>' +
-    '<div class="dcard"><div class="dh"><b>' + esc(p.orderType ? TYPES[p.orderType][0] : 'Order') + '</b><small>' + ({ checking: 'Checking SharePoint…', found: 'Found on SharePoint ✓', missing: 'Not found on SharePoint', error: 'Could not check SharePoint' }[p.orderCheck] || (p.orderType ? '' : 'Not chosen')) + '</small></div><div class="ordrow"><span>' + (p.order && p.order.fileName ? '<b>' + esc(p.order.fileName) + '</b>' + (p.order.number ? '<small>No. ' + esc(p.order.number) + '</small>' : '') : '<small>No document chosen</small>') + '</span>' + (p.order && p.order.webUrl ? '<a class="btn ghost sm" href="' + esc(p.order.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + '<button class="btn ghost sm" id="dOrd">Change</button></div></div>' +
+    '<div class="dcard"><div class="dh"><b>' + esc(p.orderType ? TYPES[p.orderType][0] : 'Order') + '</b><small>' + ({ checking: 'Checking SharePoint…', found: 'Found on SharePoint ✓', missing: 'Not found on SharePoint', error: 'Could not check SharePoint', skipped: 'Skipped' }[p.orderCheck] || (p.orderType ? '' : 'Not chosen')) + '</small></div><div class="ordrow"><span>' + (p.order && p.order.fileName ? '<b>' + esc(p.order.fileName) + '</b>' + (p.order.number ? '<small>No. ' + esc(p.order.number) + '</small>' : '') : '<small>No document chosen</small>') + '</span>' + (p.order && p.order.webUrl ? '<a class="btn ghost sm" href="' + esc(p.order.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + '<button class="btn ghost sm" id="dOrd">Change</button>' + (p.orderCheck !== 'skipped' ? '<button class="btn ghost sm" id="dSkip">Skip</button>' : '') + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>For every certificate</b><small>You can still change one certificate on its page</small></div><div class="dgrid">' +
       fld('Calibration interval', inp('interval', g.interval)) + fld('Location', inp('loc', g.loc)) + '</div></div>';
+  var dsk = $('#dSkip'); if (dsk) dsk.onclick = function () { p.order = { skipped: true }; p.orderCheck = 'skipped'; saveProjects(); toast('Skipped – no ' + (p.orderType ? TYPES[p.orderType][0] : 'order') + ' for this project'); tDet(p); };
   $('#dOrd').onclick = function () { p.orderAsked = 1; if (p.order) p.order.auto = false; go(p, p.orderType === 'po' ? 'order' : 'type'); };
   $$('[data-d]').forEach(function (e) { e.onchange = function () { var k = e.dataset.d, v = e.value.trim();
     if (k === 'cal') { if (!v) return; inf.cal = v; calcDates(inf); saveProjects(); toast('Issue, received and work order dates updated'); return tDet(p); }
