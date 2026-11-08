@@ -466,6 +466,8 @@ function uploadOrderSP(p, file) { /* saves the attached document in SharePoint: 
       .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error('Upload failed ' + r.status + ': ' + t.slice(0, 120)); }); return r.json(); }); }); }); }
 function wOrder(p) {
   var of = p.orderFiles, o = p.order || {}, tname = TYPES[p.orderType][0], isPO = p.orderType === 'po';
+  if (!isPO && o.auto && o.fileName && !p.orderAsked) { o.auto = false; p.orderAsked = 1; p.order = o; p.orderAutoAt = Date.now(); saveProjects(); toast(tname + ' chosen: ' + o.fileName + ' – change it in Project details'); return go(p, 'items'); }
+  if (!isPO && of && !of.list.length && !o.fileName && !p.orderAsked) { p.orderAsked = 1; saveProjects(); toast('No ' + tname + ' found on SharePoint – you can add it later in Project details'); return go(p, 'items'); }
   if (!of && spOn() && !W.busy) { W.busy = true; findOrderFiles(p).catch(function (e) { toast(e.message, true); p.orderFiles = { list: [], nums: [], err: e.message }; }).then(function () { W.busy = false; if (p.stage === 'order') render(); }); }
   var chosen = o.fileName ? '<div class="card bar" style="--c:var(--office)"><h3>' + (o.auto ? 'Found – please confirm' : 'Chosen') + '</h3><div class="meta" style="word-break:break-word"><b>' + esc(o.fileName) + '</b>' + (o.number ? ' · No. ' + esc(o.number) : '') + (o.attached ? ' · attached by you' + (o.uploaded ? ' · saved' : ' · on this phone') : '') + '</div>' +
       '<div class="cf">' + (o.webUrl ? '<a class="btn ghost sm" href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + (o.auto ? '<button class="btn sm" id="oConf">Yes, this one</button>' : '') + '<button class="btn ghost sm" id="oClr">Choose another</button></div></div>' : '';
@@ -1516,7 +1518,7 @@ function phaseSum(p, i) {
   if (i === 1) return (p.items || []).length ? p.items.length + (p.items.length === 1 ? ' code' : ' codes') : 'No codes yet';
   var L = readyItems(p); return L.length ? L.filter(certDone).length + ' of ' + L.length + ' done' : 'After the codes'; }
 function stepBar(p) { var cur = curStep(p), ci = phaseOf(cur), r = reach(p);
-  return '<div class="rail">' + PHASES.map(function (ph, i) { var first = ph.s[0], can = FIDX[first] <= r, done = i < ci;
+  return '<div class="rail">' + PHASES.map(function (ph, i) { var first = i === 0 && (p.items || []).length ? 'det' : ph.s[0], can = FIDX[first] <= r || first === 'det', done = i < ci;
       done = done && (i !== 1 || (p.items || []).length > 0); return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
     '<div class="substeps">' + PHASES[ci].s.map(function (s) { var i = FIDX[s]; return '<button class="' + (s === cur ? 'on' : i <= r ? 'ok' : '') + '" data-step="' + s + '"' + (i > r ? ' disabled' : '') + '>' + (i < FIDX[cur] ? '✓ ' : '') + FLOW[i][1] + '</button>'; }).join('') + '</div>'; }
 function bindStepBar(p) { $$('[data-step]').forEach(function (b) { b.onclick = function () { gotoStep(p, b.dataset.step); }; }); }
@@ -1765,10 +1767,10 @@ function phaseSum(p, i) {
   if (i === 1) return (p.items || []).length ? p.items.length + (p.items.length === 1 ? ' code' : ' codes') : 'No codes yet';
   var L = certList(p); return L.length ? savedN(p) + ' of ' + L.length + ' saved' : 'After the codes'; }
 function stepBar(p) { var cur = curStep(p), ci = phaseOf(cur), r = reach(p);
-  return '<div class="rail">' + PHASES.map(function (ph, i) { var first = ph.s[0], can = FIDX[first] <= r, done = i < ci;
+  return '<div class="rail">' + PHASES.map(function (ph, i) { var first = i === 0 && (p.items || []).length ? 'det' : ph.s[0], can = FIDX[first] <= r || first === 'det', done = i < ci;
       done = done && (i !== 1 || (p.items || []).length > 0); return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
     (PHASES[ci].s.length > 1 && ci === 0 ? '<div class="substeps">' + PHASES[ci].s.map(function (s) { var i = FIDX[s]; return '<button class="' + (s === cur ? 'on' : i <= r ? 'ok' : '') + '" data-step="' + s + '"' + (i > r ? ' disabled' : '') + '>' + (i < FIDX[cur] ? '✓ ' : '') + FLOW[i][1] + '</button>'; }).join('') + '</div>' : ''); }
-function gotoStep(p, s) { if (FIDX[s] > reach(p) && s !== 'cert') return; if (FIDX[s] <= FIDX.items) { p.stage = s; } else { p.stage = 'done'; p.tab = s; if (s === 'cert') p.ci = null; } p.reached = Math.max(p.reached || 0, FIDX[s]); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
+function gotoStep(p, s) { if (FIDX[s] > reach(p) && s !== 'cert' && s !== 'det') return; if (FIDX[s] <= FIDX.items) { p.stage = s; } else { p.stage = 'done'; p.tab = s; if (s === 'cert') p.ci = null; } p.reached = Math.max(p.reached || 0, FIDX[s]); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
 function toHub(p) { p.stage = 'done'; p.tab = 'cert'; p.ci = null; p.reached = Math.max(p.reached || 0, FIDX.cert); saveProjects(); render(); window.scrollTo(0, 0); }
 function renderOverview(p) {
   ensureInfo(p); if (!p.tab || p.tab === 'over' || p.tab === 'read') p.tab = 'cert'; PT.tab = p.tab;
@@ -1802,7 +1804,7 @@ function tHub(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p),
   var open = function (i) { p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }, files = function () { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); }, codes = function () { go(p, 'items'); };
   $$('[data-ci]').forEach(function (b) { b.onclick = function () { open(+b.dataset.ci); }; });
   var x; if ((x = $('#tNext'))) x.onclick = function () { open(nxt); }; if ((x = $('#tFiles'))) x.onclick = files; $('#tCodes').onclick = codes;
-  $('#tEditCo').onclick = function () { go(p, p.wizStage && FIDX[p.wizStage] < FIDX.items ? p.wizStage : 'date'); };
+  $('#tEditCo').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); };
   $('#hGo').onclick = function () { if (!codesOk) codes(); else if (nxt >= 0) open(nxt); else files(); };
   $('#hDet').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); }; }
 /* preview one certificate (cover + certificate) */
@@ -1873,8 +1875,10 @@ function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNa
       fld('Calibrated by', sel('tech', inf.tech)) + fld('Position', inp('techPos', g.techPos)) + fld('Approved by', sel('approver', g.approver)) + fld('Position', inp('approverPos', g.approverPos)) + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>Environmental conditions</b><small>Default 21 °C · 55 %RH</small></div><div class="dgrid three">' +
       fld('Temperature °C', inp('eT', inf.eT, 'text', ' inputmode="decimal"')) + fld('Humidity %RH', inp('eH', inf.eH, 'text', ' inputmode="decimal"')) + fld('Place', inp('eLoc', inf.eLoc)) + '</div></div>' +
+    '<div class="dcard"><div class="dh"><b>Order</b><small>' + esc(p.orderType ? TYPES[p.orderType][0] : 'Not chosen') + '</small></div><div class="ordrow"><span>' + (p.order && p.order.fileName ? '<b>' + esc(p.order.fileName) + '</b>' + (p.order.number ? '<small>No. ' + esc(p.order.number) + '</small>' : '') : '<small>No document chosen</small>') + '</span>' + (p.order && p.order.webUrl ? '<a class="btn ghost sm" href="' + esc(p.order.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + '<button class="btn ghost sm" id="dOrd">Change</button></div></div>' +
     '<div class="dcard"><div class="dh"><b>For every certificate</b><small>You can still change one certificate on its page</small></div><div class="dgrid">' +
       fld('Calibration interval', inp('interval', g.interval)) + fld('Location', inp('loc', g.loc)) + '</div></div>';
+  $('#dOrd').onclick = function () { p.orderAsked = 1; if (p.order) p.order.auto = false; go(p, 'type'); };
   $$('[data-d]').forEach(function (e) { e.onchange = function () { var k = e.dataset.d, v = e.value.trim();
     if (k === 'cal') { if (!v) return; inf.cal = v; calcDates(inf); saveProjects(); toast('Issue, received and work order dates updated'); return tDet(p); }
     if (k === 'iss' || k === 'rec' || k === 'wo') { if (v) inf[k] = v; if (k === 'wo') inf.woText = ''; saveProjects(); return tDet(p); }
