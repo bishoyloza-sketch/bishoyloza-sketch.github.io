@@ -37,3 +37,11 @@
 .small{font-size:13px;color:var(--muted)}
 .okline{display:flex;align-items:center;gap:8px;color:var(--office);font-weight:600;font-size:14.5px}
 .projcard{display:block;width:100%;text-align:left;font:inherit;cursor:pointer}
+
+.stepbar{display:flex;gap:6px;overflow-x:auto;margin:14px -16px 0;padding:0 16px 2px;scrollbar-width:none;scroll-behavior:smooth}
+.stepbar::-webkit-scrollbar{display:none}
+.stepbar button{flex:none;display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#C9D6E8;border-radius:999px;padding:5px 11px 5px 5px;font-size:13px;font-weight:600;white-space:nowrap}
+.stepbar button i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14);font-size:12px;font-family:var(--cond)}
+.stepbar button.ok{color:#fff}.stepbar button.ok i{background:#3FD08A;color:#0b2a1a}
+.stepbar button.on{background:#fff;color:var(--navy);border-color:#fff}.stepbar button.on i{background:var(--blue);color:#fff}
+.stepbar button[disabled]{opacity:.45}
