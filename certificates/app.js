@@ -1346,7 +1346,7 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
     '<div class="sec"><h2>Covers and certificates</h2><small>' + groups.length + ' covers · ' + p.items.length + ' certificates</small></div>' +
     groups.map(function (gr) { return '<div class="mach"><div class="mach-h"><b>' + esc(gr.machine ? gr.machine.name : (gr.items[0].description || 'Units')) + '</b><span class="small">' + esc(gr.from ? (gr.items.length > 1 ? gr.from + ' → ' + gr.to : gr.from) : 'no number yet') + '</span></div>' +
       gr.items.map(function (it) { return '<div class="row"><span class="t"><b>' + esc(it.certNo || '—') + ' · ' + esc(it.code || it.description) + '</b><small>Data sheet ref. <input class="inp" data-ds="' + it.id + '" value="' + esc(dsRef(p, it)) + '" style="height:32px;width:110px;display:inline-block;padding:0 6px"> · Price <input class="inp" data-pr="' + it.id + '" value="' + esc(g.prices[it.id] || '') + '" inputmode="decimal" placeholder="Lump sum" style="height:32px;width:100px;display:inline-block;padding:0 6px"></small></span></div>'; }).join('') + '</div>'; }).join('') +
-    '<div class="sec"><h2>Receipt letter</h2></div><div class="dgrid">' + signerFields(g) + '</div>' +
+    '<div class="sec"><h2>Receipt letter</h2><button class="btn ghost sm" id="gPr">Fill prices</button></div><div class="dgrid">' + signerFields(g) + '</div>' +
     '<div class="sec"><h2>Finish</h2></div><div class="cats one">' +
       '<button id="gPv">' + I.doc + '<b>1 · Preview the certificates</b><small>All covers and certificates one after the other</small></button>' +
       '<button id="gP">' + I.doc + '<b>2 · Save as PDF</b><small>One PDF with all the certificates in order – you see it first, then save</small></button>' +
@@ -1361,7 +1361,8 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
   $$('[data-pr]').forEach(function (e) { e.onchange = function () { g.prices[e.dataset.pr] = e.value.trim(); saveProjects(); }; });
   var ad = $('#adr'); if (ad) ad.onclick = function () { ad.disabled = true; ad.innerHTML = '<span class="spin dark"></span>'; findAddress(p, true).then(function () { tGen(p); }); };
   var r = $('#phR'); if (r) r.onclick = function (e) { e.preventDefault(); phSheet(p); };
-  $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); };
+  if ($('#gPr')) $('#gPr').onclick = function () { pricesThen(p, function () { if (S.cur === p.id && !sheetFn) tGen(p); }); };
+  $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); pricesThen(p, function () { var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); }); };
   var pv = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } htmlPreview(p.company.name + ' · ' + certList(p).length + ' certificates', html); if (iss.length || ph.length) toast('Draft – something is still missing', true); };
   $('#gPv').onclick = pv; $('#gP').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } pdfPreview(p.company.name + ' ' + monYear(inf.cal) + ' certificates', html); }; $('#gS').onclick = function () { saveWordSP(p); };
 }
@@ -1970,7 +1971,7 @@ function refDec(p, it) { var id = (it.refs || [])[0], r = id && refResOf(p, id);
 var REFQ = {};
 function needOcr() { return window.Tesseract ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'); }
 function fileText(f) { /* text of a PDF in SharePoint; scanned pages are read with OCR (website only) */
-  if (CL.on || useFiles()) return pdfPages(f.driveId, f.id).then(function (pg) { return pg.map(function (x) { return x.join(' | '); }).join('\n'); });
+  if (CL.on || useFiles()) return pdfPages(f.driveId, f.id).then(function (pg) { return (pg || []).map(function (x) { return Array.isArray(x) ? x.join(' | ') : String(x); }).join('\n'); });
   return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + f.driveId + '/items/' + f.id + '/content' + (/\.pdf$/i.test(f.name) ? '' : '?format=pdf'), { headers: { Authorization: 'Bearer ' + r[1] } }); })
     .then(function (res) { if (!res.ok) throw new Error('open ' + res.status); return res.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; })
     .then(function (doc) { var n = Math.min(doc.numPages, 4), txt = [], ch = Promise.resolve();
@@ -2423,6 +2424,38 @@ function letterHtml(p, lid) { var all = buildAll(p), inf = p.info, g = genDefaul
     (tot ? '<p class="tot">Price without VAT: ' + tot.toLocaleString('en') + ' EGP</p>' : '') + '<p class="ar" style="margin-top:18px">مع جزيل الشكر وتفضلوا بقبول فائق الاحترام،</p><p class="ar"><b>' + esc(g.signerPos) + '</b></p><p class="ar"><b>' + esc(g.signer) + '</b></p></body></html>'; }
 function pvFit() { var w = $('#pvw'), f = $('#pvf'); if (!w || !f) return; var W = 820, sc = Math.min(1, (w.clientWidth - 2) / W); var h = 1160; try { h = Math.max(1160, f.contentDocument.documentElement.scrollHeight + 10); } catch (e) {}
   f.style.width = W + 'px'; f.style.height = h + 'px'; f.style.transform = 'scale(' + sc + ')'; w.style.height = Math.ceil(h * sc) + 'px'; var z = $('#pvz'); if (z) z.textContent = Math.round(sc * 100) + '%'; }
+/* ---- prices for the receipt letter: contract → this year's letters → last year's letters → ask once per kind ---- */
+function docText(f) { return pdfPages(f.driveId, f.id).then(function (pg) { return (pg || []).map(function (x) { return Array.isArray(x) ? x.join(' | ') : String(x); }).join('\n'); }); }
+var PRICE_RX = /(Lump\s*sum|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{2,6}(?:\.\d+)?)/i;
+function pricesFromLetters(t, items) { t = String(t).replace(/\s*([\-\/])\s*/g, '$1'); var lo = t.toLowerCase(), out = {};
+  items.forEach(function (it) { var c = cleanCode(it.code || ''); if (c.length < 3) return; var k = c.toLowerCase(), i = lo.indexOf(k), last = null;
+    while (i >= 0) { if (/[a-z0-9]/i.test(t.charAt(i + c.length)) || (i && /[a-z0-9]/i.test(t.charAt(i - 1)))) { i = lo.indexOf(k, i + 1); continue; } var row = t.slice(i + c.length).split('\n')[0], cells = row.split('|').map(function (x) { return x.trim(); }).filter(Boolean), lc = cells[cells.length - 1] || '';
+      if (cells.length >= 2 && /^(lump\s*sum|\d{1,3}(,\d{3})+(\.\d+)?|\d{2,6}(\.\d+)?)$/i.test(lc)) { last = lc; i = lo.indexOf(k, i + 1); continue; }
+      var seg = t.slice(i + c.length, i + c.length + 170), m = seg.match(/(?:[A-Z0-9\/]{2,8}-\d{2,5}-20\d\d|protocol)\s*\|?\s*(Lump\s*sum|\d{1,3}(?:,\d{3})+|\d{2,6})(?![\d\-\/])/i); if (m) last = m[1]; i = lo.indexOf(k, i + 1); }
+    if (last) out[it.id] = /lump/i.test(last) ? 'Lump sum' : last.replace(/,/g, ''); }); return out; }
+function pricesFromContract(t, items) { var out = {}, by = {};
+  KINDS.forEach(function (kd) { var rx = new RegExp('(' + kd[1].source + ')[^\\n]{0,70}?(\\d{1,3}(?:,\\d{3})+|\\d{2,6})(?![\\d\\-\\/%])', 'i'), m = String(t).match(rx); if (m) { var v = +m[m.length - 1].replace(/,/g, ''); if (v >= 50) by[kd[0]] = String(v); } });
+  items.forEach(function (it) { var k = itKind(it); if (k && by[k]) out[it.id] = by[k]; }); return out; }
+function priceBook(p) { var all = LS.get('priceBook', {}); return all[p.company.id] || { kind: {} }; }
+function priceBookSet(p, kind, v) { var all = LS.get('priceBook', {}), b = all[p.company.id] || { kind: {} }; b.kind[kind] = v; all[p.company.id] = b; LS.set('priceBook', all); }
+function autoPrices(p, done) { var g = genDefaults(p), items = certList(p), need = function () { return items.filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); }, got = { contract: 0, letters: 0, book: 0 };
+  var put = function (m, src) { Object.keys(m).forEach(function (id) { if (!String(g.prices[id] || '').trim() && m[id]) { g.prices[id] = m[id]; got[src]++; } }); };
+  var bk = priceBook(p), bm = {}; items.forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (bk.kind[k]) bm[it.id] = bk.kind[k]; });
+  var chain = Promise.resolve();
+  if (p.order && p.order.fileId && p.orderType !== 'po') chain = chain.then(function () { return withTime(docText({ id: p.order.fileId, driveId: p.order.driveId, name: p.order.fileName || '' }), 40000).then(function (t) { put(pricesFromContract(t, need()), 'contract'); }).catch(function () {}); });
+  chain = chain.then(function () { if (!need().length || !spOn()) return; var ny = new Date().getFullYear(), terms = companyTerms(p.company);
+    return withTime(spSearch('"Unit Price" "' + terms[0] + '"', 25), 20000).then(function (fs) { fs = fs.filter(function (f) { return /\/Reports\s*20\d\d\//i.test(pathOf(f)) && /\.(docx?|pdf)$/i.test(f.name); }).sort(function (a, b) { return (String(pathOf(b)).match(/Reports\s*(20\d\d)/i) || [0, 0])[1] - (String(pathOf(a)).match(/Reports\s*(20\d\d)/i) || [0, 0])[1]; });
+      return fs.slice(0, 2).reduce(function (pr, f) { return pr.then(function () { if (!need().length) return; return withTime(docText(f), 60000).then(function (t) { put(pricesFromLetters(t, need()), 'letters'); }).catch(function () {}); }); }, Promise.resolve()); }).catch(function () {}); });
+  chain.then(function () { put(bm, 'book'); saveProjects(); var left = need(); done && done(got, left); }); }
+function askPrices(p, left, done) { var g = genDefaults(p), groups = {}, order = []; left.forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(it); });
+  openSheet(function () { return { title: 'Prices missing', body: '<div class="note">' + left.length + (left.length === 1 ? ' item has' : ' items have') + ' no price in the contract or in this year\'s letters. Write one price for each kind – it is kept for this company. Empty = Lump sum.</div>' +
+      order.map(function (k, i) { return '<label class="f"><span>' + esc(k) + ' <i class="small">(' + groups[k].length + ': ' + esc(groups[k].slice(0, 3).map(function (x) { return x.code || x.description; }).join(', ')) + (groups[k].length > 3 ? '…' : '') + ')</i></span><input class="inp" inputmode="decimal" data-pk="' + i + '" placeholder="e.g. 450"></label>'; }).join(''),
+    foot: '<button class="btn ghost" id="pkX">Leave Lump sum</button><button class="btn" id="pkOk">Save prices</button>',
+    mount: function () { $('#pkX').onclick = function () { closeSheet(); done && done(); };
+      $('#pkOk').onclick = function () { $$('[data-pk]').forEach(function (e) { var v = e.value.trim().replace(/,/g, ''); if (!v) return; var k = order[+e.dataset.pk]; priceBookSet(p, k, v); groups[k].forEach(function (it) { g.prices[it.id] = v; }); }); saveProjects(); toast('Prices saved'); closeSheet(); done && done(); }; } }; }); }
+function pricesThen(p, go) { var g = genDefaults(p), miss = certList(p).filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); if (!miss.length) return go();
+  toast('Filling the prices from the contract and this year\'s letters…'); autoPrices(p, function (got, left) { var n = got.contract + got.letters + got.book; if (n) toast(n + ' prices filled' + (got.contract ? ' · ' + got.contract + ' from the contract' : '') + (got.letters ? ' · ' + got.letters + ' from this year\'s letters' : ''));
+    if (left.length) askPrices(p, left, go); else go(); }); }
 function htmlPreview(title, html, word) { var paper = '<style>@media screen{html{background:#DFE4EA}body{width:794px;min-height:1123px;margin:12px auto!important;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);box-sizing:border-box;padding:42px 46px!important}}</style>';
   if (!/class="pg"/.test(html)) html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, paper + '</head>') : paper + html;
   openSheet(function () { return { title: title, body: '<div class="pvhint">Whole page shown – pinch to zoom in <b id="pvz"></b></div><div class="pvwrap" id="pvw"><iframe class="pv" id="pvf"></iframe></div>',
@@ -2437,7 +2470,7 @@ function exportSheet(p) { genGroups(p); var L = certList(p).filter(function (it)
   var chosen = function () { return st.which === 'all' ? L : st.which === 'range' ? L.slice(Math.min(st.from, st.to), Math.max(st.from, st.to) + 1) : L.filter(function (it, i) { return st.on[i]; }); };
   var lbl = function (it, i) { return (i + 1) + '. ' + (it.certNo || '—') + ' · ' + (it.code || it.description || ''); };
   openSheet(function () {
-    var showLetter = function (lid) { closeSheet(); var all = buildAll(p); htmlPreview('Receipt letter' + (lid ? ' · ' + letterName(p, lid) : ''), letterHtml(p, lid), function () { saveBlob(new Blob([letterDoc(p, all.groups, lid)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), p.company.name + ' receipt letter' + (lid ? ' - ' + letterName(p, lid) : '') + '.docx'); }); };
+    var showLetter = function (lid) { closeSheet(); pricesThen(p, function () { showLetter2(lid); }); }, showLetter2 = function (lid) { var all = buildAll(p); htmlPreview('Receipt letter' + (lid ? ' · ' + letterName(p, lid) : ''), letterHtml(p, lid), function () { saveBlob(new Blob([letterDoc(p, all.groups, lid)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), p.company.name + ' receipt letter' + (lid ? ' - ' + letterName(p, lid) : '') + '.docx'); }); };
     if (st.what === 'letters') return { title: 'Which letter?', body: '<div class="cats one">' + letterIds(p).map(function (lid, i) { var n0 = L.filter(function (it) { return (it.letterId || '') === lid; }).length; return '<button data-lt="' + lid + '"><b>Letter ' + (i + 1) + ' · ' + esc(letterName(p, lid)) + '</b><small>' + n0 + ' items</small></button>'; }).join('') + '</div>', foot: '<button class="btn ghost" id="ltB">‹ Back</button>',
       mount: function () { $('#ltB').onclick = function () { st.what = ''; renderSheet(); }; $$('[data-lt]').forEach(function (b) { b.onclick = function () { showLetter(b.dataset.lt); }; }); } };
     if (!st.what) return { title: 'Print / Export', body: '<div class="cats one">' +
@@ -2517,6 +2550,7 @@ function clDir(parent, name, pathEnd) { var want = function (o) { return o.drive
 function certFolderName(p) { var it = certList(p).filter(function (x) { return x.old && x.old.file && x.old.file.webUrl; })[0];
   var seg = it ? (decodeURIComponent(it.old.file.webUrl).match(/\/Cert\s*20\d\d\/([^\/]+)\//i) || [])[1] : ''; return String(seg || p.company.name).replace(/\s*20\d\d\s*$/, '').replace(/["*:<>?\/\\|#%]/g, ' ').trim(); }
 function saveWordSP(p) { var g = genDefaults(p); if (!String(g.start).trim()) return toast('Write the first certificate number', true);
+  if (!p._prOk) return pricesThen(p, function () { p._prOk = 1; try { saveWordSP(p); } finally { delete p._prOk; } });
   var all = buildAll(p), yr = (s2d(p.info.cal) || new Date()).getFullYear(), folder = certFolderName(p), st = { d: 0, n: all.files.length, done: [], err: '' };
   if (!CL.on) { toast('Saving to SharePoint works in the Claude version for now – the Word files are downloaded instead', true); return dlZip(all.files, (p.company.name + ' ' + monYear(p.info.cal) + ' certificates').trim() + '.zip'); }
   openSheet(function () { return { title: 'Saving to SharePoint', body: '<div class="note">Certificates › Cert ' + yr + ' › <b>' + esc(folder) + '</b></div>' +
