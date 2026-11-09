@@ -2070,15 +2070,20 @@ function certPreview(p, it, onSave) { var n = parseInt(String(it.certNo || '').r
       $('#pvE').onclick = closeSheet; $('#pvS').onclick = function () { it.saved = Date.now(); saveProjects(); closeSheet(); onSave(); }; } }; }); }
 /* ---- new item: start from a similar certificate (points, limits, SOP, resolution, range) ---- */
 function simFind(p, it) { var d = String(it.description || '').trim(); if (!d) return Promise.resolve([]); var toks = d.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
-  var qs = ['"' + d + '" "Data of item"', d + ' ' + (it.unit || '') + ' "Calibration Date"'], all = {};
-  return Promise.all(qs.map(function (q) { return spSearch(q, 40).then(function (fs) { fs.forEach(function (f) { if (isCalCert(f.name) && !all[f.id]) all[f.id] = f; }); }).catch(function () {}); })).then(function () {
+  var qs = ['"' + d + '" "Data of item"'], all = {};
+  var run = function (q) { return spSearch(q, 40).then(function (fs) { fs.forEach(function (f) { if (isCalCert(f.name) && !all[f.id]) all[f.id] = f; }); }).catch(function () {}); };
+  return run(qs[0]).then(function () { if (Object.keys(all).length < 2) return run(d + ' ' + (it.unit || '') + ' "Calibration Date"'); }).then(function () {
     var ny = new Date().getFullYear(), u = String(it.unit || '').toLowerCase();
     return Object.keys(all).map(function (k) { var f = all[k], t = String(f.summary || '').toLowerCase(), sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 2 : 0); }, 0);
       if (u && t.indexOf(u) >= 0) sc += 2; if (isNum(it.rMax) && t.indexOf(String(it.rMax)) >= 0) sc += 2; f.yr = yearOf(f); if (f.yr >= ny - 1) sc += 1; f.sc = sc; return f; }).sort(function (a, b) { return b.sc - a.sc || b.yr - a.yr; }).slice(0, 6); }); }
 function readTemplate(it, f) { return pdfPages(f.driveId, f.id).then(function (pages) { var toks = String(it.description || '').toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = -1, bs = -1;
     pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (it.unit && t.indexOf(String(it.unit).toLowerCase()) >= 0) sc += 1; if (sc > bs) { bs = sc; best = i; } });
     if (best < 0) throw new Error('No data in ' + f.name); var sec = [pages[best]]; for (var k = best + 1; k < pages.length && sec.length < 5 && /continue/i.test(pages[k].join(' ')); k++) sec.push(pages[k]);
+    var flat = [].concat.apply([], sec), rs = parseResults(flat), fl = parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')); try { learnCert(fl); } catch (e) {}
+    if ((rs.points || []).length || !CL.on) return { file: fileRef(f), fields: fl, points: rs.points || [], dirs: rs.dirs || 1, score: bs }; /* quick local read – the AI only if that found no points */
     return readSec(sec, 'Use the certificate whose description best matches "' + it.description + '".').then(function (x) { return { file: fileRef(f), fields: x.fields || {}, points: x.points || [], dirs: x.dirs || 1, score: bs }; }); }); }
+function withTime(pr, ms) { return Promise.race([pr, new Promise(function (r, j) { setTimeout(function () { j(new Error('slow')); }, ms); })]); }
+function tmplKey(it) { return itKind(it) + '|' + norm(it.description || ''); }
 function tmplFit(it, t) { var f = t.fields, sc = t.score || 0, rg = rngNums(f.range || ''); if (rg && it.unit && rg.u && unitKey(rg.u) === unitKey(it.unit)) sc += 3; if (rg && isNum(it.rMax) && isNum(rg.hi)) { var r = numv(rg.hi) / numv(it.rMax); if (r > 0.5 && r < 2) sc += 3; } if ((t.points || []).length) sc += 2; return sc; }
 function tmplKindOk(it, t) { var k0 = itKind(it), tf = t.fields || {}, kt = kindOf(tf.description || '', (rngNums(tf.range || '') || {}).u || ''); return !k0 || !kt || k0 === kt; }
 function applyTemplate(p, it, t, force) { var o = it.old, f = o.fields || (o.fields = {}), tf = t.fields || {}, used = []; if (!force && !tmplKindOk(it, t)) return used;
@@ -2100,11 +2105,14 @@ function tmplSheet(p, it) { var st = { q: it.description || '', list: it.tmplLis
         : st.list ? (st.list.length ? '<div class="list">' + st.list.map(function (x, i) { return '<button class="row" data-tp="' + i + '"><span class="t"><b>' + esc(x.name) + '</b><small>' + esc([x.folder, x.snip].filter(Boolean).join(' · ')) + '</small></span><span class="pill">Use</span></button>'; }).join('') + '</div>' : '<div class="empty"><b>Nothing similar found</b>Try another word.</div>') : ''),
     mount: function () { var tq = $('#tq'); tq.oninput = function () { st.q = tq.value; }; tq.onkeydown = function (e) { if (e.key === 'Enter') search(); }; $('#tgo').onclick = search;
       $$('[data-tp]').forEach(function (b) { b.onclick = function () { var x = st.list[+b.dataset.tp]; st.read = x.name; renderSheet(); readTemplate(it, x).then(function (t) { var u = applyTemplate(p, it, t, !!it.tmpl); toast(u.length ? 'Copied: ' + u.join(', ') : 'Nothing to copy from this certificate', !u.length); closeSheet(); }).catch(function (e) { st.read = null; toast(e.message, true); renderSheet(); }); }; }); } }; }); }
-function autoTemplate(p, it, rerender) { if (!it.old || it.old.status !== 'manual' || it.tmplTried || !String(it.description || '').trim() || !spOn()) return; it.tmplTried = 1; it.tmplBusy = 1; saveProjects();
-  simFind(p, it).then(function (fs) { it.tmplList = fs.map(function (f) { var r = fileRef(f); r.snip = String(f.summary || '').replace(/<[^>]+>/g, '').slice(0, 120); return r; });
-    var cand = fs.slice(0, 3), got = [];
-    return cand.reduce(function (pr, f) { return pr.then(function () { return readTemplate(it, f).then(function (t) { got.push(t); }).catch(function () {}); }); }, Promise.resolve()).then(function () {
-      got = got.filter(function (t) { return tmplKindOk(it, t); }); got.sort(function (a, b) { return tmplFit(it, b) - tmplFit(it, a); }); if (got[0]) { var u = applyTemplate(p, it, got[0]); if (u.length) toast('Filled from a similar certificate: ' + u.join(', ')); } }); })
+function autoTemplate(p, it, rerender) { if (!it.old || it.old.status !== 'manual' || it.tmplTried || !String(it.description || '').trim() || !spOn()) return; it.tmplTried = 1;
+  var cache = LS.get('tmplCache', {}), hit = cache[tmplKey(it)];
+  if (hit && Date.now() - (hit.at || 0) < 60 * 864e5) { var u0 = applyTemplate(p, it, hit); if (u0.length) toast('Filled from ' + hit.file.name + ': ' + u0.join(', ')); saveProjects(); return; } /* same kind seen before – instant */
+  it.tmplBusy = 1; saveProjects();
+  withTime(simFind(p, it), 12000).then(function (fs) { it.tmplList = fs.map(function (f) { var r = fileRef(f); r.snip = String(f.summary || '').replace(/<[^>]+>/g, '').slice(0, 120); return r; });
+    return Promise.all(fs.slice(0, 2).map(function (f) { return withTime(readTemplate(it, f), 15000).catch(function () { return null; }); })).then(function (got) {
+      got = got.filter(function (t) { return t && tmplKindOk(it, t); }); got.sort(function (a, b) { return tmplFit(it, b) - tmplFit(it, a); });
+      if (got[0]) { var u = applyTemplate(p, it, got[0]); var c2 = LS.get('tmplCache', {}), ks = Object.keys(c2); if (ks.length > 60) delete c2[ks[0]]; got[0].at = Date.now(); c2[tmplKey(it)] = got[0]; LS.set('tmplCache', c2); if (u.length) toast('Filled from a similar certificate: ' + u.join(', ')); } }); })
     .catch(function () {}).then(function () { it.tmplBusy = 0; saveProjects(); rerender && rerender(); }); }
 function useSimilar(p, it, s) { return pdfPages(s.driveId, s.id).then(function (pages) { var toks = String((it.description || '') + ' ' + (it.manufacturer || '')).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = 0, bs = -1;
     pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (sc > bs) { bs = sc; best = i; } });
