@@ -227,3 +227,11 @@ select.fin{background-image:linear-gradient(45deg,transparent 50%,#8792A2 50%),l
 .sprog{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--blue,#0B74C8);border-radius:12px;padding:12px;margin:10px 0;position:sticky;top:0;z-index:2}
 .sprog .t{flex:1}.sprog b{display:block;color:var(--navy)}.sprog small{color:var(--muted);font-size:12.5px}
 .sprog .btn{flex:none;min-width:84px;border-color:var(--danger,#C0392B);color:var(--danger,#C0392B)}
+/* edit / remove on chosen items */
+.row.irow{cursor:pointer}
+.iacts{display:inline-flex;gap:6px;flex:none;margin-left:auto;align-items:center}
+.ia{border:1px solid var(--line);background:#fff;color:var(--navy);border-radius:9px;height:32px;padding:0 10px;font:600 12.5px var(--font);cursor:pointer}
+.ia.del{color:var(--danger,#C0392B);border-color:#F1C6C0;width:32px;padding:0;font-size:18px;line-height:1}
+.ia:active{transform:scale(.96)}
+.letter tr.mrow .iacts{float:right;margin-top:-4px}
+.mach-h .ia.del{margin-left:6px}
