@@ -210,3 +210,17 @@ select.fin{background-image:linear-gradient(45deg,transparent 50%,#8792A2 50%),l
 .letter tr.mrow small{display:inline;margin-left:8px;color:var(--muted,#667)}
 .letter tr.mrow .mi{color:#13294B;margin-right:6px}
 .letter tr.sub td:nth-child(2){padding-left:22px;border-left:3px solid #C9D6E8}
+/* advanced search panel */
+.srch{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;margin:12px 0;box-shadow:0 1px 3px rgba(19,41,75,.05)}
+.srch .srow{margin-bottom:10px}
+.srch .srow>label{display:block;font:600 11.5px var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 5px 2px}
+.srch .seg button{font-size:13px;padding:8px 2px;line-height:1.2}
+.srch .seg.sm button{font-size:12.5px;padding:7px 2px}
+.srch .psel{display:flex;gap:8px;margin-top:8px}.srch .psel .inp{flex:1;height:42px}
+.srch .sq textarea{height:auto;min-height:46px;resize:vertical;padding-top:11px;font-size:15px}
+.srch .sfoot{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:10px}
+.srch .sfoot .small{flex:1;line-height:1.35}.srch .sfoot .btn{flex:none;min-width:110px}
+.sgrp{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#EAF1FB;border-top:2px solid #13294B;margin-top:6px;border-radius:10px 10px 0 0}
+.sgrp .t{flex:1}.sgrp b{display:block;color:#13294B}.sgrp small{color:var(--muted);font-size:12px}
+.sgrp .chip{flex:none;margin:0}
+.list .row.gsub{border-left:3px solid #C9D6E8;padding-left:14px}
