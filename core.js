@@ -336,24 +336,45 @@ var Core = (function () {
       return { ok: true };
     },
 
-    /* Admin: wipe trial history — everything, or only the last N days. Devices keep where they are now. */
+    /* Admin: erase trial data, piece by piece. p.what = { moves, receipts, transfers, jobs, datasheets, places, devices, companies }, p.days (0 = all). */
     eraseHistory: function (db, actor, p, now) {
       need(isAdmin(actor), 'Only the admin can erase history.');
-      var days = num(p.days), cut = days > 0 ? iso(now - days * 864e5) : '';
+      var w = p.what || {}, days = num(p.days), cut = days > 0 ? iso(now - days * 864e5) : '', cutMs = days > 0 ? now - days * 864e5 : 0;
+      need(Object.keys(w).some(function (k) { return w[k]; }), 'Choose what to erase.');
       function inRange(ts) { return !cut || String(ts || '') >= cut; }
+      function idTime(id) { var m = String(id || '').match(/^[A-Z](\d{12,})$/); return m ? +m[1] : 0; }
+      var r = { moves: 0, receipts: 0, transfers: 0, jobs: 0, datasheets: 0, places: 0, devices: 0, companies: 0 };
+      if (w.places) {
+        db.checkouts.forEach(function (c) { if (c.status === 'Pending') { c.status = 'Cancelled'; c.decidedById = actor.id; c.decidedByName = actor.name; c.decidedTs = iso(now); } });
+        db.transfers.forEach(function (t) { if (t.status === 'Pending') { t.status = 'Cancelled'; t.decidedById = actor.id; t.decidedByName = actor.name; t.decidedTs = iso(now); } });
+        db.devices.forEach(function (d) { if (d.status !== 'In Office' || d.pending) { r.places++; d.status = 'In Office'; clearPlace(d); d.since = iso(now); } });
+        r.places += db.holdings.length; db.holdings = [];
+        touch(db, 'devices'); touch(db, 'holdings'); touch(db, 'checkouts'); touch(db, 'transfers');
+      }
+      if (w.datasheets) db.checkouts.forEach(function (c) { if (c.dataSheet && inRange(c.dataSheetTs)) { c.dataSheet = ''; c.dataSheetTs = ''; c.dataSheetById = ''; c.dataSheetByName = ''; r.datasheets++; } });
+      if (w.datasheets) touch(db, 'checkouts');
+      if (w.moves) { var n0 = db.movements.length; db.movements = db.movements.filter(function (m) { return !inRange(m.ts); }); r.moves = n0 - db.movements.length; touch(db, 'movementsAll'); }
       var live = {};
       db.devices.forEach(function (d) { if (d.checkoutId) live[d.checkoutId] = 1; if (d.pending) live[d.pending] = 1; });
       db.holdings.forEach(function (h) { if (h.checkoutId) live[h.checkoutId] = 1; });
-      var n0 = db.movements.length;
-      db.movements = db.movements.filter(function (m) { return !inRange(m.ts); });
-      var c0 = db.checkouts.length;
-      db.checkouts = db.checkouts.filter(function (c) { return live[c.id] || c.status === 'Pending' || !inRange(c.requestedTs || c.ts); });
-      db.transfers = db.transfers.filter(function (t) { return t.status === 'Pending' || !inRange(t.ts); });
-      var used = {}; db.checkouts.forEach(function (c) { if (c.jobId) used[c.jobId] = 1; });
-      var j0 = db.jobs.length;
-      db.jobs = db.jobs.filter(function (j) { return used[j.id] || !inRange(j.ts); });
-      touch(db, 'movementsAll'); touch(db, 'checkouts'); touch(db, 'transfers'); touch(db, 'jobs');
-      return { moves: n0 - db.movements.length, receipts: c0 - db.checkouts.length, jobs: j0 - db.jobs.length };
+      if (w.receipts) { var c0 = db.checkouts.length; db.checkouts = db.checkouts.filter(function (c) { return live[c.id] || c.status === 'Pending' || !inRange(c.requestedTs || c.ts); }); r.receipts = c0 - db.checkouts.length; touch(db, 'checkouts'); }
+      if (w.transfers) { var t0 = db.transfers.length; db.transfers = db.transfers.filter(function (t) { return t.status === 'Pending' || !inRange(t.ts); }); r.transfers = t0 - db.transfers.length; touch(db, 'transfers'); }
+      if (w.jobs) {
+        var used = {}; db.checkouts.forEach(function (c) { if (c.jobId) used[c.jobId] = 1; });
+        var j0 = db.jobs.length; db.jobs = db.jobs.filter(function (j) { return used[j.id] || !inRange(j.ts); }); r.jobs = j0 - db.jobs.length; touch(db, 'jobs');
+      }
+      if (w.devices) db.devices.forEach(function (d) {
+        var t = idTime(d.id); if (!t || (cutMs && t < cutMs) || d.active === false || d.status !== 'In Office' || d.pending) return;
+        d.active = false; r.devices++; touch(db, 'devices');
+      });
+      if (w.companies) {
+        var usedCo = {}; db.checkouts.forEach(function (c) { usedCo[c.companyId] = 1; }); db.jobs.forEach(function (j) { usedCo[j.companyId] = 1; });
+        db.devices.forEach(function (d) { if (d.companyId) usedCo[d.companyId] = 1; }); db.holdings.forEach(function (h) { usedCo[h.companyId] = 1; });
+        var k0 = db.companies.length;
+        db.companies = db.companies.filter(function (c) { var t = idTime(c.id); return !t || (cutMs && t < cutMs) || usedCo[c.id]; });
+        r.companies = k0 - db.companies.length; if (r.companies) touch(db, 'companies');
+      }
+      return r;
     },
 
     checkin: function (db, actor, p, now) {

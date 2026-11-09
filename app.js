@@ -745,7 +745,7 @@
         (j.basis ? '<div class="meta"><span class="jbadge">' + esc(jobBasis(j)) + '</span></div>' : '') +
         '<div class="meta">Opened by ' + esc(j.byName) + ' · ' + esc(when(j.ts)) + (j.status === 'Closed' ? ' · closed ' + esc(fmtDate(j.closedTs)) : '') + '</div></div>' +
         '<span class="cnt">' + k.rs.length + ' req.</span></div>' +
-        '<div class="jobnums"><span' + (k.out ? ' class="o"' : '') + '><b>' + k.out + '</b> still out</span><span' + (k.dsMissing ? ' class="r"' : '') + '><b>' + k.dsMissing + '</b> data sheet' + (k.dsMissing === 1 ? '' : 's') + ' missing</span>' + (k.pending ? '<span class="p"><b>' + k.pending + '</b> waiting</span>' : '') + '</div>' +
+        '<div class="jobnums"><span' + (k.out ? ' class="o"' : '') + '><b>' + k.out + '</b> still out</span><span' + (k.dsMissing ? ' class="r"' : '') + '><b>' + k.dsMissing + '</b> data sheet' + (k.dsMissing === 1 ? '' : 's') + ' missing</span>' + (k.pending ? '<span class="p"><b>' + k.pending + '</b> waiting</span>' : '') + (j.status !== 'Closed' && k.rs.length && !k.out && !k.pending ? '<span class="ok">✓ All back' + (can('job') ? ' — ready to close' : '') + '</span>' : '') + '</div>' +
         (j.status !== 'Closed' ? '<div class="site-f"><button class="btn sm" data-jobreq="' + j.id + '">＋ ' + (can('keep') ? 'Check out' : 'Request') + ' in this job</button></div>' : '') + '</div>';
     });
     return h + '<div style="height:24px"></div></main>';
@@ -951,26 +951,47 @@
       pdfSheet(doc.output('blob'), 'Jobs summary ' + isoDay(now) + '.pdf', 'Jobs summary', 'Jobs summary', open.length + ' open · ' + closed.length + ' closed', 'Akhnaton jobs summary');
     });
   }
-  /* Admin only: wipe trial history (all, or the last N days). Where devices are now is kept. */
+  /* Admin only: erase trial data — each kind on its own, for a chosen period */
+  var ERASE_OPTS = [
+    ['moves', 'Activity log (every move)', 'The audit trail of check-outs, returns, transfers and consumables used.'],
+    ['receipts', 'Receipts', 'Finished check-out receipts. Receipts with devices still out, or still waiting, are kept.'],
+    ['transfers', 'Transfers', 'Finished transfers between companies.'],
+    ['jobs', 'Jobs', 'Jobs with no receipts left in them.'],
+    ['datasheets', 'Data sheet marks', 'Sets the Yes / No mark of receipts back to empty.'],
+    ['places', 'Where devices are now', 'Every device back In office, loggers and kits back in the lab, waiting requests cancelled. Ignores the period.'],
+    ['devices', 'Devices added in the app', 'Only devices added from the app in this period (not the main list). Rarely needed.'],
+    ['companies', 'Companies added in the app', 'Only companies added in this period that are not used in any job or receipt.']
+  ];
   function eraseHistory() {
-    var days = 1;
+    var days = 1, what = {};
     openSheet(function (body, setFoot, setTitle) {
-      setTitle('Erase history');
+      setTitle('Erase');
       function draw() {
-        body.innerHTML = '<div class="note warnbox">This removes moves, closed receipts and empty jobs from the history. It cannot be undone. Where each device is right now does not change, and anything still out or waiting stays.</div>' +
-          '<div class="box"><h4>What to erase</h4><div class="seg">' + [[1, 'Last 24 hours'], [3, 'Last 3 days'], [7, 'Last 7 days'], [30, 'Last 30 days'], [0, 'Everything']].map(function (o) { return '<button data-days="' + o[0] + '" class="' + (days === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div>' +
-          '<label class="f" style="margin:12px 0 0"><span>Or the last … days</span><input class="inp" id="edays" inputmode="numeric" value="' + (days || '') + '" placeholder="e.g. 5"></label></div>';
+        body.innerHTML = '<div class="note warnbox">Choose exactly what to erase. Nothing is chosen until you tick it. Erasing cannot be undone.</div>' +
+          '<div class="box"><h4>Period</h4><div class="seg">' + [[1, 'Last 24 hours'], [3, 'Last 3 days'], [7, 'Last 7 days'], [30, 'Last 30 days'], [0, 'Everything']].map(function (o) { return '<button data-days="' + o[0] + '" class="' + (days === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div>' +
+          '<label class="f" style="margin:12px 0 0"><span>Or the last … days</span><input class="inp" id="edays" inputmode="numeric" value="' + (days || '') + '" placeholder="e.g. 5"></label></div>' +
+          '<div class="sec"><h2>What to erase</h2><small>' + Object.keys(what).filter(function (k) { return what[k]; }).length + ' chosen</small></div><div class="list">' +
+          ERASE_OPTS.map(function (o) { var on = !!what[o[0]]; return '<button class="row' + (on ? ' sel' : '') + '" data-ew="' + o[0] + '"><span class="check">' + (on ? ICON.tick : '') + '</span><span class="t"><b>' + o[1] + '</b><small>' + o[2] + '</small></span></button>'; }).join('') + '</div>';
         $$('[data-days]', body).forEach(function (b) { b.onclick = function () { days = +b.dataset.days; draw(); }; });
         $('#edays', body).oninput = function (e) { days = parseInt(e.target.value, 10) || 0; $$('[data-days]', body).forEach(function (x) { x.classList.toggle('on', +x.dataset.days === days); }); foot(); };
+        $$('[data-ew]', body).forEach(function (b) { b.onclick = function () { what[b.dataset.ew] = !what[b.dataset.ew]; S._keepScroll = true; var y = body.scrollTop; draw(); body.scrollTop = y; }; });
         foot();
       }
+      function chosen() { return ERASE_OPTS.filter(function (o) { return what[o[0]]; }); }
       function foot() {
-        setFoot('<button class="btn danger" data-er>Erase ' + (days ? 'the last ' + days + ' day' + (days === 1 ? '' : 's') : 'ALL history') + '</button>');
+        var c = chosen();
+        setFoot('<button class="btn danger" data-er ' + (c.length ? '' : 'disabled') + '>Erase ' + (c.length ? c.length + ' item' + (c.length === 1 ? '' : 's') : '…') + '</button>');
         $('[data-er]').onclick = function () {
-          askConfirm(days ? 'Erase everything recorded in the last ' + days + ' day' + (days === 1 ? '' : 's') + '?' : 'Erase ALL history? This cannot be undone.', 'Erase', function () {
+          var per = days ? 'from the last ' + days + ' day' + (days === 1 ? '' : 's') : 'from ALL time';
+          askConfirm('Erase ' + per + ': ' + c.map(function (o) { return o[1]; }).join(', ') + '? This cannot be undone.', 'Erase', function () {
             busy(true);
-            req('eraseHistory', { days: days }).then(function (r) { return refresh(true).then(function () { return r; }); })
-              .then(function (r) { closeAll(); toast('Erased ' + r.moves + ' moves, ' + r.receipts + ' receipts, ' + r.jobs + ' jobs'); })
+            req('eraseHistory', { days: days, what: what }).then(function (r) { return refresh(true).then(function () { return r; }); })
+              .then(function (r) {
+                closeAll();
+                var parts = [['moves', 'moves'], ['receipts', 'receipts'], ['transfers', 'transfers'], ['jobs', 'jobs'], ['datasheets', 'data sheet marks'], ['places', 'devices / items reset'], ['devices', 'devices'], ['companies', 'companies']]
+                  .filter(function (x) { return what[x[0]]; }).map(function (x) { return (r[x[0]] || 0) + ' ' + x[1]; });
+                toast('Erased: ' + parts.join(', '));
+              })
               .catch(function (e) { toast(e.message, true); }).then(function () { busy(false); });
           }, true);
         };
@@ -1030,7 +1051,7 @@
         '<button class="row" data-act="companies"><span class="t"><b>Companies</b><small>' + S.data.companies.filter(function (c) { return c.active !== false; }).length + ' active · add, rename or remove</small></span></button>' +
         '<button class="row" data-act="devlist"><span class="t"><b>Devices &amp; certificates</b><small>Add devices, due dates, certificate links</small></span></button>' +
         '<button class="row" data-act="stock"><span class="t"><b>Loggers, sensors &amp; kits</b><small>' + stockList().length + ' types counted by quantity · set how many you have</small></span></button>' +
-        '<button class="row" data-act="erase"><span class="t"><b style="color:var(--danger)">Erase history</b><small>Remove trial moves and receipts — all, or the last few days</small></span></button>' +
+        '<button class="row" data-act="erase"><span class="t"><b style="color:var(--danger)">Erase</b><small>Choose what to erase: activity, receipts, jobs, data sheet marks, device places…</small></span></button>' +
         '</div>';
     } else if (can('keep')) {
       h += '<div class="sec"><h2>Lab keeper</h2></div><div class="list">' +
