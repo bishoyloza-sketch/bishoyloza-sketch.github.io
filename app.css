@@ -281,3 +281,41 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .kbar{display:block;height:6px;border-radius:3px;background:var(--office-soft);margin-top:7px;overflow:hidden}
 .kbar i{display:block;height:100%;background:var(--client)}
 .nav a{font-size:11.5px}
+/* ---- home: data loggers card ---- */
+.kitcard{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;margin:12px 0 4px;color:var(--ink)}
+.kitcard:active{background:var(--blue-soft)}
+.kc-h{display:flex;justify-content:space-between;align-items:baseline}
+.kc-h b{font-size:16px;color:var(--navy)}
+.kc-h span{font-size:13px;color:var(--blue);font-weight:600}
+.kc-n{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.kc-n b{display:block;font-family:'Barlow Semi Condensed',sans-serif;font-size:26px;line-height:1.05;color:var(--navy)}
+.kc-n .ot b{color:var(--client)} .kc-n .in b{color:var(--office)}
+.kc-n small{font-size:12.5px;color:var(--muted)}
+.kc-t{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.kc-t span{font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted)}
+.kc-t span.o{background:var(--client-soft);border-color:transparent;color:var(--navy)}
+.kc-t span b{color:var(--client)}
+.odrow{border-left:4px solid var(--danger)}
+/* ---- transfer select all ---- */
+.selall{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 10px}
+.selall span{font-size:14px;color:var(--muted);font-weight:600}
+/* ---- jobs & data sheets ---- */
+.site.job{cursor:pointer}
+.site.job:active{background:var(--blue-soft)}
+.jobnums{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.jobnums span{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--muted)}
+.jobnums span b{color:var(--navy)}
+.jobnums span.o{background:var(--client-soft);border-color:transparent}
+.jobnums span.r{background:var(--danger-soft);border-color:transparent} .jobnums span.r b{color:var(--danger)}
+.jobnums span.p{background:var(--pending-soft);border-color:transparent}
+.dsb{flex:0 0 auto;font-size:12px;font-weight:700;border-radius:999px;padding:4px 9px;white-space:nowrap;align-self:flex-start}
+.dsb.yes{background:var(--office-soft);color:var(--office)}
+.dsb.no{background:var(--danger-soft);color:var(--danger)}
+.dsb.wait{background:var(--pending-soft);color:var(--pending)}
+.row .dsb{margin-right:6px;align-self:center}
+.dsrow{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.dsrow>span{font-size:13.5px;color:var(--muted);font-weight:600}
+.dsrow .sortseg button.on.no{color:var(--danger)}
+.dsrow .sortseg button.on:not(.no){color:var(--office)}
+.nav a{font-size:10.5px}
+.nav a svg{width:22px;height:22px}

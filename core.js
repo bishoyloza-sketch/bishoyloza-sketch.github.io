@@ -24,6 +24,7 @@ var Core = (function () {
   function ensureStock(db) {
     if (!db.stock) db.stock = [];
     if (!db.holdings) db.holdings = [];
+    if (!db.jobs) db.jobs = [];
     if (db.stock.length) return false;
     DEFAULT_STOCK.forEach(function (x) { db.stock.push({ id: x[0], group: x[1], name: x[2], total: '', active: true, note: x[3] || '' }); });
     return true;
@@ -76,6 +77,8 @@ var Core = (function () {
   function personRef(u) { return { id: u.id, name: u.name }; }
   function isSuper(actor) { return actor.role === 'superadmin'; }
   function canKeep(actor) { return actor.role === 'admin' || actor.role === 'keeper' || isSuper(actor); }
+  function canJob(actor) { return actor.role === 'admin' || actor.role === 'supervisor' || isSuper(actor); }
+  var ROLES = ['superadmin', 'admin', 'keeper', 'supervisor', 'engineer'];
   function isAdmin(actor) { return actor.role === 'admin' || isSuper(actor); }
   function devName(d) { return d.description + ' (S/N ' + d.serial + ')'; }
 
@@ -187,6 +190,9 @@ var Core = (function () {
 
     /* Lab keepers / admin: devices leave now. Everyone else: a request that waits for a lab keeper. */
     checkout: function (db, actor, p, now) {
+      var job = byId(db.jobs, p.jobId); need(job, 'Choose the job first. A site supervisor opens jobs.');
+      need(job.status !== 'Closed', 'This job is closed. Ask the site supervisor to reopen it.');
+      p.companyId = job.companyId;
       var co = byId(db.companies, p.companyId); need(co, 'Choose the company.');
       need(p.engineerIds && p.engineerIds.length, 'Choose at least one engineer.');
       p.deviceIds = p.deviceIds || [];
@@ -203,7 +209,7 @@ var Core = (function () {
       checkAvailable(db, items);
       var id = nextCheckoutId(db, now);
       var rec = {
-        id: id, ts: iso(now), companyId: co.id, engineers: eng, deviceIds: p.deviceIds.slice(),
+        id: id, ts: iso(now), jobId: job.id, companyId: co.id, engineers: eng, deviceIds: p.deviceIds.slice(),
         expectedReturn: p.expectedReturn || '', note: p.note || '', byId: actor.id, byName: actor.name, items: items,
         status: keeper ? 'Approved' : 'Pending', requestedTs: iso(now),
         decidedById: keeper ? actor.id : '', decidedByName: keeper ? actor.name : '', decidedTs: keeper ? iso(now) : ''
@@ -237,6 +243,7 @@ var Core = (function () {
       checkAvailable(db, c.items || []);
       var devs = keep.map(function (id) {
         var d = byId(db.devices, id); need(d && (d.pending === c.id || d.status === 'In Office'), 'A device in this request is no longer available.');
+        need(!d.pending || d.pending === c.id || isPortion(d), devName(d) + ' is reserved in another request.');
         need(d.status === 'In Office' || isAdmin(actor), devName(d) + ' is not in the office (' + d.status + ').');
         return d;
       });
@@ -245,6 +252,92 @@ var Core = (function () {
       touch(db, 'checkouts');
       releaseCheckout(db, now, actor, c, devs, co);
       return { checkoutId: c.id };
+    },
+
+    /* Change a request while it waits: the requester or a lab keeper. Closed once approved. */
+    checkoutEdit: function (db, actor, p, now) {
+      var c = byId(db.checkouts, p.checkoutId); need(c && c.status === 'Pending', 'This request was already decided, so it cannot be changed.');
+      need(canKeep(actor) || c.byId === actor.id, 'Only the person who sent the request or a lab keeper can change it.');
+      var ids = (p.deviceIds || c.deviceIds).slice();
+      var items = p.items ? cleanItems(db, p.items) : (c.items || []);
+      need(ids.length || items.length, 'Keep at least one device or item, or cancel the request.');
+      ids.forEach(function (id) {
+        var d = byId(db.devices, id); need(d, 'Unknown device.');
+        if (c.deviceIds.indexOf(id) >= 0) return;
+        need(d.status === 'In Office', devName(d) + ' is not in the office (' + d.status + ').');
+        need(!d.pending || isPortion(d), devName(d) + ' is already reserved in another request.');
+      });
+      checkAvailable(db, items);
+      c.deviceIds.forEach(function (id) {
+        if (ids.indexOf(id) >= 0) return;
+        var d = byId(db.devices, id); if (!d) return;
+        if (d.pending === c.id) d.pending = '';
+        log(db, now, actor, d, 'Removed from request', { checkoutId: c.id });
+      });
+      ids.forEach(function (id) {
+        if (c.deviceIds.indexOf(id) >= 0) return;
+        var d = byId(db.devices, id); if (!isPortion(d)) d.pending = c.id;
+        log(db, now, actor, d, 'Added to request', { checkoutId: c.id });
+      });
+      c.deviceIds = ids; c.items = items;
+      if (p.engineerIds && p.engineerIds.length) c.engineers = p.engineerIds.map(function (id) { var u = byId(db.users, id); need(u, 'Unknown engineer.'); return personRef(u); });
+      if (p.expectedReturn !== undefined) c.expectedReturn = p.expectedReturn || '';
+      if (p.note !== undefined) c.note = p.note || '';
+      c.editedByName = actor.name; c.editedTs = iso(now);
+      touch(db, 'checkouts'); touch(db, 'devices');
+      return { checkoutId: c.id };
+    },
+
+    /* Jobs: a site supervisor (or the admin) opens one per client visit; every request goes inside a job. */
+    saveJob: function (db, actor, p, now) {
+      need(canJob(actor), 'Only a site supervisor or the admin can open or edit jobs.');
+      var j = p.job || {}, ex = j.id ? byId(db.jobs, j.id) : null;
+      if (!ex) {
+        var co = byId(db.companies, j.companyId); need(co, 'Choose the company.');
+        var y = new Date(now).getFullYear(), n = 0, pre = 'JOB-' + y + '-';
+        db.jobs.forEach(function (x) { if (x.id.indexOf(pre) === 0) n = Math.max(n, parseInt(x.id.slice(pre.length), 10) || 0); });
+        ex = { id: pre + pad(n + 1, 3), ts: iso(now), companyId: co.id, status: 'Open', byId: actor.id, byName: actor.name, closedTs: '' };
+        db.jobs.push(ex);
+      } else if (j.companyId && j.companyId !== ex.companyId) {
+        need(!db.checkouts.some(function (c) { return c.jobId === ex.id && c.status !== 'Declined' && c.status !== 'Cancelled'; }), 'This job already has requests, so its company cannot change.');
+        need(byId(db.companies, j.companyId), 'Choose the company.'); ex.companyId = j.companyId;
+      }
+      if (j.title !== undefined) ex.title = String(j.title || '').trim();
+      if (j.note !== undefined) ex.note = String(j.note || '').trim();
+      if (j.status === 'Closed' && ex.status !== 'Closed') { ex.status = 'Closed'; ex.closedTs = iso(now); }
+      if (j.status === 'Open') { ex.status = 'Open'; ex.closedTs = ''; }
+      touch(db, 'jobs');
+      return { jobId: ex.id };
+    },
+
+    /* Lab keeper marks whether the data sheet of a receipt came back to the office (any time). */
+    setDataSheet: function (db, actor, p, now) {
+      need(canKeep(actor), 'Only a lab keeper can mark data sheets.');
+      var c = byId(db.checkouts, p.checkoutId); need(c && (c.status === 'Approved' || !c.status), 'Receipt not found.');
+      c.dataSheet = p.value === 'Yes' ? 'Yes' : 'No';
+      c.dataSheetTs = iso(now); c.dataSheetById = actor.id; c.dataSheetByName = actor.name;
+      touch(db, 'checkouts');
+      return { ok: true };
+    },
+
+    /* Admin: wipe trial history — everything, or only the last N days. Devices keep where they are now. */
+    eraseHistory: function (db, actor, p, now) {
+      need(isAdmin(actor), 'Only the admin can erase history.');
+      var days = num(p.days), cut = days > 0 ? iso(now - days * 864e5) : '';
+      function inRange(ts) { return !cut || String(ts || '') >= cut; }
+      var live = {};
+      db.devices.forEach(function (d) { if (d.checkoutId) live[d.checkoutId] = 1; if (d.pending) live[d.pending] = 1; });
+      db.holdings.forEach(function (h) { if (h.checkoutId) live[h.checkoutId] = 1; });
+      var n0 = db.movements.length;
+      db.movements = db.movements.filter(function (m) { return !inRange(m.ts); });
+      var c0 = db.checkouts.length;
+      db.checkouts = db.checkouts.filter(function (c) { return live[c.id] || c.status === 'Pending' || !inRange(c.requestedTs || c.ts); });
+      db.transfers = db.transfers.filter(function (t) { return t.status === 'Pending' || !inRange(t.ts); });
+      var used = {}; db.checkouts.forEach(function (c) { if (c.jobId) used[c.jobId] = 1; });
+      var j0 = db.jobs.length;
+      db.jobs = db.jobs.filter(function (j) { return used[j.id] || !inRange(j.ts); });
+      touch(db, 'movementsAll'); touch(db, 'checkouts'); touch(db, 'transfers'); touch(db, 'jobs');
+      return { moves: n0 - db.movements.length, receipts: c0 - db.checkouts.length, jobs: j0 - db.jobs.length };
     },
 
     checkin: function (db, actor, p, now) {
@@ -385,7 +478,7 @@ var Core = (function () {
     saveUser: function (db, actor, p, now) {
       need(isAdmin(actor), 'Only the admin can manage people.');
       var u = p.user || {}; need(u.name && String(u.name).trim(), 'Write the person\'s name.');
-      need(['superadmin', 'admin', 'keeper', 'engineer'].indexOf(u.role) >= 0, 'Choose a role.');
+      need(ROLES.indexOf(u.role) >= 0, 'Choose a role.');
       var ex = u.id ? byId(db.users, u.id) : null, pin = null;
       /* Super admin: the safety account (e.g. the general manager). Only a super admin can change one,
        * except that an admin may create the very first super admin. */
@@ -427,14 +520,15 @@ var Core = (function () {
     },
 
     saveDevice: function (db, actor, p, now) {
-      need(isAdmin(actor), 'Only the admin can add or edit devices.');
+      need(canKeep(actor), 'Only a lab keeper or the admin can edit devices.');
       var d = p.device || {}; need(d.description && d.serial, 'Description and serial number are required.');
       var ex = d.id ? byId(db.devices, d.id) : null;
+      if (!isAdmin(actor)) { need(ex, 'Only the admin can add new devices.'); need(d.active !== false, 'Only the admin can remove a device.'); }
       if (!ex) {
         ex = { id: 'D' + now, status: 'In Office', companyId: '', holders: [], since: iso(now), expectedReturn: '', checkoutId: '', note: '', pending: '' };
         db.devices.push(ex);
       }
-      ['category', 'manufacturer', 'description', 'model', 'serial', 'accuracy', 'range', 'calDue', 'certUrl'].forEach(function (k) {
+      ['category', 'manufacturer', 'description', 'model', 'serial', 'accuracy', 'resolution', 'range', 'calDate', 'calDue', 'certNo', 'certUrl', 'remarks'].forEach(function (k) {
         if (d[k] !== undefined) ex[k] = String(d[k] == null ? '' : d[k]).trim();
       });
       ex.certStatus = d.certStatus === 'none' ? 'none' : 'dated';
@@ -479,13 +573,14 @@ var Core = (function () {
       checkouts: recentCheckouts,
       stock: db.stock.filter(function (x) { return x.active !== false; }),
       holdings: db.holdings,
+      jobs: db.jobs,
       movements: moves,
       serverTime: opts.now ? iso(opts.now) : ''
     };
   }
 
   return {
-    STATUSES: STATUSES, SERVICE: SERVICE, apply: apply, snapshot: snapshot, isCoReq: isCoReq, isPortion: isPortion, STOCK_GROUPS: STOCK_GROUPS,
+    STATUSES: STATUSES, SERVICE: SERVICE, ROLES: ROLES, apply: apply, snapshot: snapshot, isCoReq: isCoReq, isPortion: isPortion, STOCK_GROUPS: STOCK_GROUPS,
     pinHash: pinHash, serialTail: serialTail, verify: verify, publicUser: publicUser
   };
 })();
