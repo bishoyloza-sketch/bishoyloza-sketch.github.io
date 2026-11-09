@@ -191,3 +191,5 @@ select.fin{background-image:linear-gradient(45deg,transparent 50%,#8792A2 50%),l
 .xlv tr.gap td{border:0;height:10px}
 .xlh{margin:16px 0 0;font:600 14px var(--font);color:var(--navy)}
 .xlv td.v{text-align:left}
+.rt input.rnd{border-color:#F0A04B;background:#FFF1E2;box-shadow:0 0 0 2px #FDE1C2}
+.rndw{color:#B45309;font-weight:600}
