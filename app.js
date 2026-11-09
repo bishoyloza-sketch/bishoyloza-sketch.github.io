@@ -575,7 +575,8 @@
         var ws = X.utils.aoa_to_sheet(aoa); ws['!cols'] = [30, 26, 10, 26, 12].map(function (w) { return { wch: w }; });
         X.utils.book_append_sheet(wb, ws, t[1].slice(0, 30));
       });
-      var blob = new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var kset = {}; wb.SheetNames.forEach(function (n) { kset[n] = { o: 'portrait', head: 3 }; });
+      var blob = xlsxA4(X, wb, kset);
       var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
       pdfSheet(blob, 'Loggers and kits ' + stamp + '.xlsx', 'Loggers & kits', 'Loggers & kits', 'One sheet per group · in / out / who has them', 'Akhnaton loggers & kits', 'xlsx');
     }).catch(function (e) { toast(e.message, true); });
@@ -857,58 +858,86 @@
     var now = new Date(); toast('Preparing Excel…');
     loadXlsx().then(function (X) {
       var wb = X.utils.book_new();
-      var head = ['Data sheet', 'Receipt', 'Job', 'Job title', 'Company', 'Out on', 'Engineers', 'Devices', 'Items', 'Still outside', 'Expected back', 'Marked by', 'Marked on'];
+      var head = ['Data sheet', 'Receipt', 'Out on', 'Company', 'Job', 'Job title', 'Engineers', 'Devices', 'Items', 'Still outside', 'Expected back', 'Marked by', 'Marked on'];
       var rows = dsRows().sort(function (a, b) { return dsBack(a.c) - dsBack(b.c); }).map(function (r) {
         var c = r.c;
-        return [dsBack(c) ? 'Yes' : 'No', c.id, r.job ? r.job.id : '', r.job ? r.job.title || '' : '', coName(c.companyId), fmtDate(c.ts), names(c.engineers), c.deviceIds.length, itemsText(c.items), r.out.n || 'All back', c.expectedReturn ? fmtDate(c.expectedReturn) : '', c.dataSheetByName || '', c.dataSheetTs ? fmtDate(c.dataSheetTs) : ''];
+        return [dsBack(c) ? 'Yes' : 'No', c.id, fmtDate(c.ts), coName(c.companyId), r.job ? r.job.id : '', r.job ? r.job.title || '' : '', names(c.engineers), c.deviceIds.length, itemsText(c.items), r.out.n || 'All back', c.expectedReturn ? fmtDate(c.expectedReturn) : '', c.dataSheetByName || '', c.dataSheetTs ? fmtDate(c.dataSheetTs) : ''];
       });
       var ws = X.utils.aoa_to_sheet([['Data sheet report — as of ' + fmtDate(now) + ' ' + fmtTime(now)], [], head].concat(rows));
-      ws['!cols'] = [10, 14, 14, 24, 26, 12, 28, 8, 30, 12, 13, 16, 12].map(function (w) { return { wch: w }; });
+      ws['!cols'] = [10, 14, 12, 26, 14, 24, 28, 8, 30, 12, 13, 16, 12].map(function (w) { return { wch: w }; });
       ws['!autofilter'] = { ref: 'A3:M' + (rows.length + 3) };
       X.utils.book_append_sheet(wb, ws, 'Data sheets');
       var jr = jobsList().slice().sort(function (a, b) { return (b.ts || '').localeCompare(a.ts || ''); }).map(function (j) { var k = jobStats(j); return [j.id, coName(j.companyId), j.title || '', j.basis || '', j.basis === 'Other' ? '' : j.ref || '', j.status || 'Open', j.byName, fmtDate(j.ts), j.closedTs ? fmtDate(j.closedTs) : '', k.rs.length, k.out, k.dsMissing]; });
       var ws2 = X.utils.aoa_to_sheet([['Jobs — as of ' + fmtDate(now)], [], ['Job', 'Company', 'Title', 'Under', 'PO / approval no.', 'Status', 'Opened by', 'Opened', 'Closed', 'Requests', 'Still outside', 'Data sheets missing']].concat(jr));
       ws2['!cols'] = [14, 26, 26, 14, 18, 9, 16, 12, 12, 9, 12, 16].map(function (w) { return { wch: w }; });
       X.utils.book_append_sheet(wb, ws2, 'Jobs');
-      var blob = new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var blob = xlsxA4(X, wb, { 'Data sheets': { o: 'landscape', head: 3 }, 'Jobs': { o: 'landscape', head: 3 } });
       pdfSheet(blob, 'Data sheet report ' + isoDay(now) + '.xlsx', 'Data sheet report', 'Data sheet report', rows.length + ' receipts · ' + jr.length + ' jobs', 'Akhnaton data sheet report', 'xlsx');
     }).catch(function (e) { toast(e.message, true); });
   }
   function dsPdf() {
     if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
     var now = new Date(), all = dsRows(), miss = all.filter(function (r) { return !dsBack(r.c); }), ok = all.filter(function (r) { return dsBack(r.c); });
+    var outN = miss.filter(function (r) { return r.out.n; }).length;
     loadLogo().then(function (logo) {
       function lat(t) { return pdfTxt(t); }
-      var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' }), W = 297, H = 210, M = 12, y = 12;
+      var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' }), W = 297, H = 210, M = 10, y = 10;
       var FN = useFont(doc);
-      if (logo) { var lw = 50, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
-      doc.setFont(FN, 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75); doc.text('Data Sheet Report', W - M, y + 6, { align: 'right' });
-      doc.setFont(FN, 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
-      doc.text(miss.length + ' missing  ·  ' + ok.length + ' back  ·  as of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 12, { align: 'right' });
-      y += 22; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 6;
-      var cols = [['Receipt', 26], ['Job', 44], ['Company', 52], ['Out on', 22], ['Engineers', 52], ['Still outside', 26], ['Marked by / on', 51]];
+      /* one line per cell: cut the text with … so nothing wraps */
+      function fit(t, w) { t = lat(t); if (doc.getTextWidth(t) <= w) return t; while (t.length > 1 && doc.getTextWidth(t + '…') > w) t = t.slice(0, -1); return t + '…'; }
+      if (logo) { var lw = 44, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
+      doc.setFont(FN, 'bold'); doc.setFontSize(17); doc.setTextColor(19, 41, 75); doc.text('Data Sheet Report', W - M, y + 6, { align: 'right' });
+      doc.setFont(FN, 'normal'); doc.setFontSize(9); doc.setTextColor(90, 104, 121);
+      doc.text('As of ' + fmtDate(now) + ', ' + fmtTime(now) + '   ·   by ' + lat(S.me && S.me.name), W - M, y + 11.5, { align: 'right' });
+      y += 19;
+      /* summary cards */
+      [[miss.length, 'Data sheets NOT back', [194, 54, 43], [253, 236, 234]], [ok.length, 'Data sheets back in office', [30, 138, 85], [230, 246, 238]], [outN, 'Not back & devices still outside', [11, 118, 197], [230, 241, 251]], [all.length, 'Receipts in total', [19, 41, 75], [237, 241, 245]]].forEach(function (c, i) {
+        var cw = (W - 2 * M - 9) / 4, x = M + i * (cw + 3);
+        doc.setFillColor(c[3][0], c[3][1], c[3][2]); doc.roundedRect(x, y, cw, 15, 2, 2, 'F');
+        doc.setFillColor(c[2][0], c[2][1], c[2][2]); doc.rect(x, y, 1.6, 15, 'F');
+        doc.setFont(FN, 'bold'); doc.setFontSize(16); doc.setTextColor(c[2][0], c[2][1], c[2][2]); doc.text(String(c[0]), x + 5, y + 7.5);
+        doc.setFont(FN, 'normal'); doc.setFontSize(8.5); doc.setTextColor(60, 72, 88); doc.text(c[1], x + 5, y + 12);
+      });
+      y += 21;
+      var cols = [['#', 8], ['Receipt', 25], ['Out on', 21], ['Company', 48], ['Job', 42], ['Engineers', 48], ['Still out', 18], ['Data sheet', 22], ['Marked by / on', 45]];
+      var RH = 6.4;
       function headRow() {
-        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7.5, 'F'); doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont(FN, 'bold');
-        var x = M + 2; cols.forEach(function (c) { doc.text(c[0], x, y + 5.1); x += c[1]; }); doc.setFont(FN, 'normal'); y += 7.5;
+        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7, 'F'); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255); doc.setFont(FN, 'bold');
+        var x = M + 2; cols.forEach(function (c) { doc.text(c[0], x, y + 4.7); x += c[1]; }); doc.setFont(FN, 'normal'); y += 7;
       }
       function section(t, list, col) {
-        if (y + 18 > H - 14) { doc.addPage(); y = 14; }
-        doc.setFont(FN, 'bold'); doc.setFontSize(11.5); doc.setTextColor(col[0], col[1], col[2]); doc.text(t + '  (' + list.length + ')', M, y + 4); y += 6.5; headRow();
+        if (y + 22 > H - 12) { doc.addPage(); y = 12; }
+        doc.setFillColor(col[0], col[1], col[2]); doc.rect(M, y, 2, 6, 'F');
+        doc.setFont(FN, 'bold'); doc.setFontSize(11); doc.setTextColor(col[0], col[1], col[2]); doc.text(t + '  (' + list.length + ')', M + 4, y + 4.6); y += 8; headRow();
+        if (!list.length) { doc.setFontSize(9); doc.setTextColor(90, 104, 121); doc.text('None.', M + 2, y + 4.5); y += RH + 2; return; }
         list.forEach(function (r, i) {
-          var c = r.c, cells = [c.id, r.job ? r.job.id + (r.job.title ? ' ' + lat(r.job.title) : '') : '-', lat(coName(c.companyId)), fmtDate(c.ts), lat(names(c.engineers)), r.out.n ? String(r.out.n) : 'All back', c.dataSheetByName ? lat(c.dataSheetByName) + ' ' + fmtDate(c.dataSheetTs) : ''];
-          var wr = cells.map(function (t, k) { return doc.splitTextToSize(t, cols[k][1] - 2.5); }), hh = Math.max.apply(null, wr.map(function (w) { return w.length; })) * 4.2 + 3;
-          if (y + hh > H - 14) { doc.addPage(); y = 14; headRow(); }
-          if (i % 2) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, hh, 'F'); }
-          doc.setFontSize(9.3); doc.setTextColor(23, 34, 51);
-          var x = M + 2; wr.forEach(function (w, k) { doc.text(w, x, y + 4.6); x += cols[k][1]; }); y += hh;
+          var c = r.c, yes = dsBack(c);
+          if (y + RH > H - 12) { doc.addPage(); y = 12; headRow(); }
+          if (i % 2) { doc.setFillColor(244, 246, 249); doc.rect(M, y, W - 2 * M, RH, 'F'); }
+          doc.setFontSize(8.5); doc.setTextColor(23, 34, 51); doc.setFont(FN, 'normal');
+          var cells = [String(i + 1), c.id, fmtDate(c.ts), coName(c.companyId), r.job ? r.job.id + (r.job.title ? ' · ' + r.job.title : '') : '—', names(c.engineers), r.out.n ? String(r.out.n) : '✓', '', c.dataSheetByName ? c.dataSheetByName + ' · ' + fmtDate(c.dataSheetTs) : ''];
+          var x = M + 2;
+          cells.forEach(function (t, k) {
+            var w = cols[k][1] - 3;
+            if (k === 7) {
+              doc.setFillColor(yes ? 30 : 194, yes ? 138 : 54, yes ? 85 : 43); doc.roundedRect(x - 0.5, y + 1.1, 13, RH - 2.2, 1.5, 1.5, 'F');
+              doc.setFont(FN, 'bold'); doc.setFontSize(7.5); doc.setTextColor(255, 255, 255); doc.text(yes ? 'YES' : 'NO', x + 6, y + 4.4, { align: 'center' });
+              doc.setFont(FN, 'normal'); doc.setFontSize(8.5); doc.setTextColor(23, 34, 51);
+            } else {
+              if (k === 6) { if (r.out.n) { doc.setTextColor(11, 118, 197); doc.setFont(FN, 'bold'); } else doc.setTextColor(30, 138, 85); }
+              doc.text(fit(t, w), x, y + 4.4);
+              doc.setTextColor(23, 34, 51); doc.setFont(FN, 'normal');
+            }
+            x += cols[k][1];
+          });
+          y += RH;
         });
-        if (!list.length) { doc.setFontSize(10); doc.setTextColor(90, 104, 121); doc.text('None.', M + 2, y + 5); y += 7; }
-        y += 6;
+        doc.setDrawColor(214, 221, 230); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 7;
       }
       section('Data sheet NOT back', miss, [194, 54, 43]);
-      section('Data sheet back in the office', ok, [19, 41, 75]);
+      section('Data sheet back in the office', ok, [30, 138, 85]);
       var pages = doc.internal.getNumberOfPages();
-      for (var p = 1; p <= pages; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(140, 150, 165); doc.text('Akhnaton Trading and Representation · Calibration Lab · Data Sheet Report', M, H - 6); doc.text('Page ' + p + ' of ' + pages, W - M, H - 6, { align: 'right' }); }
+      for (var p = 1; p <= pages; p++) { doc.setPage(p); doc.setFontSize(7.5); doc.setTextColor(140, 150, 165); doc.text('Akhnaton Trading and Representation · Calibration Lab · Data Sheet Report · ' + fmtDate(now), M, H - 5); doc.text('Page ' + p + ' of ' + pages, W - M, H - 5, { align: 'right' }); }
       pdfSheet(doc.output('blob'), 'Data sheet report ' + isoDay(now) + '.pdf', 'Data sheet report', 'Data sheet report', miss.length + ' missing · ' + ok.length + ' back', 'Akhnaton data sheet report');
     });
   }
@@ -2041,6 +2070,37 @@
     });
     return xlsxLoading;
   }
+  /* Make every sheet print on A4: given orientation, all columns fit the page width, header row repeats on each page */
+  function xlsxA4(X, wb, setup) {
+    setup = setup || {};
+    var names = [];
+    wb.SheetNames.forEach(function (n, i) {
+      var ws = wb.Sheets[n], st = setup[n] || {};
+      ws['!margins'] = { left: 0.35, right: 0.35, top: 0.45, bottom: 0.45, header: 0.25, footer: 0.25 };
+      if (st.head) names.push({ Name: '_xlnm.Print_Titles', Sheet: i, Ref: "'" + n.replace(/'/g, "''") + "'!$" + st.head + ':$' + st.head });
+    });
+    if (names.length) { wb.Workbook = wb.Workbook || {}; wb.Workbook.Names = (wb.Workbook.Names || []).concat(names); }
+    var data = new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' }));
+    try {
+      var z = X.CFB.read(data, { type: 'array' }), dec = new TextDecoder(), enc = new TextEncoder();
+      var wbXml = '', rels = '';
+      z.FullPaths.forEach(function (fp, i) { if (/xl\/workbook\.xml$/.test(fp)) wbXml = dec.decode(z.FileIndex[i].content); if (/xl\/_rels\/workbook\.xml\.rels$/.test(fp)) rels = dec.decode(z.FileIndex[i].content); });
+      var byFile = {};
+      (wbXml.match(/<sheet [^>]*>/g) || []).forEach(function (tag, k) {
+        var rid = (tag.match(/r:id="([^"]+)"/) || [])[1], m = rels.match(new RegExp('Id="' + rid + '"[^>]*Target="([^"]+)"')) || rels.match(new RegExp('Target="([^"]+)"[^>]*Id="' + rid + '"'));
+        if (m) byFile[m[1].replace(/^\/?xl\//, '')] = wb.SheetNames[k];
+      });
+      z.FullPaths.forEach(function (fp, i) {
+        var short = (fp.match(/xl\/(worksheets\/sheet\d+\.xml)$/) || [])[1]; if (!short) return;
+        var name = byFile[short], o = ((setup[name] || {}).o) || 'portrait', f = z.FileIndex[i], x = dec.decode(f.content);
+        x = x.replace(/(<worksheet[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>')
+             .replace(/(<pageMargins[^>]*\/>)/, '$1<pageSetup paperSize="9" orientation="' + o + '" fitToWidth="1" fitToHeight="0"/>');
+        f.content = enc.encode(x); f.size = f.content.length;
+      });
+      data = X.CFB.write(z, { fileType: 'zip', type: 'array' });
+    } catch (e) { /* keep the plain file if anything goes wrong */ }
+    return new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
   function listXls() {
     var list = filteredDevices();
     var fLabel = (DEV_FILTERS.filter(function (x) { return x[0] === S.filter; })[0] || ['', 'All'])[1];
@@ -2070,8 +2130,7 @@
         .concat(hs.map(function (h) { return [h.group, h.name, +h.qty, coName(h.companyId), names(h.holders), fmtDate(h.since)]; })));
       ws2['!cols'] = [20, 32, 20, 10, 10, 12].map(function (w) { return { wch: w }; });
       X.utils.book_append_sheet(wb, ws2, 'Loggers & kits');
-      var out = X.write(wb, { bookType: 'xlsx', type: 'array' });
-      var blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var blob = xlsxA4(X, wb, { 'Devices': { o: 'landscape', head: 3 }, 'Loggers & kits': { o: 'portrait', head: 3 } });
       var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
       var fname = 'Devices ' + title.replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ' + stamp + '.xlsx';
       pdfSheet(blob, fname, 'Device list', title, rows.length + ' device' + (rows.length === 1 ? '' : 's') + ' · Excel', 'Akhnaton devices – ' + title, 'xlsx');
