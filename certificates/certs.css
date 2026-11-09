@@ -342,3 +342,8 @@ body{overflow-wrap:break-word;word-break:normal;hyphens:none;-webkit-hyphens:non
 .pvbox{background:#F7FAFE;border:1px solid #D6E2F0;border-top:0;border-radius:0 0 12px 12px;padding:10px 12px;margin:-2px 0 8px;font-size:13px}
 .pvgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-bottom:8px}.pvgrid div{min-width:0}.pvgrid span{display:block;color:var(--muted);font-size:11.5px}.pvgrid b{display:block;color:var(--navy);font-weight:600;font-size:13px;word-break:break-word}
 .pvt{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:8px;overflow:hidden}.pvt th{background:#EEF3FA;color:#13294B;font-weight:600;padding:5px;text-align:center}.pvt td{border-top:1px solid #E6ECF3;padding:5px;text-align:center}
+/* print preview: the whole A4 page fits the screen, phone and laptop */
+.pvwrap{position:relative;width:100%;overflow:hidden;background:#DFE4EA;border-radius:10px;margin-top:8px}
+.pvwrap iframe.pv{position:absolute;left:0;top:0;transform-origin:0 0;border:0;border-radius:0;margin:0;min-height:0;background:#DFE4EA}
+.pvhint{font-size:12.5px;color:var(--muted);text-align:center}
+@media (min-width:900px){.pvwrap{max-width:860px;margin-left:auto;margin-right:auto}}
