@@ -1103,7 +1103,7 @@ function monYear(s, add) { var d = s2d(s); if (!d) return ''; return MON[d.getMo
 function genDefaults(p) { var g = p.gen = p.gen || {}, first = p.items.filter(function (i) { return i.old && i.old.fields && i.old.fields.certNo; })[0], yr = s2d(p.info && p.info.cal) ? s2d(p.info.cal).getFullYear() : new Date().getFullYear();
   if (g.prefix == null) { var m = first && String(first.old.fields.certNo).match(/^(.*?)(\d+)-(\d{4})$/); g.prefix = m ? m[1] : (/^\d+$/.test(p.company.code || '') ? p.company.code + '-' : (String(p.company.code || '').replace(/^(\d+)([A-Z]+)$/i, '$1/$2-') || '')); g.pad = m ? m[2].length : 3; }
   g.year = yr; if (g.start == null) g.start = ''; if (g.approver == null) g.approver = 'Eng. Ayman Wasfy'; if (g.approverPos == null) g.approverPos = 'Technical Manager';
-  if (g.techPos == null) g.techPos = 'Calibration Engineer'; if (g.interval == null) g.interval = 'One Year'; if (g.signer == null) g.signer = 'م/ ميــنا إبراهــيم'; if (g.signerPos == null) g.signerPos = 'مدير قســمي الصيانة والمعايرة';
+  if (g.techPos == null) g.techPos = 'Calibration Engineer'; if (g.interval == null) g.interval = 'One Year'; if (g.signer == null || g.signer === 'م/ ميــنا إبراهــيم') { g.signer = S.me ? cleanName(S.me.name) : ''; g.signerPos = POS()[g.signer] || ''; } if (g.signerPos == null) g.signerPos = '';
   g.addr = g.addr || ''; g.tel = g.tel || ''; g.fax = g.fax || ''; g.loc = g.loc || ''; g.prices = g.prices || {}; g.dsr = g.dsr || {}; return g; }
 function certNo(g, n) { var s = String(n); while (s.length < (g.pad || 3)) s = '0' + s; return g.prefix + s + '-' + g.year; }
 function genGroups(p) { /* one cover per machine; units of the same kind share one cover */
@@ -1242,10 +1242,15 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
     '<div class="sec"><h2>Covers and certificates</h2><small>' + groups.length + ' covers · ' + p.items.length + ' certificates</small></div>' +
     groups.map(function (gr) { return '<div class="mach"><div class="mach-h"><b>' + esc(gr.machine ? gr.machine.name : (gr.items[0].description || 'Units')) + '</b><span class="small">' + esc(gr.from ? (gr.items.length > 1 ? gr.from + ' → ' + gr.to : gr.from) : 'no number yet') + '</span></div>' +
       gr.items.map(function (it) { return '<div class="row"><span class="t"><b>' + esc(it.certNo || '—') + ' · ' + esc(it.code || it.description) + '</b><small>Data sheet ref. <input class="inp" data-ds="' + it.id + '" value="' + esc(dsRef(p, it)) + '" style="height:32px;width:110px;display:inline-block;padding:0 6px"> · Price <input class="inp" data-pr="' + it.id + '" value="' + esc(g.prices[it.id] || '') + '" inputmode="decimal" placeholder="Lump sum" style="height:32px;width:100px;display:inline-block;padding:0 6px"></small></span></div>'; }).join('') + '</div>'; }).join('') +
-    '<div class="sec"><h2>Receipt letter</h2></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('signer', 'Signed by') + F('signerPos', 'Position') + '</div>' +
-    '<div class="cf"><button class="btn" id="gW">Word files (.zip)</button><button class="btn blue" id="gP">' + (iss.length || ph.length ? 'Preview / print (draft)' : 'Print / PDF') + '</button></div>' +
+    '<div class="sec"><h2>Receipt letter</h2></div><div class="dgrid">' + signerFields(g) + '</div>' +
+    '<div class="sec"><h2>Finish</h2></div><div class="cats one">' +
+      '<button id="gPv">' + I.doc + '<b>1 · Preview the certificates</b><small>All covers and certificates one after the other</small></button>' +
+      '<button id="gP">' + I.doc + '<b>2 · Save as PDF</b><small>All in one PDF, in order (opens the print window – choose “Save as PDF”)</small></button>' +
+      '<button id="gS">' + I.ok + '<b>2 · Save the Word files on SharePoint</b><small>Certificates › Cert ' + ((s2d(inf.cal) || new Date()).getFullYear()) + ' › ' + esc(certFolderName(p)) + (p.savedSP ? ' · saved ' + esc(fmtDate(p.savedSP.at)) : '') + '</small></button></div>' +
+      '<div class="cf"><button class="btn ghost sm" id="gW">Download Word (.zip)</button></div>' +
     '<div class="small" style="margin-top:8px">Word: for every cover a “… cover page.docx” and a “… cal. cert.docx”, plus the receipt letter. One font (Arial), all borders, page X of N. ' + (iss.length || ph.length ? 'The final PDF waits until nothing is missing.' : '') + '</div>';
   $$('[data-g]').forEach(function (e) { e.onchange = function () { g[e.dataset.g] = e.value.trim(); saveProjects(); tGen(p); }; });
+  bindSigner(g, function () { tGen(p); });
   var ga = $('#gAuto'); if (ga) ga.onclick = function () { var n = autoRefs(p, true); toast(n + ' references suggested – review them'); tGen(p); };
   var gr2 = $('#gRefs'); if (gr2) gr2.onclick = function () { gotoStep(p, 'refs'); };
   $$('[data-ds]').forEach(function (e) { e.onchange = function () { g.dsr[e.dataset.ds] = e.value.trim(); saveProjects(); }; });
@@ -1253,7 +1258,8 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
   var ad = $('#adr'); if (ad) ad.onclick = function () { ad.disabled = true; ad.innerHTML = '<span class="spin dark"></span>'; findAddress(p, true).then(function () { tGen(p); }); };
   var r = $('#phR'); if (r) r.onclick = function (e) { e.preventDefault(); phSheet(p); };
   $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); };
-  $('#gP').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); openPrint(p, iss.length || ph.length); };
+  var pv = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } htmlPreview(p.company.name + ' · ' + certList(p).length + ' certificates', html); if (iss.length || ph.length) toast('Draft – something is still missing', true); };
+  $('#gPv').onclick = pv; $('#gP').onclick = pv; $('#gS').onclick = function () { saveWordSP(p); };
 }
 function dlZip(files, name) { var cp = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (cp) { cp.filesAt = new Date().toISOString(); saveProjects(); } var z = zipFiles(files.map(function (f) { return { name: f.name, data: f.data }; }));
   if (CL.on) return clSave(new Blob([z], { type: 'application/zip' }), name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); });
@@ -1850,6 +1856,14 @@ function useSimilar(p, it, s) { return pdfPages(s.driveId, s.id).then(function (
 
 
 /* ---------- editable certificate fields ---------- */
+function POS() { return LS.get('positions', {}); }
+function signerFields(g) { var names = peopleNames(); if (g.signer && names.indexOf(g.signer) < 0) names.unshift(g.signer);
+  return '<label class="fld"><span>Signed by</span><select class="fin" id="sgN"><option value="">— choose —</option>' + names.map(function (n) { return '<option' + (n === g.signer ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label>' +
+    '<label class="fld"><span>Position</span><input class="fin" id="sgP" value="' + esc(g.signerPos || '') + '" placeholder="e.g. Calibration Manager"></label>'; }
+function bindSigner(g, done) { var n = $('#sgN'), ps = $('#sgP'); if (!n) return;
+  n.onchange = function () { g.signer = n.value; g.signerPos = POS()[g.signer] || g.signerPos || ''; saveProjects(); done && done(); };
+  ps.onchange = function () { g.signerPos = ps.value.trim(); if (g.signer) { var m = POS(); m[g.signer] = g.signerPos; LS.set('positions', m); } saveProjects(); toast('Saved – ' + (g.signer || 'this person') + ' will always get this position'); }; }
+
 function autoRef(p, it) { if ((it.refs || []).length || it.refUser || !(it.old && (it.old.points || []).length)) return false;
   if (!it.unit) { var rg = rngNums(((it.old.fields || {}).range) || ''); if (rg && rg.u) it.unit = unitKey(rg.u) || rg.u; }
   var best = refOptions(p, it)[0]; if (!best) return false; it.refs = [best.d.id]; it.refAuto = true; return true; }
@@ -1929,6 +1943,7 @@ function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNa
       '<div class="dgrid one">' + fld('Work order No.', inp('woText', woNo(inf))) + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>Signatures</b><small>Shown at the end of every certificate</small></div><div class="dgrid">' +
       fld('Calibrated by', sel('tech', inf.tech)) + fld('Position', inp('techPos', g.techPos)) + fld('Approved by', sel('approver', g.approver)) + fld('Position', inp('approverPos', g.approverPos)) + '</div></div>' +
+    '<div class="dcard"><div class="dh"><b>Receipt letter</b><small>Who signs the letter</small></div><div class="dgrid">' + signerFields(g) + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>Environmental conditions</b><small>Default 21 °C · 55 %RH</small></div><div class="dgrid three">' +
       fld('Temperature °C', inp('eT', inf.eT, 'text', ' inputmode="decimal"')) + fld('Humidity %RH', inp('eH', inf.eH, 'text', ' inputmode="decimal"')) + fld('Place', inp('eLoc', inf.eLoc)) + '</div></div>' +
     '<div class="dcard"><div class="dh"><b>' + esc(p.orderType ? TYPES[p.orderType][0] : 'Order') + '</b><small>' + ({ checking: 'Checking SharePoint…', found: 'Found on SharePoint ✓', missing: 'Not found on SharePoint', error: 'Could not check SharePoint', skipped: 'Skipped' }[p.orderCheck] || (p.orderType ? '' : 'Not chosen')) + '</small></div><div class="ordrow"><span>' + (p.order && p.order.fileName ? '<b>' + esc(p.order.fileName) + '</b>' + (p.order.number ? '<small>No. ' + esc(p.order.number) + '</small>' : '') : '<small>No document chosen</small>') + '</span>' + (p.order && p.order.webUrl ? '<a class="btn ghost sm" href="' + esc(p.order.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + '<button class="btn ghost sm" id="dOrd">Change</button></div></div>' +
@@ -1936,14 +1951,15 @@ function tDet(p) { var inf = ensureInfo(p), g = genDefaults(p), names = peopleNa
       fld('Calibration interval', '<select class="fin" data-d="interval">' + [['One Year', '1 year'], ['6 Months', '6 months'], ['Custom', 'Custom – set on each certificate']].map(function (o2) { return '<option value="' + o2[0] + '"' + ((g.interval || 'One Year') === o2[0] ? ' selected' : '') + '>' + o2[1] + '</option>'; }).join('') + '</select>', g.interval === 'Custom' ? 'Each certificate starts with 1 year' : '') + fld('Location', inp('loc', g.loc)) + '</div></div>';
   var dsk = $('#dSkip'); if (dsk) dsk.onclick = function () { p.order = { skipped: true }; p.orderCheck = 'skipped'; saveProjects(); toast('Skipped – no ' + (p.orderType ? TYPES[p.orderType][0] : 'order') + ' for this project'); tDet(p); };
   if ($('#dOrd')) $('#dOrd').onclick = function () { orderSheet(p, function () { tDet(p); }); };
+  bindSigner(g, function () { tDet(p); });
   $$('[data-d]').forEach(function (e) { e.onchange = function () { var k = e.dataset.d, v = e.value.trim();
     if (k === 'cal') { if (!v) return; inf.cal = v; calcDates(inf); saveProjects(); toast('Issue, received and work order dates updated'); return tDet(p); }
     if (k === 'iss' || k === 'rec' || k === 'wo') { if (v) inf[k] = v; if (k === 'wo') inf.woText = ''; saveProjects(); return tDet(p); }
     if (k === 'woText') { inf.woText = v === woNo(Object.assign({}, inf, { woText: '' })) ? '' : v; }
-    else if (k === 'tech') { inf.tech = v; var u = (S.people || []).filter(function (x) { return cleanName(x.name) === v; })[0]; inf.techId = u ? u.id : ''; }
-    else if (k === 'approver') g.approver = v ? 'Eng. ' + v : '';
+    else if (k === 'tech') { inf.tech = v; var u = (S.people || []).filter(function (x) { return cleanName(x.name) === v; })[0]; inf.techId = u ? u.id : ''; if (POS()[v]) g.techPos = POS()[v]; saveProjects(); return tDet(p); }
+    else if (k === 'approver') { g.approver = v ? 'Eng. ' + v : ''; if (POS()[v]) g.approverPos = POS()[v]; saveProjects(); return tDet(p); }
     else if (k === 'eT' || k === 'eH') { if (!isNum(v)) { toast('Write a number', true); return tDet(p); } inf[k] = v; }
-    else if (k === 'eLoc') inf.eLoc = v; else g[k] = v;
+    else if (k === 'eLoc') inf.eLoc = v; else { g[k] = v; if (k === 'techPos' && inf.tech) { var m1 = POS(); m1[inf.tech] = v; LS.set('positions', m1); } if (k === 'approverPos' && g.approver) { var m2 = POS(); m2[cleanName(g.approver)] = v; LS.set('positions', m2); } }
     saveProjects(); toast('Saved'); }; }); }
 
 
@@ -2099,6 +2115,26 @@ function splitSheet(p) { var L = certList(p), st = { on: {}, how: 'project', po:
           np.gen = Object.assign({}, p.gen || {}, { start: isNaN(start) ? '' : String(start + keep.filter(function (it) { return it.old && (it.old.points || []).length; }).length), autoTried: 1 });
           p.items = p.items.filter(function (it) { return its.indexOf(it) < 0; }); S.projects.push(np); saveProjects(); closeSheet();
           dialog('Moved ' + its.length + ' items', 'A new project was made for them' + (st.po ? ' (PO ' + esc(st.po) + ')' : '') + '. Open it now?', 'Open it', 'Stay here').then(function (y) { if (y) { S.cur = np.id; render(); window.scrollTo(0, 0); } else tHub(p); }); }; } }; }); }
+
+
+/* ---------- save the Word files straight into Certificates/Cert <year>/<company> ---------- */
+function clDir(parent, name, pathEnd) { var want = function (o) { return o.driveId === CL_DRIVE && o.name.toLowerCase() === name.toLowerCase() && new RegExp(pathEnd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i').test(decodeURIComponent(o.webUrl || '')); };
+  return clCall(M365, 'sharepoint_folder_search', { name: name, limit: 50, offset: 0 }).then(function (r) { var hit = clObjs(r).filter(want)[0]; if (hit) return hit.id;
+    return clCall(M365, 'sharepoint_create_folder', { driveId: CL_DRIVE, parentItemId: parent, name: name, conflictBehavior: 'fail' }).then(function (r2) { return (clObjs(r2)[0] || {}).id; }); }); }
+function certFolderName(p) { var it = certList(p).filter(function (x) { return x.old && x.old.file && x.old.file.webUrl; })[0];
+  var seg = it ? (decodeURIComponent(it.old.file.webUrl).match(/\/Cert\s*20\d\d\/([^\/]+)\//i) || [])[1] : ''; return String(seg || p.company.name).replace(/\s*20\d\d\s*$/, '').replace(/["*:<>?\/\\|#%]/g, ' ').trim(); }
+function saveWordSP(p) { var g = genDefaults(p); if (!String(g.start).trim()) return toast('Write the first certificate number', true);
+  var all = buildAll(p), yr = (s2d(p.info.cal) || new Date()).getFullYear(), folder = certFolderName(p), st = { d: 0, n: all.files.length, done: [], err: '' };
+  if (!CL.on) { toast('Saving to SharePoint works in the Claude version for now – the Word files are downloaded instead', true); return dlZip(all.files, (p.company.name + ' ' + monYear(p.info.cal) + ' certificates').trim() + '.zip'); }
+  openSheet(function () { return { title: 'Saving to SharePoint', body: '<div class="note">Certificates › Cert ' + yr + ' › <b>' + esc(folder) + '</b></div>' +
+      (st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : '') + '<div class="list">' + all.files.map(function (f, i) { var dn = st.done[i]; return '<div class="row"><span class="t"><b>' + esc(f.name) + '</b><small>' + (dn ? (dn.webUrl ? '<a href="' + esc(dn.webUrl) + '" target="_blank" rel="noopener">Saved ✓ open</a>' : 'Saved ✓') : i === st.d && !st.err ? 'Saving…' : i > st.d ? 'Waiting' : 'Not saved') + '</small></span></div>'; }).join('') + '</div>',
+    foot: '<button class="btn" id="svX"' + (st.d < st.n && !st.err ? ' disabled' : '') + '>' + (st.d < st.n && !st.err ? 'Saving ' + st.d + ' / ' + st.n + '…' : 'Done') + '</button>', mount: function () { $('#svX').onclick = closeSheet; } }; });
+  var b64 = function (u8) { var s2 = '', i, ch = 0x8000; for (i = 0; i < u8.length; i += ch) s2 += String.fromCharCode.apply(null, u8.subarray(i, i + ch)); return btoa(s2); };
+  clDir(CL_CERT_FOLDER, 'Cert ' + yr, '/Certificates/Cert ' + yr).then(function (yid) { if (!yid) throw new Error('Could not open the Cert ' + yr + ' folder'); return clDir(yid, folder, '/Cert ' + yr + '/' + folder); }).then(function (fid) { if (!fid) throw new Error('Could not open the ' + folder + ' folder');
+    return all.files.reduce(function (pr, f, i) { return pr.then(function () { var data = typeof f.data === 'string' ? new TextEncoder().encode(f.data) : f.data;
+      return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: fid, filename: f.name, contentBase64: b64(data), conflictBehavior: 'rename' }).then(function (r) { var o = clObjs(r)[0] || {}; st.done[i] = { webUrl: o.webUrl }; st.d = i + 1; if (sheetFn) renderSheet(); }); }); }, Promise.resolve()); })
+    .then(function () { p.filesAt = new Date().toISOString(); p.savedSP = { folder: 'Cert ' + yr + '/' + folder, at: p.filesAt }; saveProjects(); toast('All files saved on SharePoint'); if (sheetFn) renderSheet(); })
+    .catch(function (e) { st.err = (e && e.message) || 'Could not save'; if (sheetFn) renderSheet(); }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
