@@ -324,3 +324,13 @@ body{overflow-wrap:break-word;word-break:normal;hyphens:none;-webkit-hyphens:non
 .tmpl small a{color:var(--blue,#0B74C8)}
 .kvt.kv2 th{width:37%;word-break:normal;overflow-wrap:normal;hyphens:none;font-size:12.5px;padding-left:9px;padding-right:6px}
 .kvt.kv2 td{width:63%}
+/* collapsible covers / machines */
+.cgh .chev,.mach-h .chev{flex:none;width:18px;color:#13294B;font-size:13px}
+.cgrp:not(.open) .cgh{border-bottom:0}
+.cgrp.alldone .cgh{background:#EEF8F2}
+.cgbar{flex:none;width:44px;height:6px;border-radius:3px;background:#DCE3EC;overflow:hidden}.cgbar i{display:block;height:100%;background:var(--office,#1E8E5A)}
+.hubtools{display:flex;gap:8px;align-items:center;margin-bottom:10px}.hubtools .search{flex:1;margin:0}
+.search.sm input{height:40px;font-size:14.5px}
+.mach-h{cursor:pointer}.mach.shut .mach-h{border-bottom:0}
+.mach-h .mcnt{display:inline-block;background:#EEF2F7;color:var(--muted);border-radius:999px;padding:0 7px;font-size:12px;font-weight:600;margin-left:4px}
+.mach-h b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
