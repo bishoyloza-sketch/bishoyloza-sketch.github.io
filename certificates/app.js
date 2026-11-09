@@ -967,7 +967,12 @@ function decOf(s) { var c = String(s == null ? '' : s).replace(',', '.').match(/
 function limitVal(lim, ref, rd) { var l = String(lim || '').replace(/\s+/g, ''); if (!l) return null; var pm = l.match(/(\d*\.?\d+)%/); if (pm) return parseFloat(pm[1]) / 100 * Math.abs(/rdg|reading/i.test(lim) ? (rd != null ? rd : ref) : (ref != null ? ref : rd)); var m = l.match(/(\d*\.?\d+)/); return m ? parseFloat(m[1]) : null; }
 function ptLimit(it, q) { return q.limit || ((it.old || {}).fields || {}).limits || ''; }
 function resDec(it) { if (isNum(it.res)) return decOf(it.res); if (it.old && it.old.split) return null; var r = it.old && it.old.fields && it.old.fields.resolution; return r && /\d/.test(r) ? decOf(r) : null; }
-function itemRange(it) { if (isNum(it.rMin) && isNum(it.rMax)) return [numv(it.rMin), numv(it.rMax)]; var f = (it.old || {}).fields || {}, r = rngNums(f.range || ''); return r && isNum(r.lo) && isNum(r.hi) ? [numv(r.lo), numv(r.hi)] : null; }
+function itemRange(it) { /* only a clear single range "(a : b)" is used for the out-of-range check */
+  var f = (it.old || {}).fields || {}, txt = String(f.range || ''), pairs = txt.match(/-?\d+(?:\.\d+)?\s*:\s*-?\d+(?:\.\d+)?/g) || [];
+  if (!it.rangeUser && (pairs.length !== 1 || /&|,|\band\b/i.test(txt.replace(/\d,\d{3}/g, '')))) return null;
+  var lo = isNum(it.rMin) ? numv(it.rMin) : null, hi = isNum(it.rMax) ? numv(it.rMax) : null;
+  if (lo == null || hi == null) { var r = rngNums(txt); if (!r || !isNum(r.lo) || !isNum(r.hi)) return null; lo = numv(r.lo); hi = numv(r.hi); }
+  return hi > lo ? [lo, hi] : null; }
 function evalPt(it, i, dir) { var q = it.old.points[i], v = (it.nv || {})[i + (dir === 2 ? 'd' : '')] || {}, d = resDec(it);
   var ref = isNum(v.ref) ? numv(v.ref) : null, rd = isNum(v.reading) ? numv(v.reading) : null, o = { ref: ref, rd: rd, dev: null, lim: null, res: '', warn: [] };
   if (ref == null || rd == null) return o; o.dev = +(rd - ref + 0).toFixed(Math.max(d == null ? 6 : d, decOf(v.ref), decOf(v.reading))); o.lim = limitVal(ptLimit(it, q), ref, rd);
@@ -975,7 +980,7 @@ function evalPt(it, i, dir) { var q = it.old.points[i], v = (it.nv || {})[i + (d
   if (d != null && decOf(v.reading) !== d) o.warn.push('Reading should have ' + d + ' decimal' + (d === 1 ? '' : 's') + ' (resolution ' + (it.res || it.old.fields.resolution) + ')');
   var lo = isNum(it.cMin) ? numv(it.cMin) : (isNum(it.rMin) ? numv(it.rMin) : null), hi = isNum(it.cMax) ? numv(it.cMax) : (isNum(it.rMax) ? numv(it.rMax) : null);
   if (lo != null && hi != null && (ref < lo - 1e-9 || ref > hi + 1e-9)) o.warn.push('Point is outside the calibration range (' + lo + ' : ' + hi + ')');
-  var R = itemRange(it); if (R && ((rd != null && (rd < R[0] - 1e-9 || rd > R[1] + 1e-9)) || (ref != null && (ref < R[0] - 1e-9 || ref > R[1] + 1e-9)))) { o.oor = true; o.res = 'OUT'; o.warn.unshift('OUT OF RANGE – the device range is (' + R[0] + ' : ' + R[1] + ')'); }
+  var R = itemRange(it), tl = (isNum(it.res) ? numv(it.res) : 0) + 1e-9; if (R && ((rd != null && (rd < R[0] - tl || rd > R[1] + tl)) || (ref != null && (ref < R[0] - tl || ref > R[1] + tl)))) { o.oor = true; o.res = 'OUT'; o.warn.unshift('OUT OF RANGE – the device range is (' + R[0] + ' : ' + R[1] + ')'); }
   return o; }
 function withPts(p) { return p.items.filter(function (it) { return it.old && (it.old.points || []).length; }); }
 function itemProg(it) { var t = 0, f = 0, out = 0; it.old.points.forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { t++; var r = evalPt(it, i, dr); if (r.rd != null && r.ref != null) f++; if (r.res === 'OUT') out++; }); }); return { tot: t, fil: f, out: out }; }
@@ -1718,7 +1723,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
       it.refs.filter(function (id) { return !refOptions(p, it).some(function (x) { return x.d.id === id; }); }).map(function (id) { var x = byId[id]; return x ? '<button class="chip on" data-rf="' + id + '">' + esc(x.manufacturer + ' ' + x.model) + '</button>' : ''; }).join('') + '<button class="chip" id="rOther">Other…</button></div>' +
     '<h5>Environmental conditions</h5><table class="kvt kv2">' + kv2('Temperature (°C)', E('eT', inf.eT), 'Humidity (%RH)', E('eH', inf.eH)) + kv2('Place', E('eLoc', inf.eLoc)) + '</table>' +
     '<h5>Results <small>grey = last year · type the new values</small></h5><div style="overflow-x:auto"><table class="rt"><tr><th>Point / limit</th><th>Ref</th><th>Reading</th><th>Dev</th><th></th></tr>' + rows + '</table></div>' +
-    '<div class="cf" style="margin-top:10px"><button class="btn ghost sm" id="sameRef">Ref = last year\'s points</button><button class="btn ghost sm" id="eItem">Edit item</button></div>' +
+    '<div class="cf" style="margin-top:10px"><button class="btn ghost sm" id="sameRef">Ref = last year\'s points</button><button class="btn ghost sm" id="sameUut">UUT = last year\'s readings</button><button class="btn ghost sm" id="eItem">Edit item</button></div>' +
     '<h5>Signatures</h5><table class="kvt kv2">' + kv2('Calibrated by', SEL('tech', inf.tech), 'Position', E('techPos', g.techPos)) + kv2('Approved by', SEL('approver', g.approver), 'Position', E('approverPos', g.approverPos)) + '</table></div>';
   var last = p.ci === L.length - 1;
   $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (it.saved ? 'Saved ✓ · Preview' : 'Preview & save') + '</button>';
@@ -1732,6 +1737,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   $('#rOther').onclick = function () { pickRef(p, it, function () { syncRefs(p); tCertEd(p); }); };
   $('#eItem').onclick = function () { itemSheet(p, it.id); };
   $$('[data-ef]').forEach(function (inp) { inp.onchange = function () { setField(p, it, inp.dataset.ef, inp.value.trim(), function () { tCertEd(p); }); }; inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }; });
+  $('#sameUut').onclick = function () { if (d == null) return toast('Write the resolution first', true); var n = 0; o.points.forEach(function (q, i) { dirs.forEach(function (dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] = it.nv[k] || {}, ov = dr === 2 ? q.reading2 : q.reading; if (!v.reading && isNum(ov)) { v.reading = fmtRes(ov, d); n++; } }); }); saveProjects(); tCertEd(p); toast(n ? n + ' readings copied from last year – edit the ones that changed' : 'The readings are already filled'); };
   $('#sameRef').onclick = function () { var n = 0; o.points.forEach(function (q, i) { dirs.forEach(function (dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] = it.nv[k] || {}; if (!v.ref && q.ref) { v.ref = String(q.ref); n++; } }); }); saveProjects(); tCertEd(p); toast(n ? n + ' ref points copied – type the readings' : 'Ref points are already filled'); };
   var upd = function (tr) { var a = tr.dataset.pt.split('|').map(Number), r = evalPt(it, a[0], a[1]); tr.querySelector('[data-dv]').textContent = r.dev == null ? '' : (d == null ? String(r.dev) : (Math.abs(r.dev) < Math.pow(10, -d) / 2 ? 0 : r.dev).toFixed(d));
     var rs = tr.querySelector('[data-rs]'); rs.textContent = r.oor ? 'RANGE' : r.res; rs.className = 'rs ' + (r.res === 'OUT' ? 'out' : r.res ? 'ok' : ''); tr.classList.toggle('bad', r.res === 'OUT');
@@ -1893,7 +1899,7 @@ function setField(p, it, k, v, done) { var o = it.old || (it.old = { fields: {},
     if ((k === 'cMin' || k === 'cMax') && v !== '') { var R0 = itemRange(it); if (R0 && (numv(v) < R0[0] || numv(v) > R0[1])) { toast('The calibration range must be inside the range (' + R0[0] + ' : ' + R0[1] + ')', true); return done(); } }
     if (k === 'rMin' && isNum(it.rMax) && v !== '' && numv(v) >= numv(it.rMax)) { toast('Min must be less than max', true); return done(); }
     if (k === 'rMax' && isNum(it.rMin) && v !== '' && numv(v) <= numv(it.rMin)) { toast('Max must be more than min', true); return done(); }
-    it[k] = v; if (k === 'cMin' || k === 'cMax') it.crFromPts = 0; if (k === 'unit' && !it.resUnit) it.resUnit = v; if (k === 'resUnit' && !it.unit) it.unit = v;
+    it[k] = v; if (k === 'rMin' || k === 'rMax' || k === 'unit') it.rangeUser = true; if (k === 'cMin' || k === 'cMax') it.crFromPts = 0; if (k === 'unit' && !it.resUnit) it.resUnit = v; if (k === 'resUnit' && !it.unit) it.unit = v;
     if (k === 'res') { it.resFrom = ''; var nr = applyRes(it); if (nr) toast(nr + (nr === 1 ? ' reading was' : ' readings were') + ' rounded to the new resolution – check the orange boxes', true); }
     f.range = rangeText(it) || f.range; f.resolution = isNum(it.res) ? it.res + ' ' + (it.resUnit || it.unit || '') : ''; if (k === 'cMin' || k === 'cMax') f.calRange = calRangeText(it);
     if (it.refAuto || !(it.refs || []).length) { var best = refOptions(p, it)[0]; it.refs = best ? [best.d.id] : []; it.refAuto = true; syncRefs(p); if (best) toast('Reference suggested: ' + best.d.manufacturer + ' ' + best.d.model + ' ' + (best.d.range || '')); }
