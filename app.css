@@ -319,3 +319,6 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .dsrow .sortseg button.on:not(.no){color:var(--office)}
 .nav a{font-size:10.5px}
 .nav a svg{width:22px;height:22px}
+.jbadge{display:inline-block;font-size:12px;font-weight:700;background:var(--blue-soft);color:var(--blue);border-radius:6px;padding:2px 7px}
+.inc{margin:0;padding-left:18px;font-size:14px;line-height:1.6;color:var(--ink)}
+.row.part{margin-left:22px;border-left:3px solid var(--line)}

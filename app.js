@@ -110,6 +110,9 @@
   /* ---------- jobs & receipts ---------- */
   function jobsList() { return (S.data && S.data.jobs) || []; }
   function jobById(id) { return jobsList().filter(function (j) { return j.id === id; })[0] || null; }
+  var BASIS = [['PO', 'PO', 'PO number'], ['Contract', 'Contract', 'Contract number'], ['Approval', 'Approval', 'Approval / quotation number'], ['One-day visit', 'One-day visit', 'Note (optional)'], ['Other', 'Something else', 'What is it? (required)']];
+  function jobBasis(j) { if (!j || !j.basis) return ''; return (j.basis === 'Other' ? (j.ref || 'Other') : j.basis + (j.ref ? ' ' + j.ref : '')); }
+  var CAL_LABS = ['NIS', 'MECC', 'Mehy', 'Shebab', 'Internal Cal'];
   function jobName(j) { return j ? coName(j.companyId) + (j.title ? ' · ' + j.title : '') : ''; }
   function jobReceipts(j) { return S.data.checkouts.filter(function (c) { return c.jobId === j.id && c.status !== 'Declined' && c.status !== 'Cancelled'; }); }
   /* what of one receipt is still outside right now */
@@ -178,7 +181,8 @@
     return '<span class="tag' + (size ? ' ' + size : '') + '" style="--c:' + s.c + '" aria-label="Serial ending ' + esc(d.serialTail) + '"><i></i><span>' + esc(d.serialTail) + '</span></span>';
   }
   function devTitle(d) { return d.description; }
-  function devSub(d) { return [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial; }
+  function partsOf(d) { return S.data.devices.filter(function (x) { return x.parentId === d.id && x.active !== false; }); }
+  function devSub(d) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
   function coName(id) { return id && !IDX.co[id] ? 'Removed company' : (IDX.co[id] || {}).name || '—'; }
   function names(list) { return (list || []).map(function (h) { return h.name; }).join(', '); }
   function can(what) {
@@ -507,7 +511,7 @@
   /* ---------- Devices ---------- */
   var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
   /* ---------- Loggers & kits tab: each group with in / out and who has what ---------- */
-  var KIT_TABS = [['Data Loggers', 'Loggers'], ['Validator Sensors', 'Validation'], ['Connections', 'Connections'], ['Tools & Accessories', 'Tools']];
+  var KIT_TABS = [['Data Loggers', 'Loggers'], ['Validator Sensors', 'Validation'], ['Connections', 'Connections'], ['Tools & Accessories', 'Tools'], ['Consumables', 'Consumables']];
   function kitGroup() { return S.kgrp || 'Data Loggers'; }
   function kitData(g) {
     var types = stockList().filter(function (x) { return x.group === g; }).map(function (st) {
@@ -537,11 +541,18 @@
       '<div class="sec"><h2>In the lab / outside</h2></div><div class="list">' +
       (K.types.length ? K.types.map(function (t) {
         var pct = t.total ? Math.round(t.out / t.total * 100) : 0;
-        return '<div class="row kitrow"><span class="t"><b>' + esc(t.st.name) + '</b>' +
+        return '<div class="row kitrow"><span class="t"><b>' + esc(t.st.name) + '</b>' + (t.st.contents ? '<small dir="auto">' + esc(t.st.contents) + '</small>' : '') +
           '<span class="kitnums"><em class="in">' + (t.free == null ? '—' : t.free) + ' in</em><em class="ot">' + t.out + ' out</em><em>' + (t.total == null ? 'total not set' : t.total + ' total') + '</em></span>' +
           (t.total ? '<span class="kbar"><i style="width:' + Math.min(100, pct) + '%"></i></span>' : '') + '</span></div>';
       }).join('') : '<div class="row"><span class="t"><small>No types yet — the admin adds them from Me › Loggers, sensors &amp; kits.</small></span></div>') + '</div>' +
       '<div class="sec"><h2>Who has them</h2><small>' + K.out + ' outside</small></div>';
+    if (g === 'Consumables') {
+      var used = ((S.data && S.data.movements) || []).filter(function (m) { return m.action === 'Used'; }).slice().reverse().slice(0, 40);
+      h = h.replace(/<div class="sec"><h2>Who has them<\/h2>[\s\S]*$/, '') + '<div class="note">These are used up: when someone takes some, they come off the stock and do not come back. The admin adds new stock from Me › Loggers, sensors &amp; kits.</div>' +
+        '<div class="sec"><h2>Used recently</h2><small>' + used.length + '</small></div>' +
+        (used.length ? '<div class="box" style="margin-top:0"><ul class="tl">' + used.map(function (m) { return '<li style="--c:var(--service)"><b dir="auto">' + esc(m.note) + '</b><small>' + esc(coName(m.companyId)) + ' · ' + esc(names(m.holders)) + '</small><small>' + esc(when(m.ts)) + ' · ' + esc(m.checkoutId) + '</small></li>'; }).join('') + '</ul></div>' : '<div class="empty">Nothing used yet.</div>');
+      return h + '<div style="height:24px"></div></main>';
+    }
     if (!K.sites.length) h += '<div class="empty"><b>Everything is in the lab.</b>Nothing from this group is outside right now.</div>';
     K.sites.forEach(function (st) {
       h += '<div class="site" style="--c:var(--client)"><div class="site-h"><div><h3>' + esc(st.name) + '</h3>' +
@@ -573,19 +584,20 @@
     if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
     var g = kitGroup(), K = kitData(g), now = new Date();
     loadLogo().then(function (logo) {
-      function lat(t) { return String(t || '').replace(/[^\x20-\x7E\u00A0-\u024F\u2013\u2014]/g, '').replace(/\s+/g, ' ').trim(); }
+      function lat(t) { return pdfTxt(t); }
       function nm(stockId, name) { var st = stockList().filter(function (x) { return x.id === stockId; })[0]; return lat(name) || (st && st.note) || 'Other item'; }
       var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4' }), W = 210, M = 14, y = 14;
+      var FN = useFont(doc);
       if (logo) { var lw = 46, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(19, 41, 75); doc.text(g + ' — in / out', W - M, y + 6, { align: 'right' });
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(90, 104, 121);
+      doc.setFont(FN, 'bold'); doc.setFontSize(15); doc.setTextColor(19, 41, 75); doc.text(g + ' — in / out', W - M, y + 6, { align: 'right' });
+      doc.setFont(FN, 'normal'); doc.setFontSize(9.5); doc.setTextColor(90, 104, 121);
       doc.text('As of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 12, { align: 'right' });
       y += 22; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 8;
-      doc.setFontSize(11); doc.setTextColor(19, 41, 75); doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11); doc.setTextColor(19, 41, 75); doc.setFont(FN, 'bold');
       doc.text('In the lab: ' + (K.inLab == null ? '-' : K.inLab) + '     Outside: ' + K.out + '     Total: ' + (K.total == null ? '-' : K.total), M, y); y += 8;
       function table(head, widths, rows) {
-        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9.5); doc.setFont('helvetica', 'bold');
-        var x = M + 2; head.forEach(function (t, i) { doc.text(t, x, y + 4.8); x += widths[i]; }); y += 7; doc.setFont('helvetica', 'normal'); doc.setTextColor(23, 34, 51);
+        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9.5); doc.setFont(FN, 'bold');
+        var x = M + 2; head.forEach(function (t, i) { doc.text(t, x, y + 4.8); x += widths[i]; }); y += 7; doc.setFont(FN, 'normal'); doc.setTextColor(23, 34, 51);
         rows.forEach(function (r, ri) {
           var wr = r.map(function (t, i) { return doc.splitTextToSize(String(t), widths[i] - 2.5); }), hh = Math.max.apply(null, wr.map(function (w) { return w.length; })) * 4.3 + 3;
           if (y + hh > 282) { doc.addPage(); y = 16; }
@@ -595,9 +607,9 @@
         y += 6;
       }
       table(['Type', 'Total', 'In the lab', 'Outside'], [92, 30, 30, 30], K.types.map(function (t) { return [nm(t.st.id, t.st.name), t.total == null ? '-' : t.total, t.free == null ? '-' : t.free, t.out]; }));
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(19, 41, 75); doc.text('Outside now', M, y); y += 4;
+      doc.setFont(FN, 'bold'); doc.setFontSize(11); doc.setTextColor(19, 41, 75); doc.text('Outside now', M, y); y += 4;
       var rows = []; K.sites.forEach(function (st) { st.list.forEach(function (h) { rows.push([lat(st.name), nm(h.stockId, h.name), h.qty, lat(names(h.holders)), fmtDate(h.since)]); }); });
-      if (rows.length) table(['Company', 'Type', 'Qty', 'With', 'Since'], [52, 46, 14, 46, 24], rows); else { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('Nothing outside.', M, y + 5); }
+      if (rows.length) table(['Company', 'Type', 'Qty', 'With', 'Since'], [52, 46, 14, 46, 24], rows); else { doc.setFont(FN, 'normal'); doc.setFontSize(10); doc.text('Nothing outside.', M, y + 5); }
       var stamp = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2);
       pdfSheet(doc.output('blob'), g.replace(/[^\w ]+/g, '').trim() + ' in-out ' + stamp + '.pdf', 'Loggers & kits', g, K.out + ' outside', 'Akhnaton ' + g);
     });
@@ -715,6 +727,12 @@
     var tabs = [['open', 'Open jobs'], ['closed', 'Closed']].concat(rep ? [['ds', 'Data sheets']] : []);
     var h = header('Jobs') + '</header><main>' +
       '<div class="filters" role="tablist">' + tabs.map(function (t) { return '<button class="fbtn' + (f === t[0] ? ' on' : '') + '" data-jf="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+    if (rep && f !== 'ds') {
+      var allJ = jobsList(), openN = allJ.filter(function (x) { return x.status !== 'Closed'; }).length, m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
+      var closedM = allJ.filter(function (x) { return x.status === 'Closed' && x.closedTs && new Date(x.closedTs) >= m0; }).length;
+      h += '<div class="placesum"><button data-jf="open"><b>' + openN + '</b><span>open jobs</span></button><button data-jf="closed"><b>' + (allJ.length - openN) + '</b><span>closed</span></button><div class="ks"><b>' + closedM + '</b><span>closed this month</span></div></div>' +
+        '<div class="sortbar" style="margin-top:12px"><span>Jobs summary</span><button class="printbtn" data-jobspdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-dsxls>' + ICON.pdf + 'Excel</button></div>';
+    }
     if (can('job') && f !== 'ds') h += '<button class="btn blue wide" data-newjob style="margin:4px 0 6px">＋ Open a new job</button>';
     if (f === 'ds') return h + dsReport() + '<div style="height:24px"></div></main>';
     var list = jobsList().filter(function (j) { return f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed'; })
@@ -724,6 +742,7 @@
       var k = jobStats(j);
       h += '<div class="site job" data-job="' + j.id + '" style="--c:' + (j.status === 'Closed' ? 'var(--muted)' : 'var(--blue)') + '"><div class="site-h"><div><h3>' + esc(coName(j.companyId)) + '</h3>' +
         '<div class="meta"><b>' + esc(j.id) + '</b>' + (j.title ? ' · ' + esc(j.title) : '') + '</div>' +
+        (j.basis ? '<div class="meta"><span class="jbadge">' + esc(jobBasis(j)) + '</span></div>' : '') +
         '<div class="meta">Opened by ' + esc(j.byName) + ' · ' + esc(when(j.ts)) + (j.status === 'Closed' ? ' · closed ' + esc(fmtDate(j.closedTs)) : '') + '</div></div>' +
         '<span class="cnt">' + k.rs.length + ' req.</span></div>' +
         '<div class="jobnums"><span' + (k.out ? ' class="o"' : '') + '><b>' + k.out + '</b> still out</span><span' + (k.dsMissing ? ' class="r"' : '') + '><b>' + k.dsMissing + '</b> data sheet' + (k.dsMissing === 1 ? '' : 's') + ' missing</span>' + (k.pending ? '<span class="p"><b>' + k.pending + '</b> waiting</span>' : '') + '</div>' +
@@ -769,7 +788,7 @@
       function draw() {
       var k = jobStats(j);
       var h = '<div class="hero" style="padding-bottom:6px"><h3>' + esc(coName(j.companyId)) + '</h3><div class="sub">' + esc(j.title || 'Job') + ' · ' + (j.status === 'Closed' ? 'Closed ' + esc(fmtDate(j.closedTs)) : 'Open') + '</div></div>' +
-        '<div class="box" style="margin-top:0"><dl class="kv"><dt>Opened by</dt><dd>' + esc(j.byName) + ' · ' + esc(fmtDate(j.ts)) + '</dd>' + (j.note ? '<dt>Note</dt><dd>' + esc(j.note) + '</dd>' : '') +
+        '<div class="box" style="margin-top:0"><dl class="kv">' + (j.basis ? '<dt>Under</dt><dd>' + esc(jobBasis(j)) + '</dd>' : '') + '<dt>Opened by</dt><dd>' + esc(j.byName) + ' · ' + esc(fmtDate(j.ts)) + '</dd>' + (j.note ? '<dt>Note</dt><dd>' + esc(j.note) + '</dd>' : '') +
         '<dt>Requests</dt><dd>' + k.rs.length + '</dd><dt>Still outside</dt><dd>' + k.out + '</dd><dt>Data sheets missing</dt><dd>' + k.dsMissing + '</dd></dl></div>';
       if (!k.rs.length) h += '<div class="empty"><b>No requests in this job yet.</b></div>';
       k.rs.slice().reverse().forEach(function (c) {
@@ -803,17 +822,22 @@
       .catch(function (e) { toast(e.message, true); }).then(function (r) { busy(false); return r; });
   }
   function editJob(j, onCreated) {
-    var f = j ? { id: j.id, companyId: j.companyId, title: j.title || '', note: j.note || '' } : { companyId: '', title: '', note: '' };
+    var f = j ? { id: j.id, companyId: j.companyId, title: j.title || '', note: j.note || '', basis: j.basis || '', ref: j.ref || '' } : { companyId: '', title: '', note: '', basis: '', ref: '' };
     openSheet(function (body, setFoot, setTitle) {
       setTitle(j ? 'Edit job' : 'Open a new job', j ? j.id : '');
-      body.innerHTML = '<label class="f"><span>What is the job? (e.g. Thermal mapping – stores)</span><input class="inp" id="jt" value="' + esc(f.title) + '"></label>' +
+      function refLabel() { var b = BASIS.filter(function (x) { return x[0] === f.basis; })[0]; return b ? b[2] : ''; }
+      body.innerHTML = '<div class="box" style="margin-top:0"><h4>The job is under</h4><div class="seg" id="jb">' + BASIS.map(function (b) { return '<button data-jbasis="' + b[0] + '" class="' + (f.basis === b[0] ? 'on' : '') + '">' + b[1] + '</button>'; }).join('') + '</div>' +
+        '<label class="f" id="jrefw" style="margin:12px 0 0;' + (f.basis ? '' : 'display:none') + '"><span id="jrefl">' + esc(refLabel()) + '</span><input class="inp" id="jref" value="' + esc(f.ref) + '"></label></div>' +
+        '<label class="f"><span>What is the job? (e.g. Thermal mapping – stores)</span><input class="inp" id="jt" value="' + esc(f.title) + '"></label>' +
         '<label class="f"><span>Note (optional)</span><input class="inp" id="jn" value="' + esc(f.note) + '"></label>' +
         '<div class="sec" style="margin-top:4px"><h2>Company</h2></div><div id="jc"></div>';
       $('#jt', body).oninput = function (e) { f.title = e.target.value; };
       $('#jn', body).oninput = function (e) { f.note = e.target.value; };
+      $('#jref', body).oninput = function (e) { f.ref = e.target.value; foot(); };
+      $$('[data-jbasis]', body).forEach(function (b) { b.onclick = function () { f.basis = b.dataset.jbasis; $$('[data-jbasis]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); $('#jrefw', body).style.display = ''; $('#jrefl', body).textContent = refLabel(); foot(); }; });
       companyPicker($('#jc', body), f.companyId, function (id) { f.companyId = id; foot(); });
       function foot() {
-        setFoot((j ? '<button class="btn ghost" data-close-job style="flex:0 0 auto;color:var(--danger)">Close job</button>' : '') + '<button class="btn blue" data-sj ' + (f.companyId ? '' : 'disabled') + '>' + (j ? 'Save' : 'Open job') + '</button>');
+        setFoot((j ? '<button class="btn ghost" data-close-job style="flex:0 0 auto;color:var(--danger)">Close job</button>' : '') + '<button class="btn blue" data-sj ' + (f.companyId && f.basis && (f.basis !== 'Other' || f.ref.trim()) ? '' : 'disabled') + '>' + (j ? 'Save' : 'Open job') + '</button>');
         var cj = $('[data-close-job]'); if (cj) cj.onclick = function () {
           var k = jobStats(j);
           askConfirm('Close ' + j.id + '?' + (k.out ? ' ' + k.out + ' still outside.' : '') + (k.dsMissing ? ' ' + k.dsMissing + ' data sheet(s) missing.' : ''), 'Close job', function () { saveJobReq({ id: j.id, status: 'Closed' }, 'Job closed'); }, true);
@@ -842,9 +866,9 @@
       ws['!cols'] = [10, 14, 14, 24, 26, 12, 28, 8, 30, 12, 13, 16, 12].map(function (w) { return { wch: w }; });
       ws['!autofilter'] = { ref: 'A3:M' + (rows.length + 3) };
       X.utils.book_append_sheet(wb, ws, 'Data sheets');
-      var jr = jobsList().slice().sort(function (a, b) { return (b.ts || '').localeCompare(a.ts || ''); }).map(function (j) { var k = jobStats(j); return [j.id, coName(j.companyId), j.title || '', j.status || 'Open', j.byName, fmtDate(j.ts), k.rs.length, k.out, k.dsMissing]; });
-      var ws2 = X.utils.aoa_to_sheet([['Jobs — as of ' + fmtDate(now)], [], ['Job', 'Company', 'Title', 'Status', 'Opened by', 'Opened', 'Requests', 'Still outside', 'Data sheets missing']].concat(jr));
-      ws2['!cols'] = [14, 26, 26, 9, 16, 12, 9, 12, 16].map(function (w) { return { wch: w }; });
+      var jr = jobsList().slice().sort(function (a, b) { return (b.ts || '').localeCompare(a.ts || ''); }).map(function (j) { var k = jobStats(j); return [j.id, coName(j.companyId), j.title || '', j.basis || '', j.basis === 'Other' ? '' : j.ref || '', j.status || 'Open', j.byName, fmtDate(j.ts), j.closedTs ? fmtDate(j.closedTs) : '', k.rs.length, k.out, k.dsMissing]; });
+      var ws2 = X.utils.aoa_to_sheet([['Jobs — as of ' + fmtDate(now)], [], ['Job', 'Company', 'Title', 'Under', 'PO / approval no.', 'Status', 'Opened by', 'Opened', 'Closed', 'Requests', 'Still outside', 'Data sheets missing']].concat(jr));
+      ws2['!cols'] = [14, 26, 26, 14, 18, 9, 16, 12, 12, 9, 12, 16].map(function (w) { return { wch: w }; });
       X.utils.book_append_sheet(wb, ws2, 'Jobs');
       var blob = new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       pdfSheet(blob, 'Data sheet report ' + isoDay(now) + '.xlsx', 'Data sheet report', 'Data sheet report', rows.length + ' receipts · ' + jr.length + ' jobs', 'Akhnaton data sheet report', 'xlsx');
@@ -854,21 +878,22 @@
     if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
     var now = new Date(), all = dsRows(), miss = all.filter(function (r) { return !dsBack(r.c); }), ok = all.filter(function (r) { return dsBack(r.c); });
     loadLogo().then(function (logo) {
-      function lat(t) { return String(t || '').replace(/[^\x20-\x7E -ɏ–—]/g, '').replace(/\s+/g, ' ').trim(); }
+      function lat(t) { return pdfTxt(t); }
       var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' }), W = 297, H = 210, M = 12, y = 12;
+      var FN = useFont(doc);
       if (logo) { var lw = 50, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75); doc.text('Data Sheet Report', W - M, y + 6, { align: 'right' });
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
+      doc.setFont(FN, 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75); doc.text('Data Sheet Report', W - M, y + 6, { align: 'right' });
+      doc.setFont(FN, 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
       doc.text(miss.length + ' missing  ·  ' + ok.length + ' back  ·  as of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 12, { align: 'right' });
       y += 22; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 6;
       var cols = [['Receipt', 26], ['Job', 44], ['Company', 52], ['Out on', 22], ['Engineers', 52], ['Still outside', 26], ['Marked by / on', 51]];
       function headRow() {
-        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7.5, 'F'); doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-        var x = M + 2; cols.forEach(function (c) { doc.text(c[0], x, y + 5.1); x += c[1]; }); doc.setFont('helvetica', 'normal'); y += 7.5;
+        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7.5, 'F'); doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont(FN, 'bold');
+        var x = M + 2; cols.forEach(function (c) { doc.text(c[0], x, y + 5.1); x += c[1]; }); doc.setFont(FN, 'normal'); y += 7.5;
       }
       function section(t, list, col) {
         if (y + 18 > H - 14) { doc.addPage(); y = 14; }
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(col[0], col[1], col[2]); doc.text(t + '  (' + list.length + ')', M, y + 4); y += 6.5; headRow();
+        doc.setFont(FN, 'bold'); doc.setFontSize(11.5); doc.setTextColor(col[0], col[1], col[2]); doc.text(t + '  (' + list.length + ')', M, y + 4); y += 6.5; headRow();
         list.forEach(function (r, i) {
           var c = r.c, cells = [c.id, r.job ? r.job.id + (r.job.title ? ' ' + lat(r.job.title) : '') : '-', lat(coName(c.companyId)), fmtDate(c.ts), lat(names(c.engineers)), r.out.n ? String(r.out.n) : 'All back', c.dataSheetByName ? lat(c.dataSheetByName) + ' ' + fmtDate(c.dataSheetTs) : ''];
           var wr = cells.map(function (t, k) { return doc.splitTextToSize(t, cols[k][1] - 2.5); }), hh = Math.max.apply(null, wr.map(function (w) { return w.length; })) * 4.2 + 3;
@@ -885,6 +910,45 @@
       var pages = doc.internal.getNumberOfPages();
       for (var p = 1; p <= pages; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(140, 150, 165); doc.text('Akhnaton Trading and Representation · Calibration Lab · Data Sheet Report', M, H - 6); doc.text('Page ' + p + ' of ' + pages, W - M, H - 6, { align: 'right' }); }
       pdfSheet(doc.output('blob'), 'Data sheet report ' + isoDay(now) + '.pdf', 'Data sheet report', 'Data sheet report', miss.length + ' missing · ' + ok.length + ' back', 'Akhnaton data sheet report');
+    });
+  }
+  /* Summary of open and closed jobs */
+  function jobsPdf() {
+    if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
+    var now = new Date(), all = jobsList().slice().sort(function (a, b) { return (b.ts || '').localeCompare(a.ts || ''); });
+    var open = all.filter(function (j) { return j.status !== 'Closed'; }), closed = all.filter(function (j) { return j.status === 'Closed'; });
+    loadLogo().then(function (logo) {
+      function lat(t) { return pdfTxt(t); }
+      var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' }), W = 297, H = 210, M = 12, y = 12;
+      var FN = useFont(doc);
+      if (logo) { var lw = 50, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
+      doc.setFont(FN, 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75); doc.text('Jobs Summary', W - M, y + 6, { align: 'right' });
+      doc.setFont(FN, 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
+      doc.text(open.length + ' open  ·  ' + closed.length + ' closed  ·  as of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 12, { align: 'right' });
+      y += 22; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 6;
+      var cols = [['Job', 26], ['Company', 52], ['Title', 50], ['Under', 40], ['Opened', 30], ['Closed', 22], ['Req.', 12], ['Out', 12], ['Data sheets missing', 29]];
+      function headRow() {
+        doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7.5, 'F'); doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont(FN, 'bold');
+        var x = M + 2; cols.forEach(function (c) { doc.text(c[0], x, y + 5.1); x += c[1]; }); doc.setFont(FN, 'normal'); y += 7.5;
+      }
+      function section(t, list) {
+        if (y + 18 > H - 14) { doc.addPage(); y = 14; }
+        doc.setFont(FN, 'bold'); doc.setFontSize(11.5); doc.setTextColor(19, 41, 75); doc.text(t + '  (' + list.length + ')', M, y + 4); y += 6.5; headRow();
+        list.forEach(function (j, i) {
+          var k = jobStats(j), cells = [j.id, lat(coName(j.companyId)), lat(j.title), lat(jobBasis(j)), lat(j.byName) + ' ' + fmtDate(j.ts), j.closedTs ? fmtDate(j.closedTs) : '', String(k.rs.length), String(k.out), String(k.dsMissing)];
+          var wr = cells.map(function (t, n) { return doc.splitTextToSize(t, cols[n][1] - 2.5); }), hh = Math.max.apply(null, wr.map(function (w) { return w.length; })) * 4.2 + 3;
+          if (y + hh > H - 14) { doc.addPage(); y = 14; headRow(); }
+          if (i % 2) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, hh, 'F'); }
+          doc.setFontSize(9.3); doc.setTextColor(23, 34, 51);
+          var x = M + 2; wr.forEach(function (w, n) { doc.text(w, x, y + 4.6); x += cols[n][1]; }); y += hh;
+        });
+        if (!list.length) { doc.setFontSize(10); doc.setTextColor(90, 104, 121); doc.text('None.', M + 2, y + 5); y += 7; }
+        y += 6;
+      }
+      section('Open jobs', open); section('Closed jobs', closed);
+      var pages = doc.internal.getNumberOfPages();
+      for (var p = 1; p <= pages; p++) { doc.setPage(p); doc.setFontSize(8); doc.setTextColor(140, 150, 165); doc.text('Akhnaton Trading and Representation · Calibration Lab · Jobs Summary', M, H - 6); doc.text('Page ' + p + ' of ' + pages, W - M, H - 6, { align: 'right' }); }
+      pdfSheet(doc.output('blob'), 'Jobs summary ' + isoDay(now) + '.pdf', 'Jobs summary', 'Jobs summary', open.length + ' open · ' + closed.length + ' closed', 'Akhnaton jobs summary');
     });
   }
   /* Admin only: wipe trial history (all, or the last N days). Where devices are now is kept. */
@@ -996,6 +1060,7 @@
     $$('[data-ds]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); setDS(b.dataset.ds, b.dataset.v); }; });
     $$('[data-dsxls]').forEach(function (b) { b.onclick = dsXls; });
     $$('[data-dspdf]').forEach(function (b) { b.onclick = dsPdf; });
+    $$('[data-jobspdf]').forEach(function (b) { b.onclick = jobsPdf; });
     $$('[data-kgrp]').forEach(function (b) { b.onclick = function () { S.kgrp = b.dataset.kgrp; render(); }; });
     $$('[data-kpdf]').forEach(function (b) { b.onclick = kitsPdf; });
     $$('[data-kxls]').forEach(function (b) { b.onclick = kitsXls; });
@@ -1127,8 +1192,11 @@
         (d.resolution ? '<dt>Resolution</dt><dd>' + esc(d.resolution) + '</dd>' : '') +
         (d.calDate ? '<dt>Calibrated on</dt><dd>' + fmtDate(d.calDate) + '</dd>' : '') +
         (d.certNo ? '<dt>Certificate no.</dt><dd>' + esc(d.certNo) + '</dd>' : '') +
+        (d.calLab ? '<dt>Calibrated at</dt><dd>' + esc(d.calLab) + '</dd>' : '') +
         (d.remarks ? '<dt>Remarks</dt><dd>' + esc(d.remarks) + '</dd>' : '') +
         '<dt>Type</dt><dd>' + esc(d.category) + '</dd></dl></div>' +
+        (partsOf(d).length ? '<div class="box"><h4>Parts of this device</h4><div class="list" style="margin:0">' + partsOf(d).map(function (x) { return devRow(x); }).join('') + '</div><div class="meta" style="margin-top:6px">Each part can also go out on its own.</div></div>' : '') +
+        (d.parentId && IDX.dev[d.parentId] ? '<div class="box"><h4>Part of</h4><div class="list" style="margin:0">' + devRow(IDX.dev[d.parentId]) + '</div></div>' : '') +
         '<div class="box"><h4>History</h4><ul class="tl" id="hist"><li><small>Loading…</small></li></ul></div>';
       var btns = [];
       if (can('keep')) {
@@ -1233,6 +1301,9 @@
       var inGroup = grp === null ? null : groups.filter(function (g) { return g[0] === grp; })[0];
       var list = S.data.devices.filter(function (d) { return filterFn(d) && matches(d, q) && (q || !inGroup || inGroup[1].indexOf(d.category) >= 0); });
       list.sort(function (a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); });
+      (function () { var inL = {}, outL = []; list.forEach(function (d) { inL[d.id] = 1; });
+        list.forEach(function (d) { if (d.parentId && inL[d.parentId]) return; outL.push(d); list.forEach(function (c) { if (c.parentId === d.id) outL.push(c); }); });
+        list = outL; })();
       var picked = selected.map(function (id) { return IDX.dev[id]; }).filter(Boolean);
       var isStock = items && grp && grp.indexOf('stock:') === 0;
       var head = '<div class="selbar"><div class="search" style="margin-bottom:8px">' + ICON.search + '<input id="dq" type="search" placeholder="Search all: name or last digits of serial" value="' + esc(q) + '" autocomplete="off"></div>' +
@@ -1249,13 +1320,13 @@
         }).join('') + (items ? Core.STOCK_GROUPS.map(function (g) {
           var sts = stockList().filter(function (x) { return x.group === g; });
           var n = items.filter(function (it) { return it.group === g; }).reduce(function (a, it) { return a + it.qty; }, 0);
-          return '<button data-grp="stock:' + esc(g) + '" class="qtile"><b>' + esc(g) + '</b><small>' + sts.length + ' type' + (sts.length === 1 ? '' : 's') + ' · by quantity</small>' + (n ? '<i>' + n + ' picked</i>' : '') + '</button>';
+          return '<button data-grp="stock:' + esc(g) + '" class="qtile"><b>' + esc(g) + '</b><small>' + sts.length + ' type' + (sts.length === 1 ? '' : 's') + (g === 'Consumables' ? ' · used up' : ' · by quantity') + '</small>' + (n ? '<i>' + n + ' picked</i>' : '') + '</button>';
         }).join('') : '') + '<button data-grp="__all"><b>All devices</b><small>' + S.data.devices.filter(filterFn).length + ' available</small></button></div>';
       } else if (isStock && !q) {
         var g = grp.slice(6);
         var rows = stockList().filter(function (x) { return x.group === g; }).map(function (st) {
           var free = stockFree(st), cur = items.filter(function (it) { return it.stockId === st.id; })[0];
-          return { key: st.id, name: st.name, sub: free == null ? 'Count not set' : free + ' in the lab', max: free, qty: cur ? cur.qty : 0 };
+          return { key: st.id, name: st.name, sub: (st.contents ? st.contents + ' · ' : '') + (free == null ? 'Count not set' : free + ' in the lab'), max: free, qty: cur ? cur.qty : 0 };
         });
         var others = items.filter(function (it) { return !it.stockId && it.group === g; });
         var qr = qtyRows(rows, function (k, v) {
@@ -1277,14 +1348,18 @@
         container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
         (list.length ? '<div class="list">' + list.map(function (d) {
           var on = selected.indexOf(d.id) >= 0, c = cert(d);
-          return '<button class="row' + (on ? ' sel' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
+          return '<button class="row' + (on ? ' sel' : '') + (d.parentId ? ' part' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
             (c.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
         }).join('') + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
       }
       $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; onChange && onChange(); }; });
       $$('[data-back]', container).forEach(function (b) { b.onclick = function () { api.back(); }; });
       var inp = $('#dq', container); inp.oninput = function () { var was = !!q; q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} if (was !== !!q) onChange && onChange(); };
-      $$('[data-d]', container).forEach(function (b) { b.onclick = function () { var id = b.dataset.d, i = selected.indexOf(id); if (i >= 0) selected.splice(i, 1); else selected.push(id); draw(); onChange && onChange(); }; });
+      $$('[data-d]', container).forEach(function (b) { b.onclick = function () {
+        var id = b.dataset.d, i = selected.indexOf(id), parts = S.data.devices.filter(function (x) { return x.parentId === id && x.active !== false && filterFn(x); }).map(function (x) { return x.id; });
+        if (i >= 0) { selected.splice(i, 1); parts.forEach(function (p) { var k = selected.indexOf(p); if (k >= 0) selected.splice(k, 1); }); }
+        else { selected.push(id); parts.forEach(function (p) { if (selected.indexOf(p) < 0) selected.push(p); }); if (parts.length) toast('Added with its ' + parts.length + ' part' + (parts.length > 1 ? 's' : '') + ' — untick any that stay'); }
+        draw(); onChange && onChange(); }; });
       $$('[data-unpick]', container).forEach(function (b) { b.onclick = function () { selected.splice(selected.indexOf(b.dataset.unpick), 1); draw(); onChange && onChange(); }; });
       $$('[data-unitem]', container).forEach(function (b) { b.onclick = function () { items.splice(+b.dataset.unitem, 1); draw(); onChange && onChange(); }; });
     }
@@ -1302,7 +1377,7 @@
         (can('job') ? '<button class="btn ghost wide" data-nj style="margin-bottom:12px">＋ Open a new job</button>' : '') +
         (list.length ? '<div class="list">' + list.map(function (j) {
           var n = jobReceipts(j).length;
-          return '<button class="row' + (j.id === selected ? ' sel' : '') + '" data-pj="' + j.id + '"><span class="check">' + (j.id === selected ? ICON.tick : '') + '</span><span class="t"><b>' + esc(coName(j.companyId)) + '</b><small>' + esc(j.id) + (j.title ? ' · ' + esc(j.title) : '') + '</small><small>' + n + ' request' + (n === 1 ? '' : 's') + ' so far · opened ' + esc(when(j.ts)) + '</small></span></button>';
+          return '<button class="row' + (j.id === selected ? ' sel' : '') + '" data-pj="' + j.id + '"><span class="check">' + (j.id === selected ? ICON.tick : '') + '</span><span class="t"><b>' + esc(coName(j.companyId)) + '</b><small>' + esc(j.id) + (j.title ? ' · ' + esc(j.title) : '') + (j.basis ? ' · ' + esc(jobBasis(j)) : '') + '</small><small>' + n + ' request' + (n === 1 ? '' : 's') + ' so far · opened ' + esc(when(j.ts)) + '</small></span></button>';
         }).join('') + '</div>' : '<div class="empty"><b>No open job' + (q ? ' matches' : '') + '.</b>' + (can('job') ? 'Open a new job for the company first.' : 'Ask the site supervisor to open a job for this visit.') + '</div>');
       var inp = $('#jq', container); inp.oninput = function () { q = inp.value; var p = inp.selectionStart; draw(); var n = $('#jq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} };
       $$('[data-pj]', container).forEach(function (b) { b.onclick = function () { selected = b.dataset.pj; onPick(selected); draw(); }; });
@@ -1700,7 +1775,7 @@
           Core.STOCK_GROUPS.map(function (g) {
             var sts = stockList().filter(function (x) { return x.group === g; });
             return '<div class="sec"><h2>' + esc(g) + '</h2></div><div class="list">' + sts.map(function (st) {
-              return '<button class="row" data-st="' + st.id + '"><span class="t"><b>' + esc(st.name) + '</b><small>' + (st.total === '' ? 'Total not set' : st.total + ' total') + ' · ' + stockOut(st.id) + ' out</small></span></button>';
+              return '<button class="row" data-st="' + st.id + '"><span class="t"><b>' + esc(st.name) + '</b>' + (st.contents ? '<small dir="auto">' + esc(st.contents) + '</small>' : '') + '<small>' + (st.total === '' ? 'Total not set' : st.total + ' total') + ' · ' + stockOut(st.id) + ' out</small></span></button>';
             }).join('') + '</div>';
           }).join('');
         $$('[data-st]', body).forEach(function (b) { b.onclick = function () { editStock(stockList().filter(function (x) { return x.id === b.dataset.st; })[0]); }; });
@@ -1716,10 +1791,12 @@
       setTitle(st ? 'Edit type' : 'Add a type');
       body.innerHTML = '<label class="f"><span>Name (e.g. Dickson Temp/RH data logger)</span><input class="inp" id="sn" value="' + esc(f.name) + '"></label>' +
         '<div class="box" style="margin:4px 0 14px"><h4>Group</h4><div class="seg">' + Core.STOCK_GROUPS.map(function (g) { return '<button data-g="' + esc(g) + '" class="' + (f.group === g ? 'on' : '') + '">' + esc(g) + '</button>'; }).join('') + '</div></div>' +
-        '<label class="f"><span>How many do you own? (leave empty if not counted)</span><input class="inp" id="tt" inputmode="numeric" value="' + esc(f.total) + '"></label>' +
+        '<label class="f"><span>How many do you own? (leave empty if not counted · a kit counts as 1)</span><input class="inp" id="tt" inputmode="numeric" value="' + esc(f.total) + '"></label>' +
+        '<label class="f"><span>What is inside? (for a kit — e.g. 8 وصلات: 1/4 ×4، 1/2 ×4)</span><textarea class="inp" id="kc" dir="auto">' + esc(f.contents || '') + '</textarea></label>' +
         (st ? '<div class="meta">' + stockOut(st.id) + ' are out right now.</div>' : '');
       $('#sn', body).oninput = function (e) { f.name = e.target.value; };
       $('#tt', body).oninput = function (e) { f.total = e.target.value.replace(/[^0-9]/g, ''); };
+      $('#kc', body).oninput = function (e) { f.contents = e.target.value; };
       $$('[data-g]', body).forEach(function (b) { b.onclick = function () { f.group = b.dataset.g; $$('[data-g]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       setFoot((st ? '<button class="btn ghost" data-remove style="flex:0 0 auto;color:var(--danger)">Remove</button>' : '') + '<button class="btn" data-save>Save</button>');
       var rm = $('[data-remove]');
@@ -1735,17 +1812,28 @@
     });
   }
   function editDevice(d, after) {
-    var f = d ? JSON.parse(JSON.stringify(d)) : { category: '', manufacturer: '', description: '', model: '', serial: '', range: '', accuracy: '', resolution: '', calDate: '', calDue: '', certNo: '', certUrl: '', remarks: '', certStatus: 'dated' };
+    var f = d ? JSON.parse(JSON.stringify(d)) : { category: '', manufacturer: '', description: '', model: '', serial: '', range: '', accuracy: '', resolution: '', calDate: '', calDue: '', certNo: '', certUrl: '', remarks: '', calLab: '', parentId: '', certStatus: 'dated' };
     openSheet(function (body, setFoot, setTitle) {
       setTitle(d ? 'Edit device' : 'Add a device');
       var fields = [['description', 'Name (e.g. Digital Tachometer)'], ['manufacturer', 'Manufacturer'], ['model', 'Model'], ['serial', 'Serial number'], ['category', 'Type (e.g. Temperature, Pressure)'], ['range', 'Range'], ['resolution', 'Resolution'], ['accuracy', 'Accuracy'], ['remarks', 'Remarks']];
       body.innerHTML = fields.map(function (x) { return '<label class="f"><span>' + x[1] + '</span><input class="inp" data-k="' + x[0] + '" value="' + esc(f[x[0]]) + '"></label>'; }).join('') +
+        '<label class="f"><span>Part of another device? (e.g. the matrix of a capture hood)</span><select class="inp" data-k="parentId"><option value="">— No, it is a main device —</option>' +
+          S.data.devices.filter(function (x) { return x.active !== false && !x.parentId && (!d || x.id !== d.id); }).sort(bySerial).map(function (x) { return '<option value="' + x.id + '"' + (f.parentId === x.id ? ' selected' : '') + '>' + esc(x.description + ' · ' + (x.manufacturer || '') + ' · S/N ' + x.serial) + '</option>'; }).join('') + '</select></label>' +
         '<div class="box" style="margin:4px 0 14px"><h4>Certificate</h4><div class="seg" style="margin-bottom:12px"><button data-cs="dated" class="' + (f.certStatus !== 'none' ? 'on' : '') + '">Has a calibration certificate</button><button data-cs="none" class="' + (f.certStatus === 'none' ? 'on' : '') + '">No certificate needed</button></div>' +
         '<label class="f"><span>Calibration date</span><input class="inp" type="date" data-k="calDate" value="' + esc(f.calDate) + '"></label>' +
         '<label class="f"><span>Calibration due date</span><input class="inp" type="date" data-k="calDue" value="' + esc(f.calDue) + '"></label>' +
         '<label class="f"><span>Certificate number</span><input class="inp" data-k="certNo" value="' + esc(f.certNo) + '"></label>' +
+        '<div class="f"><span style="display:block;font-size:14px;color:var(--muted);margin-bottom:6px">Calibrated at</span><div class="seg" id="clab">' + CAL_LABS.concat(['Other']).map(function (l) { var on = l === 'Other' ? (f.calLab && CAL_LABS.indexOf(f.calLab) < 0) : f.calLab === l; return '<button data-clab="' + l + '" class="' + (on ? 'on' : '') + '">' + l + '</button>'; }).join('') + '</div>' +
+        '<input class="inp" id="clabo" placeholder="Write the lab name" style="margin-top:8px;' + (f.calLab && CAL_LABS.indexOf(f.calLab) < 0 ? '' : 'display:none') + '" value="' + esc(CAL_LABS.indexOf(f.calLab) < 0 ? f.calLab || '' : '') + '"></div>' +
         '<label class="f" style="margin:0"><span>Certificate link (SharePoint)</span><input class="inp" data-k="certUrl" value="' + esc(f.certUrl) + '" placeholder="https://evapharma.sharepoint.com/…"></label></div>';
       $$('[data-k]', body).forEach(function (i) { i.oninput = i.onchange = function () { f[i.dataset.k] = i.value; }; });
+      $$('[data-clab]', body).forEach(function (b) { b.onclick = function () {
+        var l = b.dataset.clab, was = b.classList.contains('on');
+        $$('[data-clab]', body).forEach(function (x) { x.classList.toggle('on', x === b && !was); });
+        var o = $('#clabo', body); o.style.display = l === 'Other' && !was ? '' : 'none';
+        f.calLab = was ? '' : (l === 'Other' ? o.value.trim() : l);
+      }; });
+      $('#clabo', body).oninput = function (e) { f.calLab = e.target.value.trim(); };
       $$('[data-cs]', body).forEach(function (b) { b.onclick = function () { f.certStatus = b.dataset.cs; $$('[data-cs]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       setFoot((d && can('admin') ? '<button class="btn ghost" data-remove style="flex:0 0 auto;color:var(--danger)">Remove</button>' : '') + '<button class="btn" data-save>Save</button>');
       var rm = $('[data-remove]');
@@ -1764,7 +1852,32 @@
 
   /* ================= PDF receipt ================= */
   var LOGO = null;
+  /* Arabic-capable font for PDFs (DejaVu Sans, subset). Without it, PDFs fall back to Latin-only text. */
+  var PDFF = null, pdfFLoading = null;
+  function pdfFont() {
+    if (PDFF) return Promise.resolve(PDFF);
+    if (!pdfFLoading) pdfFLoading = Promise.all(['dejavu.ttf', 'dejavu-bold.ttf'].map(function (f) {
+      return fetch(f).then(function (r) { if (!r.ok) throw new Error('font'); return r.arrayBuffer(); }).then(function (b) {
+        var u = new Uint8Array(b), bin = '', i, CH = 0x8000; for (i = 0; i < u.length; i += CH) bin += String.fromCharCode.apply(null, u.subarray(i, i + CH)); return btoa(bin);
+      });
+    })).then(function (a) { PDFF = a; return a; }).catch(function () { pdfFLoading = null; return null; });
+    return pdfFLoading;
+  }
+  function useFont(doc) {
+    if (!PDFF) return 'helvetica';
+    doc.addFileToVFS('dv.ttf', PDFF[0]); doc.addFont('dv.ttf', 'DV', 'normal');
+    doc.addFileToVFS('dvb.ttf', PDFF[1]); doc.addFont('dvb.ttf', 'DV', 'bold');
+    return 'DV';
+  }
+  function pdfTxt2(t) { return String(t || '').split('\n').map(pdfTxt).join('\n'); }
+  function pdfTxt(t) {
+    t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+    return PDFF ? t : t.replace(/\u00B5/g, 'u').replace(/[^\x20-\x7E\u00A0-\u024F\u2013\u2014]/g, '').trim();
+  }
   function loadLogo() {
+    return Promise.all([loadLogo0(), pdfFont()]).then(function (a) { return a[0]; });
+  }
+  function loadLogo0() {
     if (LOGO) return Promise.resolve(LOGO);
     return new Promise(function (res) {
       var img = new Image(); img.onload = function () {
@@ -1779,45 +1892,46 @@
     if (!c) return toast('Receipt not found. Refresh and try again.', true);
     if (!window.jspdf) return toast('The PDF tool is still loading. Try again in a second.', true);
     loadLogo().then(function (logo) {
-      function lat(t) { return String(t || '').replace(/[^\x20-\x7E\u00A0-\u024F\u2013\u2014]/g, '').replace(/\s+/g, ' ').trim(); }
+      function lat(t) { return pdfTxt(t); }
       var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4' });
+      var FN = useFont(doc);
       var W = 210, M = 16, y = 16, co = IDX.co[c.companyId] || {};
       if (logo) { var lw = 62, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(19, 41, 75);
+      doc.setFont(FN, 'bold'); doc.setFontSize(17); doc.setTextColor(19, 41, 75);
       doc.text('Device Check-out Receipt', W - M, y + 7, { align: 'right' });
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(90, 104, 121);
+      doc.setFont(FN, 'normal'); doc.setFontSize(10.5); doc.setTextColor(90, 104, 121);
       doc.text('Receipt no. ' + c.id, W - M, y + 13, { align: 'right' });
       doc.text('Calibration Lab', W - M, y + 18, { align: 'right' });
       y += 30; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.8); doc.line(M, y, W - M, y); y += 9;
       function field(label, val, x, w) {
         doc.setFontSize(9); doc.setTextColor(90, 104, 121); doc.text(label, x, y);
-        doc.setFontSize(12); doc.setTextColor(23, 34, 51); doc.setFont('helvetica', 'bold');
-        var lines = doc.splitTextToSize(val || '—', w); doc.text(lines, x, y + 5.5); doc.setFont('helvetica', 'normal');
+        doc.setFontSize(12); doc.setTextColor(23, 34, 51); doc.setFont(FN, 'bold');
+        var lines = doc.splitTextToSize(val || '—', w); doc.text(lines, x, y + 5.5); doc.setFont(FN, 'normal');
         return lines.length;
       }
       var d = new Date(c.ts);
       var l1 = field('Company', lat(co.name) + (co.code ? '  (ID ' + co.code + ')' : ''), M, 108);
       field('Date & time of departure', fmtDate(d) + ', ' + fmtTime(d), 130, 64);
       y += 7 + l1 * 5.5;
-      var offi = (co.official || '').split(' | ').filter(function (x) { return /^[\x20-\x7E]+$/.test(x); })[0];
+      var offi = (co.official || '').split(' | ').filter(function (x) { return PDFF || /^[\x20-\x7E]+$/.test(x); })[0];
       if (offi && offi !== co.name) { doc.setFontSize(9.5); doc.setTextColor(90, 104, 121); var ol = doc.splitTextToSize('Official name: ' + offi, 178); doc.text(ol, M, y - 2); y += ol.length * 4.5; }
       var l2 = field('Engineer(s)', names(c.engineers), M, 108);
       field('Expected return', c.expectedReturn ? fmtDate(c.expectedReturn) : 'Not set', 130, 64);
       y += 8 + l2 * 5.5;
-      var rj = jobById(c.jobId); if (rj) { var lj = field('Job', rj.id + (lat(rj.title) ? ' - ' + lat(rj.title) : ''), M, 178); y += 8 + lj * 5.5; }
+      var rj = jobById(c.jobId); if (rj) { var lj = field('Job', rj.id + (lat(rj.title) ? ' - ' + lat(rj.title) : '') + (rj.basis ? '  (' + lat(jobBasis(rj)) + ')' : ''), M, 178); y += 8 + lj * 5.5; }
       if (lat(c.note)) { var l3 = field('Note', lat(c.note), M, 178); y += 8 + l3 * 5.5; }
       // table
       var cols = [{ t: '#', w: 8 }, { t: 'Device', w: 64 }, { t: 'Manufacturer / Model', w: 44 }, { t: 'Serial no.', w: 36 }, { t: 'Cal. due', w: 26 }];
       function headRow() {
         doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 8, 'F');
-        doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-        var x = M + 2; cols.forEach(function (cl) { doc.text(cl.t, x, y + 5.4); x += cl.w; }); doc.setFont('helvetica', 'normal'); y += 8;
+        doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont(FN, 'bold');
+        var x = M + 2; cols.forEach(function (cl) { doc.text(cl.t, x, y + 5.4); x += cl.w; }); doc.setFont(FN, 'normal'); y += 8;
       }
       headRow();
       c.deviceIds.forEach(function (id, i) {
         var dv = IDX.dev[id] || { description: id, manufacturer: '', model: '', serial: '', calDue: '' };
-        var cells = [String(i + 1), dv.description, [dv.manufacturer, dv.model !== 'N/A' ? dv.model : ''].filter(Boolean).join(' '), dv.serial, dv.certStatus === 'none' ? 'Not required' : (dv.calDue ? fmtDate(dv.calDue) : '—')];
-        var wrapped = cells.map(function (t, k) { return doc.splitTextToSize(t || '', cols[k].w - 3); });
+        var cells = [String(i + 1), (dv.parentId && c.deviceIds.indexOf(dv.parentId) >= 0 ? '   ↳ ' : '') + dv.description, [dv.manufacturer, dv.model !== 'N/A' ? dv.model : ''].filter(Boolean).join(' '), dv.serial, dv.certStatus === 'none' ? 'Not required' : (dv.calDue ? fmtDate(dv.calDue) : '—')];
+        var wrapped = cells.map(function (t, k) { return doc.splitTextToSize(pdfTxt2(t), cols[k].w - 3); });
         var h = Math.max.apply(null, wrapped.map(function (w) { return w.length; })) * 4.6 + 3.4;
         if (y + h > 262) { doc.addPage(); y = 18; headRow(); }
         if (i % 2) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, h, 'F'); }
@@ -1828,14 +1942,14 @@
       var n0 = c.deviceIds.length;
       (c.items || []).forEach(function (it, j) {
         var stx = it.stockId ? stockList().filter(function (x) { return x.id === it.stockId; })[0] : null;
-        var nm = lat(it.name) || (stx && stx.note) || 'Other item';
+        var nm = (lat(it.name) || (stx && stx.note) || 'Other item') + (stx && stx.contents ? ' (' + lat(stx.contents) + ')' : '');
         var cells = [String(n0 + j + 1), nm, it.group || '', 'Qty ' + it.qty, ''];
         var wrapped = cells.map(function (t, k) { return doc.splitTextToSize(lat(t) || '', cols[k].w - 3); });
         var h = Math.max.apply(null, wrapped.map(function (w) { return w.length; })) * 4.6 + 3.4;
         if (y + h > 262) { doc.addPage(); y = 18; headRow(); }
         if ((n0 + j) % 2) { doc.setFillColor(237, 241, 245); doc.rect(M, y, W - 2 * M, h, 'F'); }
         doc.setFontSize(10); doc.setTextColor(23, 34, 51);
-        var x = M + 2; wrapped.forEach(function (w, k) { if (k === 3) doc.setFont('helvetica', 'bold'); doc.text(w, x, y + 5); doc.setFont('helvetica', 'normal'); x += cols[k].w; });
+        var x = M + 2; wrapped.forEach(function (w, k) { if (k === 3) doc.setFont(FN, 'bold'); doc.text(w, x, y + 5); doc.setFont(FN, 'normal'); x += cols[k].w; });
         y += h;
       });
       doc.setDrawColor(214, 221, 230); doc.setLineWidth(0.3); doc.line(M, y, W - M, y);
@@ -1913,7 +2027,7 @@
     toast('Preparing Excel…');
     loadXlsx().then(function (X) {
       function where(d) { if (Core.isCoReq(d)) return 'Lab (waiting approval)'; if (d.pending) return 'Transfer waiting'; if (d.status === 'At Client') return coName(d.companyId); if (d.status === 'In Office') return 'Lab'; return d.note || ''; }
-      var head = ['#', 'Location group', 'Category', 'Device', 'Manufacturer', 'Model', 'Serial no.', 'Status', 'Where', 'With', 'Since', 'Expected back', 'Cal. due', 'Certificate'];
+      var head = ['#', 'Location group', 'Category', 'Device', 'Manufacturer', 'Model', 'Serial no.', 'Status', 'Where', 'With', 'Since', 'Expected back', 'Cal. due', 'Certificate', 'Calibrated?', 'Last cal.', 'Calibrated at', 'Resolution', 'Accuracy', 'Range'];
       var rows = [], n = 0, ordered = [];
       if (S.sort === 'place') { var G = groupByPlace(list); G.keys.forEach(function (k) { G.groups[k].forEach(function (d) { ordered.push([G.meta[k].title, d]); }); }); }
       else list.slice().sort(function (a, b) { return a.category.localeCompare(b.category) || bySerial(a, b); }).forEach(function (d) { ordered.push([d.category, d]); });
@@ -1921,12 +2035,12 @@
         var d = x[1]; n++;
         rows.push([n, x[0], d.category, d.description, d.manufacturer || '', d.model && d.model !== 'N/A' ? d.model : '', d.serial, d.pending ? (Core.isCoReq(d) ? 'Requested' : 'Transfer') : d.status,
           where(d), names(d.holders), d.status === 'In Office' || !d.since ? '' : fmtDate(d.since), d.expectedReturn ? fmtDate(d.expectedReturn) : '',
-          d.certStatus === 'none' ? 'Not required' : (d.calDue ? fmtDate(d.calDue) : ''), d.certUrl || '']);
+          d.certStatus === 'none' ? 'Not required' : (d.calDue ? fmtDate(d.calDue) : ''), d.certUrl || '', d.certStatus === 'none' ? 'No' : 'Yes', d.calDate ? fmtDate(d.calDate) : '', d.calLab || '', d.resolution || '', d.accuracy || '', d.range || '']);
       });
       var wb = X.utils.book_new();
       var ws = X.utils.aoa_to_sheet([['Akhnaton Lab Devices — ' + title + ' — as of ' + fmtDate(now) + ' ' + fmtTime(now)], [], head].concat(rows));
-      ws['!cols'] = [4, 22, 18, 34, 18, 16, 22, 14, 30, 26, 12, 13, 12, 30].map(function (w) { return { wch: w }; });
-      ws['!autofilter'] = { ref: 'A3:N' + (rows.length + 3) };
+      ws['!cols'] = [4, 22, 18, 34, 18, 16, 22, 14, 30, 26, 12, 13, 12, 30, 11, 12, 14, 12, 14, 20].map(function (w) { return { wch: w }; });
+      ws['!autofilter'] = { ref: 'A3:T' + (rows.length + 3) };
       X.utils.book_append_sheet(wb, ws, 'Devices');
       var hs = holdings().filter(function (h) { return +h.qty > 0; });
       var krows = stockList().map(function (st) { return [st.group, st.name, st.note || '', st.total === '' ? '' : +st.total, stockOut(st.id), stockFree(st) == null ? '' : stockFree(st)]; });
@@ -1949,21 +2063,22 @@
     var fLabel = (DEV_FILTERS.filter(function (x) { return x[0] === S.filter; })[0] || ['', 'All'])[1];
     var title = fLabel === 'All' ? 'All devices' : fLabel;
     loadLogo().then(function (logo) {
-      function lat(t) { return String(t || '').replace(/\u00B5/g, 'u').replace(/[^\x20-\x7E\u00A0-\u024F\u2013\u2014]/g, '').replace(/\s+/g, ' ').trim(); }
+      function lat(t) { return pdfTxt(t); }
       var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+      var FN = useFont(doc);
       var W = 297, H = 210, M = 12, y = 12, now = new Date();
       if (logo) { var lw = 50, lh = lw * logo.h / logo.w; doc.addImage(logo.data, 'JPEG', M, y, lw, lh); }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75);
+      doc.setFont(FN, 'bold'); doc.setFontSize(16); doc.setTextColor(19, 41, 75);
       doc.text('Device Location Report', W - M, y + 6, { align: 'right' });
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
+      doc.setFont(FN, 'normal'); doc.setFontSize(10); doc.setTextColor(90, 104, 121);
       doc.text(title + (S.q ? '  ·  search: "' + lat(S.q) + '"' : '') + '  ·  ' + list.length + ' device' + (list.length > 1 ? 's' : ''), W - M, y + 12, { align: 'right' });
       doc.text('As of ' + fmtDate(now) + ', ' + fmtTime(now) + '  ·  by ' + lat(S.me && S.me.name), W - M, y + 17, { align: 'right' });
       y += 24; doc.setDrawColor(11, 118, 197); doc.setLineWidth(0.7); doc.line(M, y, W - M, y); y += 6;
       var cols = [{ t: '#', w: 8 }, { t: 'Device', w: 74 }, { t: 'Serial no.', w: 33 }, { t: 'Status', w: 27 }, { t: 'Where', w: 50 }, { t: 'With', w: 39 }, { t: 'Since', w: 21 }, { t: 'Cal. due', w: 21 }];
       function headRow() {
         doc.setFillColor(19, 41, 75); doc.rect(M, y, W - 2 * M, 7.5, 'F');
-        doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-        var x = M + 2; cols.forEach(function (cl) { doc.text(cl.t, x, y + 5.1); x += cl.w; }); doc.setFont('helvetica', 'normal'); y += 7.5;
+        doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont(FN, 'bold');
+        var x = M + 2; cols.forEach(function (cl) { doc.text(cl.t, x, y + 5.1); x += cl.w; }); doc.setFont(FN, 'normal'); y += 7.5;
       }
       function where(d) {
         if (isReq(d)) return 'Lab (waiting approval)';
@@ -1974,8 +2089,8 @@
       }
       function sectionTitle(t, n) {
         if (y + 16 > H - 14) { doc.addPage(); y = 14; }
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(19, 41, 75);
-        doc.text(lat(t) + '  (' + n + ')', M, y + 4); doc.setFont('helvetica', 'normal'); y += 6.5; headRow();
+        doc.setFont(FN, 'bold'); doc.setFontSize(11.5); doc.setTextColor(19, 41, 75);
+        doc.text(lat(t) + '  (' + n + ')', M, y + 4); doc.setFont(FN, 'normal'); y += 6.5; headRow();
       }
       var n = 0;
       function rows(devs) {

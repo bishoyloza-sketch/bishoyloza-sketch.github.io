@@ -11,7 +11,9 @@ var Core = (function () {
 
   /* Items counted by quantity (no serial): data loggers, validator sensors, connections, tools.
    * total '' = not counted yet (no availability limit). Admin edits them in the app. */
-  var STOCK_GROUPS = ['Data Loggers', 'Validator Sensors', 'Connections', 'Tools & Accessories'];
+  var STOCK_GROUPS = ['Data Loggers', 'Validator Sensors', 'Connections', 'Tools & Accessories', 'Consumables'];
+  /* Consumables (gas tubes, buffer solutions…) are used up: taking them lowers the stock, nothing comes back. */
+  function isUsedUp(group) { return group === 'Consumables'; }
   var DEFAULT_STOCK = [
     ['S01', 'Data Loggers', 'Dickson Temp/RH data logger'], ['S02', 'Data Loggers', 'Elitech data logger'], ['S03', 'Data Loggers', 'Lascar data logger'],
     ['S04', 'Data Loggers', 'High temp/RH data logger'], ['S05', 'Data Loggers', 'Stainless steel data logger'],
@@ -78,6 +80,7 @@ var Core = (function () {
   function isSuper(actor) { return actor.role === 'superadmin'; }
   function canKeep(actor) { return actor.role === 'admin' || actor.role === 'keeper' || isSuper(actor); }
   function canJob(actor) { return actor.role === 'admin' || actor.role === 'supervisor' || isSuper(actor); }
+  var JOB_BASIS = ['PO', 'Contract', 'Approval', 'One-day visit', 'Other'];
   var ROLES = ['superadmin', 'admin', 'keeper', 'supervisor', 'engineer'];
   function isAdmin(actor) { return actor.role === 'admin' || isSuper(actor); }
   function devName(d) { return d.description + ' (S/N ' + d.serial + ')'; }
@@ -142,6 +145,13 @@ var Core = (function () {
   }
   function giveItems(db, now, actor, rec, co) {
     (rec.items || []).forEach(function (it, i) {
+      if (isUsedUp(it.group)) {
+        var st = it.stockId ? byId(db.stock, it.stockId) : null;
+        if (st && st.total !== '' && st.total != null) { st.total = String(Math.max(0, num(st.total) - it.qty)); touch(db, 'stock'); }
+        db.movements.push({ id: 'M' + now + '-U' + i + '-' + db.movements.length, ts: iso(now), deviceId: 'ITEM:' + (it.stockId || it.name), action: 'Used',
+          status: 'Used', companyId: co.id, holders: rec.engineers, byId: actor.id, byName: actor.name, checkoutId: rec.id, note: it.qty + ' × ' + it.name + (st && st.total !== '' ? ' · ' + st.total + ' left' : '') });
+        return;
+      }
       db.holdings.push({ id: 'H' + now + '-' + i + '-' + db.holdings.length, stockId: it.stockId, name: it.name, group: it.group, qty: it.qty,
         companyId: co.id, holders: rec.engineers, since: iso(now), checkoutId: rec.id });
       db.movements.push({ id: 'M' + now + '-I' + i + '-' + db.movements.length, ts: iso(now), deviceId: 'ITEM:' + (it.stockId || it.name), action: 'Checked out',
@@ -292,6 +302,7 @@ var Core = (function () {
     saveJob: function (db, actor, p, now) {
       need(canJob(actor), 'Only a site supervisor or the admin can open or edit jobs.');
       var j = p.job || {}, ex = j.id ? byId(db.jobs, j.id) : null;
+      var isNew = !ex;
       if (!ex) {
         var co = byId(db.companies, j.companyId); need(co, 'Choose the company.');
         var y = new Date(now).getFullYear(), n = 0, pre = 'JOB-' + y + '-';
@@ -301,6 +312,11 @@ var Core = (function () {
       } else if (j.companyId && j.companyId !== ex.companyId) {
         need(!db.checkouts.some(function (c) { return c.jobId === ex.id && c.status !== 'Declined' && c.status !== 'Cancelled'; }), 'This job already has requests, so its company cannot change.');
         need(byId(db.companies, j.companyId), 'Choose the company.'); ex.companyId = j.companyId;
+      }
+      if (j.basis !== undefined || isNew) {
+        need(JOB_BASIS.indexOf(j.basis) >= 0, 'Choose what the job is under: PO, contract, approval, one-day visit or other.');
+        if (j.basis === 'Other') need(String(j.ref || '').trim(), 'Write what the job is under.');
+        ex.basis = j.basis; ex.ref = String(j.ref || '').trim();
       }
       if (j.title !== undefined) ex.title = String(j.title || '').trim();
       if (j.note !== undefined) ex.note = String(j.note || '').trim();
@@ -513,6 +529,7 @@ var Core = (function () {
       if (!ex) { ex = { id: 'S' + now, note: '' }; db.stock.push(ex); }
       ex.name = String(it.name).trim(); ex.group = STOCK_GROUPS.indexOf(it.group) >= 0 ? it.group : 'Tools & Accessories';
       ex.total = it.total === '' || it.total == null ? '' : String(Math.max(0, num(it.total)));
+      if (it.contents !== undefined) ex.contents = String(it.contents || '').trim();
       if (it.active === false) need(outQty(db, ex.id) === 0, 'Some of these are still out. Check them in first.');
       ex.active = it.active !== false;
       touch(db, 'stock');
@@ -528,7 +545,7 @@ var Core = (function () {
         ex = { id: 'D' + now, status: 'In Office', companyId: '', holders: [], since: iso(now), expectedReturn: '', checkoutId: '', note: '', pending: '' };
         db.devices.push(ex);
       }
-      ['category', 'manufacturer', 'description', 'model', 'serial', 'accuracy', 'resolution', 'range', 'calDate', 'calDue', 'certNo', 'certUrl', 'remarks'].forEach(function (k) {
+      ['category', 'manufacturer', 'description', 'model', 'serial', 'accuracy', 'resolution', 'range', 'calDate', 'calDue', 'certNo', 'certUrl', 'remarks', 'calLab', 'parentId'].forEach(function (k) {
         if (d[k] !== undefined) ex[k] = String(d[k] == null ? '' : d[k]).trim();
       });
       ex.certStatus = d.certStatus === 'none' ? 'none' : 'dated';
@@ -580,7 +597,7 @@ var Core = (function () {
   }
 
   return {
-    STATUSES: STATUSES, SERVICE: SERVICE, ROLES: ROLES, apply: apply, snapshot: snapshot, isCoReq: isCoReq, isPortion: isPortion, STOCK_GROUPS: STOCK_GROUPS,
+    STATUSES: STATUSES, SERVICE: SERVICE, ROLES: ROLES, JOB_BASIS: JOB_BASIS, apply: apply, snapshot: snapshot, isCoReq: isCoReq, isPortion: isPortion, STOCK_GROUPS: STOCK_GROUPS,
     pinHash: pinHash, serialTail: serialTail, verify: verify, publicUser: publicUser
   };
 })();
