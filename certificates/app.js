@@ -875,14 +875,14 @@ function certBase(n) { return String(n).replace(/\.(docx?|pdf)$/i, '').replace(/
 function codeHits(p, code) { code = String(code || '').trim(); if (!code) return Promise.resolve([]);
   var key = (p && p.company && p.company.name || '') + '|' + code.toUpperCase(); if (CODE_CACHE[key]) return Promise.resolve(CODE_CACHE[key]);
   var pre = String((p && p.company && p.company.code) || '').replace(/[^A-Za-z0-9]/g, ''), q = '"' + code + '"';
-  var qs = [q, q + ' "Calibration Due Date"'].concat(pre ? [q + ' filename:' + pre + '*'] : []);
+  var qs = [q, q + ' "Calibration Due Date"', q + ' (filename:cert OR filename:cover)'].concat(pre ? [q + ' filename:' + pre + '*', q + ' filename:' + pre + '* (filename:cert OR filename:cover)'] : []);
   var all = {}, add = function (fs) { (fs || []).forEach(function (f) { if (!all[f.id]) all[f.id] = f; }); };
   return Promise.all(qs.map(function (x) { return spSearch(x, 50).then(add).catch(function () {}); })).then(function () {
     var fs = Object.keys(all).map(function (k) { return all[k]; }), cc = norm(code);
     var certs = fs.filter(function (f) { return isCalCert(f.name); }), have = {}; certs.forEach(function (f) { have[certBase(f.name).toLowerCase()] = 1; });
     var covers = fs.filter(function (f) { return isCover(f.name) && !have[certBase(f.name).toLowerCase()]; });
     covers.forEach(function (f) { f.yr = yearOf(f); }); covers.sort(function (a, b) { return b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
-    return Promise.all(covers.slice(0, 6).map(function (cv) { var b = certBase(cv.name);
+    return Promise.all(covers.slice(0, 10).map(function (cv) { var b = certBase(cv.name);
       return spSearch('filename:"' + b + '"', 10).then(function (r) { r.filter(function (f) { return isCalCert(f.name) && certBase(f.name).toLowerCase() === b.toLowerCase(); }).forEach(function (f) { if (!have[b.toLowerCase()]) { have[b.toLowerCase()] = 1; f.viaCover = cv.summary; certs.push(f); } }); }).catch(function () {}); }))
       .then(function () { certs.forEach(function (f) { f.yr = yearOf(f); f.inSnip = norm((f.summary || '') + ' ' + (f.viaCover || '')).indexOf(cc) >= 0 ? 1 : 0; });
         certs.sort(function (a, b) { return b.yr - a.yr || b.inSnip - a.inSnip || String(b.mod).localeCompare(String(a.mod)); });
@@ -1663,9 +1663,11 @@ function lySearch(p, mode) {
   var searchDesc = function () { var L = st.q.split(/[\n;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 3; }); if (!L.length) return; reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet();
     var pre = String(p.company.code || '').replace(/[^A-Za-z0-9]/g, '');
     L.reduce(function (pr, q) { return pr.then(function () { var words = q.toLowerCase().split(/\s+/).filter(Boolean);
-      return spSearch('"' + q + '"' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"'), 50).then(function (fs) { var seen = {}, files = [];
+      var qq = '"' + q + '"' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"') + ' (filename:cert OR filename:cover)', got = [];
+      var page = function (off, k) { return spSearch(qq, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); return r.length >= 50 && k < 5 ? page(off + r.length, k + 1) : got; }); };
+      return page(0, 0).then(function (fs) { var seen = {}, files = [];
         fs.forEach(function (f) { if (!(isCalCert(f.name) || isCover(f.name))) return; var y = yearOf(f); if (!syOk(y) || !monOk(monOf(f.summary))) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) { if (isCover(f.name)) seen[b].f = f; return; } f.base = certBase(f.name); f.yr = y; seen[b] = { f: f }; files.push(seen[b]); });
-        files = files.map(function (x) { return x.f; }).sort(function (a1, b1) { return b1.yr - a1.yr; }).slice(0, st.per === 'all' ? 8 : 12); st.prog.n += files.length; renderSheet(); if (!files.length) st.prog.fail.push(q);
+        var ny0 = new Date().getFullYear(); files = files.map(function (x) { return x.f; }).filter(function (x) { return st.per !== 'all' || x.yr >= ny0 - 2; }).sort(function (a1, b1) { return b1.yr - a1.yr; }).slice(0, 15); st.prog.n += files.length; renderSheet(); if (!files.length) st.prog.fail.push(q);
         return files.reduce(function (pr2, f) { return pr2.then(function () { return batchItems(f).then(function (r) { var hit = r.items.filter(function (x) { var t = (x.description || '').toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); }), mach = words.every(function (w) { return (r.machine || '').toLowerCase().indexOf(w) >= 0; });
             (hit.length ? hit : mach ? r.items : []).forEach(function (x) { var mo3 = monOf('Calibration Date ' + (x.calDate || '')) || monOf(f.summary); if (!monOk(mo3)) return; if (st.rows.some(function (y) { return norm(y.code) === norm(x.code) && y.year === f.yr; })) return; st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? r.machine : '', machineCode: r.machineCode, from: f.base, year: f.yr, mon: mo3 }); }); })
           .catch(function () {}).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()); }).catch(function () { st.prog.fail.push(q); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
