@@ -1361,7 +1361,7 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
   $$('[data-pr]').forEach(function (e) { e.onchange = function () { g.prices[e.dataset.pr] = e.value.trim(); saveProjects(); }; });
   var ad = $('#adr'); if (ad) ad.onclick = function () { ad.disabled = true; ad.innerHTML = '<span class="spin dark"></span>'; findAddress(p, true).then(function () { tGen(p); }); };
   var r = $('#phR'); if (r) r.onclick = function (e) { e.preventDefault(); phSheet(p); };
-  if ($('#gPr')) $('#gPr').onclick = function () { pricesThen(p, function () { if (S.cur === p.id && !sheetFn) tGen(p); }); };
+  if ($('#gPr')) $('#gPr').onclick = function () { pricesThen(p, function () { if (S.cur === p.id && !sheetFn) tGen(p); }, true); };
   $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); pricesThen(p, function () { var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); }); };
   var pv = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } htmlPreview(p.company.name + ' · ' + certList(p).length + ' certificates', html); if (iss.length || ph.length) toast('Draft – something is still missing', true); };
   $('#gPv').onclick = pv; $('#gP').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } pdfPreview(p.company.name + ' ' + monYear(inf.cal) + ' certificates', html); }; $('#gS').onclick = function () { saveWordSP(p); };
@@ -2427,35 +2427,83 @@ function pvFit() { var w = $('#pvw'), f = $('#pvf'); if (!w || !f) return; var W
 /* ---- prices for the receipt letter: contract → this year's letters → last year's letters → ask once per kind ---- */
 function docText(f) { return pdfPages(f.driveId, f.id).then(function (pg) { return (pg || []).map(function (x) { return Array.isArray(x) ? x.join(' | ') : String(x); }).join('\n'); }); }
 var PRICE_RX = /(Lump\s*sum|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{2,6}(?:\.\d+)?)/i;
-function pricesFromLetters(t, items) { t = String(t).replace(/\s*([\-\/])\s*/g, '$1'); var lo = t.toLowerCase(), out = {};
-  items.forEach(function (it) { var c = cleanCode(it.code || ''); if (c.length < 3) return; var k = c.toLowerCase(), i = lo.indexOf(k), last = null;
-    while (i >= 0) { if (/[a-z0-9]/i.test(t.charAt(i + c.length)) || (i && /[a-z0-9]/i.test(t.charAt(i - 1)))) { i = lo.indexOf(k, i + 1); continue; } var row = t.slice(i + c.length).split('\n')[0], cells = row.split('|').map(function (x) { return x.trim(); }).filter(Boolean), lc = cells[cells.length - 1] || '';
-      if (cells.length >= 2 && /^(lump\s*sum|\d{1,3}(,\d{3})+(\.\d+)?|\d{2,6}(\.\d+)?)$/i.test(lc)) { last = lc; i = lo.indexOf(k, i + 1); continue; }
-      var seg = t.slice(i + c.length, i + c.length + 170), m = seg.match(/(?:[A-Z0-9\/]{2,8}-\d{2,5}-20\d\d|protocol)\s*\|?\s*(Lump\s*sum|\d{1,3}(?:,\d{3})+|\d{2,6})(?![\d\-\/])/i); if (m) last = m[1]; i = lo.indexOf(k, i + 1); }
-    if (last) out[it.id] = /lump/i.test(last) ? 'Lump sum' : last.replace(/,/g, ''); }); return out; }
-function pricesFromContract(t, items) { var out = {}, by = {};
-  KINDS.forEach(function (kd) { var rx = new RegExp('(' + kd[1].source + ')[^\\n]{0,70}?(\\d{1,3}(?:,\\d{3})+|\\d{2,6})(?![\\d\\-\\/%])', 'i'), m = String(t).match(rx); if (m) { var v = +m[m.length - 1].replace(/,/g, ''); if (v >= 50) by[kd[0]] = String(v); } });
-  items.forEach(function (it) { var k = itKind(it); if (k && by[k]) out[it.id] = by[k]; }); return out; }
+function flatT(t) { return String(t || '').replace(/\|/g, ' ').replace(/[–—]/g, '-').replace(/\s*([\-\/])\s*/g, '$1').replace(/\s+/g, ' '); }
+var PSYN = [[/\bgauges?\b|manometer|transmitter|vacuum/g, ' pressure '], [/\bclock|stop\s*watch|\btime\b/g, ' timer '], [/\brpm\b|tacho|stirrer|homogenizer|centrifuge/g, ' rotational speed '], [/\bbalance\b/g, ' weight balance '], [/\b(micro)?pipett?e/g, ' micropipette '], [/hygro|\brh\b/g, ' humidity '], [/thermo(meter|couple)?|pt\s*100|rtd|probe|\btemp\b\.?/g, ' temperature '], [/anemometer/g, ' air velocity '], [/\bph\b/g, ' ph '], [/vernier|caliper|micrometer/g, ' lengths '], [/data\s*-?logger/g, ' datalogger ']];
+var PSTOP = /^(calibration|calibrated|of|for|the|and|with|unit|item|items|including|per|test|sensor|sensors|meter|indicator|device|m\/c|machine)$/;
+function pToks(x) { x = ' ' + String(x || '').toLowerCase() + ' '; PSYN.forEach(function (r) { x = x.replace(r[0], r[1]); }); return x.split(/[^a-z0-9]+/).filter(function (w) { return w.length > 1 && !PSTOP.test(w) && !/^\d+$/.test(w); }); }
+/* price list / contract appendix: "1 Calibration of Temperature Sensors 240 2 Calibration of Pressure Sensors 200 …" (ids restart in every Part) */
+function priceListRows(t) { t = ' ' + String(t || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').replace(/Page\s+\d+\s+of\s+\d+/gi, ' ') + ' '; var rows = [], pos = 0, k = 1, sec = 0;
+  var at = function (n, from) { var rx = new RegExp('\\s' + n + '\\s+(?=[A-Za-z(])', 'g'); rx.lastIndex = from; var m = rx.exec(t); return m ? { i: m.index, e: m.index + m[0].length } : null; };
+  var cur = at(1, 0); while (cur) { var nx = at(k + 1, cur.e), rs = at(1, cur.e); if (rs && (!nx || rs.i < nx.i) && k > 1) { nx = null; } var end = nx ? nx.i : (rs ? rs.i : Math.min(t.length, cur.e + 260));
+      var seg = t.slice(cur.e, end).split(/(?:^|\s)(?=Part\s+[IVX]+\b|All\s+prices|Total\b|المركز|التليفون|ملاحظات|مالحظات)/i)[0].replace(/^\s*Part\s+[IVX]+\b.*$/i, ''), pm = seg.match(/(\d{1,3}(?:,\d{3})+|\d{2,6})(?!.*\d{2,})/), txt = seg.replace(/[؀-ۿ].*$/, '').replace(/(\d{1,3}(?:,\d{3})+|\d{2,6})\s*$/, '').trim();
+      if (pm && txt.length > 3) rows.push({ id: k, sec: sec, text: txt.replace(/\s*(Part\s+[IVX]+\.?.*)$/i, ''), price: pm[1].replace(/,/g, '') });
+      if (k === 1 && txt.length <= 3) { cur = at(1, cur.e); continue; }
+      if (nx) { cur = nx; k++; } else if (rs) { cur = rs; k = 1; sec++; } else cur = null; if (rows.length > 300) break; }
+  return rows.filter(function (r) { return +r.price >= 20 && !/^page\b/i.test(r.text); }); }
+function rowFor(it, rows) { var kd = itKind(it), d = (it.description || '') + ' ' + ((it.old && it.old.fields && it.old.fields.description) || ''), ld = d.toLowerCase(), want = pToks(d + ' ' + kd), best = null;
+  var rg = rngNums((it.old && it.old.fields && it.old.fields.range) || it.range || '') || {}, cap = rg.hi == null ? null : +rg.hi, cu = String(rg.u || '').toLowerCase(); if (cap != null) cap = /^kg/.test(cu) ? cap : /^mg/.test(cu) ? cap / 1e6 : /^g/.test(cu) ? cap / 1000 : null;
+  rows.forEach(function (r) { var rt = r.text.toLowerCase(), rk = pToks(r.text), sc = 0, hits = 0, km = kd && kindOf(r.text, '') === kd;
+    want.forEach(function (w) { if (rk.indexOf(w) >= 0) { sc += 2; hits++; } }); var uq = rk.filter(function (w, i) { return rk.indexOf(w) === i; }); if (!km && hits < 2 && !(hits && hits >= uq.length)) return;
+    if (km) sc += 3; if (r.sec === 0) sc += 1;
+    if (/datalogger|data\s*logger/.test(rt) !== /logger/.test(ld)) sc -= 4; if (/humid/.test(rt) && /logger/.test(rt) && !/humid/.test(ld)) sc -= 3;
+    if (/per (point|room|filter)|mapping|particle|recovery|air change|d\.?o\.?p/i.test(rt)) sc -= 3; if (/safety valve/.test(rt) && !/valve/.test(ld)) sc -= 3; if (/differential/.test(rt) !== /differential|\bdp\b/.test(ld)) sc -= 2;
+    if (/weight balance/.test(rt) && cap) { var big = /[˃>]\s*30/.test(rt); if (big !== (cap > 30)) sc -= 2; } else if (/[˃>]\s*30/.test(rt)) sc -= 1;
+    if (!best || sc > best.sc) best = { sc: sc, r: r }; });
+  return best && best.sc >= 3 ? best.r : null; }
+/* receipt letters: rows end with "<cert no.> <price>" */
+function letterRows(t) { t = flatT(t); var rx = /(\d{1,3}\/?[A-Z]{1,5}-\d{2,5}-20\d\d|Protocol)\s+(Lump\s*sum|\d{1,3}(?:,\d{3})+|\d{2,6})(?![\d\/\-])/gi, m, last = 0, out = [];
+  while ((m = rx.exec(t))) { var row = t.slice(last, m.index).replace(/^.*(?:Unit\s*Price|price\s*L\.?E\.?|EGP)\s*/i, ''); out.push({ text: row.slice(-220), price: /lump/i.test(m[2]) ? 'Lump sum' : m[2].replace(/,/g, '') }); last = rx.lastIndex; } return out; }
+function pricesFromLetters(t, items) { var rows = letterRows(t), out = {};
+  items.forEach(function (it) { var c = flatT(cleanCode(it.code || '')).trim(); if (c.length < 2) return; var hit = null;
+    rows.forEach(function (r) { var tk = (' ' + r.text + ' ').split(/[\s,]+/); if (tk.indexOf(c) >= 0) hit = r; }); if (hit) out[it.id] = hit.price; });
+  var code = out; out = {}; var left = items.filter(function (it) { return !code[it.id]; });
+  left.forEach(function (it) { var w = pToks((it.description || '') + ' ' + itKind(it)), tally = {}, top = 0; if (!w.length) return;
+    rows.forEach(function (r) { var rk = pToks(r.text.replace(/\b[A-Z]{3}[-.]\d{2}\b/g, '')), sc = 0; w.forEach(function (x) { if (rk.indexOf(x) >= 0) sc++; }); if (sc >= Math.min(2, w.length) && sc >= top) { if (sc > top) { tally = {}; top = sc; } tally[r.price] = (tally[r.price] || 0) + 1; } });
+    var pr = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; })[0]; if (pr) out[it.id] = pr; });
+  return { code: code, desc: out }; }
+function pricesFromContract(t, items) { var rows = priceListRows(t), out = {};
+  items.forEach(function (it) { var r = rowFor(it, rows); if (r) out[it.id] = r.price; }); return { map: out, rows: rows }; }
 function priceBook(p) { var all = LS.get('priceBook', {}); return all[p.company.id] || { kind: {} }; }
 function priceBookSet(p, kind, v) { var all = LS.get('priceBook', {}), b = all[p.company.id] || { kind: {} }; b.kind[kind] = v; all[p.company.id] = b; LS.set('priceBook', all); }
-function autoPrices(p, done) { var g = genDefaults(p), items = certList(p), need = function () { return items.filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); }, got = { contract: 0, letters: 0, book: 0 };
-  var put = function (m, src) { Object.keys(m).forEach(function (id) { if (!String(g.prices[id] || '').trim() && m[id]) { g.prices[id] = m[id]; got[src]++; } }); };
-  var bk = priceBook(p), bm = {}; items.forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (bk.kind[k]) bm[it.id] = bk.kind[k]; });
+function yearOf(f) { var m = String(pathOf(f) + ' ' + f.name).match(/20\d\d/g); return m ? Math.max.apply(null, m.map(Number)) : 0; }
+function priceListFiles(p) { var yr = (s2d(p.info && p.info.cal) || new Date()).getFullYear(), terms = companyTerms(p.company), cn = terms[0].toLowerCase(), toks = cn.split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
+  return Promise.all(['"Price List" "' + terms[0] + '" ' + yr, '"Unit Price" "Items to be calibrated" "' + terms[0] + '"'].map(function (q) { return withTime(spSearch(q, 25), 20000).catch(function () { return []; }); })).then(function (rs) { var seen = {}, fs = [];
+    rs.forEach(function (l) { l.forEach(function (f) { if (seen[f.id] || !/\.(docx?|pdf)$/i.test(f.name)) return; seen[f.id] = 1; var pa = (pathOf(f) + '/' + f.name).toLowerCase(), sc = 0;
+      if (/price\s*list/.test(pa)) sc += 4; if (/contract/.test(pa)) sc += 2; if (yearOf(f) === yr) sc += 4; else if (yearOf(f) === yr - 1) sc += 1; else sc -= 3; if (/archi?e?ve|\/old\//.test(pa)) sc -= 3; if (/\/reports?\s*20|\/cert\s*20/.test(pa)) sc -= 6;
+      toks.forEach(function (w) { if (pa.indexOf(w) >= 0) sc += 1; }); if (p.order && p.order.webUrl && pathOf({ webUrl: p.order.webUrl }).replace(/[^\/]+$/, '') === pathOf(f).replace(/[^\/]+$/, '')) sc += 5; if (/\.pdf$/i.test(f.name)) sc -= 0.5;
+      if (sc > 2) { f.sc = sc; fs.push(f); } }); }); return fs.sort(function (a, b) { return b.sc - a.sc; }); }); }
+function autoPrices(p, done) { var g = genDefaults(p), items = certList(p), need = function () { return items.filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); }, got = { contract: 0, letters: 0, book: 0, src: [] }, rowsAll = [], listName = '';
+  var miss0 = need(); if (!miss0.length) return done && done(got, [], []);
+  var put = function (m, src, name) { var n = 0; Object.keys(m).forEach(function (id) { if (!String(g.prices[id] || '').trim() && m[id]) { g.prices[id] = m[id]; got[src]++; n++; } }); if (n && name) got.src.push(name + ' (' + n + ')'); };
+  var readF = function (f, ms) { return withTime(docText(f), ms || 40000).catch(function () { return ''; }); };
+  var tryList = function (f) { return readF(f).then(function (t) { var r = priceListRows(t); if (r.length >= 3 && !rowsAll.length) { rowsAll = r; listName = f.name; } }); };
+  var letCode = {}, letDesc = {}, letName = '';
   var chain = Promise.resolve();
-  if (p.order && p.order.fileId && p.orderType !== 'po') chain = chain.then(function () { return withTime(docText({ id: p.order.fileId, driveId: p.order.driveId, name: p.order.fileName || '' }), 40000).then(function (t) { put(pricesFromContract(t, need()), 'contract'); }).catch(function () {}); });
-  chain = chain.then(function () { if (!need().length || !spOn()) return; var ny = new Date().getFullYear(), terms = companyTerms(p.company);
-    return withTime(spSearch('"Unit Price" "' + terms[0] + '"', 25), 20000).then(function (fs) { fs = fs.filter(function (f) { return /\/Reports\s*20\d\d\//i.test(pathOf(f)) && /\.(docx?|pdf)$/i.test(f.name); }).sort(function (a, b) { return (String(pathOf(b)).match(/Reports\s*(20\d\d)/i) || [0, 0])[1] - (String(pathOf(a)).match(/Reports\s*(20\d\d)/i) || [0, 0])[1]; });
-      return fs.slice(0, 2).reduce(function (pr, f) { return pr.then(function () { if (!need().length) return; return withTime(docText(f), 60000).then(function (t) { put(pricesFromLetters(t, need()), 'letters'); }).catch(function () {}); }); }, Promise.resolve()); }).catch(function () {}); });
-  chain.then(function () { put(bm, 'book'); saveProjects(); var left = need(); done && done(got, left); }); }
-function askPrices(p, left, done) { var g = genDefaults(p), groups = {}, order = []; left.forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(it); });
-  openSheet(function () { return { title: 'Prices missing', body: '<div class="note">' + left.length + (left.length === 1 ? ' item has' : ' items have') + ' no price in the contract or in this year\'s letters. Write one price for each kind – it is kept for this company. Empty = Lump sum.</div>' +
-      order.map(function (k, i) { return '<label class="f"><span>' + esc(k) + ' <i class="small">(' + groups[k].length + ': ' + esc(groups[k].slice(0, 3).map(function (x) { return x.code || x.description; }).join(', ')) + (groups[k].length > 3 ? '…' : '') + ')</i></span><input class="inp" inputmode="decimal" data-pk="' + i + '" placeholder="e.g. 450"></label>'; }).join(''),
+  if (p.order && p.order.fileId && p.orderType !== 'po') chain = chain.then(function () { return tryList({ id: p.order.fileId, driveId: p.order.driveId, name: p.order.fileName || 'the contract' }); });
+  chain = chain.then(function () { if (!spOn() || rowsAll.length) return; return priceListFiles(p).then(function (fs) {
+      return fs.slice(0, 3).reduce(function (pr, f) { return pr.then(function () { if (!rowsAll.length) return tryList(f); }); }, Promise.resolve()); }).catch(function () {}); });
+  chain = chain.then(function () { if (!spOn()) return; var terms = companyTerms(p.company);
+    return withTime(spSearch('"Unit Price" "' + terms[0] + '"', 30), 20000).then(function (fs) { fs = fs.filter(function (f) { return /\/R\W?eports?\s*20\d\d\//i.test(pathOf(f)) && /\.(docx?|pdf)$/i.test(f.name); }).sort(function (a, b) { return yearOf(b) - yearOf(a) || String(b.mod || '').localeCompare(String(a.mod || '')); });
+      return fs.slice(0, 3).reduce(function (pr, f) { return pr.then(function () { var left = miss0.filter(function (it) { return !letCode[it.id]; }); if (!left.length) return; return readF(f, 60000).then(function (t) { var r = pricesFromLetters(t, left), n = Object.keys(r.code).length; Object.keys(r.code).forEach(function (k) { letCode[k] = r.code[k]; }); Object.keys(r.desc).forEach(function (k) { if (!letDesc[k]) letDesc[k] = r.desc[k]; }); if (n && !letName) letName = f.name; }); }); }, Promise.resolve()); }).catch(function () {}); });
+  chain.then(function () { put(letCode, 'letters', letName || 'last letters');
+    var lm = {}; need().forEach(function (it) { var r = rowFor(it, rowsAll); if (r) lm[it.id] = r.price; }); put(lm, 'contract', listName);
+    put(letDesc, 'letters', 'similar items in ' + (letName || 'the letters'));
+    var bk = priceBook(p), bm = {}; need().forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (bk.kind[k]) bm[it.id] = bk.kind[k]; }); put(bm, 'book', 'prices you wrote before');
+    saveProjects(); done && done(got, need(), rowsAll); }); }
+function askPrices(p, left, done, rows) { var g = genDefaults(p), groups = {}, order = []; rows = rows || [];
+  left.forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(it); });
+  var opts = rows.length ? '<option value="">– choose from the price list –</option>' + rows.map(function (r) { return '<option value="' + esc(r.price) + '">' + esc(r.text.slice(0, 70)) + ' · ' + esc(r.price) + '</option>'; }).join('') : '';
+  openSheet(function () { return { title: 'Prices missing', body: '<div class="note">' + left.length + (left.length === 1 ? ' item has' : ' items have') + ' no price yet. ' + (rows.length ? 'Choose the line from the price list, or write the price.' : 'No price list was found for this company – write one price for each kind.') + ' It is kept for this company. Empty = Lump sum.</div>' +
+      order.map(function (k, i) { return '<label class="f"><span>' + esc(k) + ' <i class="small">(' + groups[k].length + ': ' + esc(groups[k].slice(0, 3).map(function (x) { return x.code || x.description; }).join(', ')) + (groups[k].length > 3 ? '…' : '') + ')</i></span>' + (opts ? '<select class="inp" data-pl="' + i + '">' + opts + '</select>' : '') + '<input class="inp" inputmode="decimal" data-pk="' + i + '" placeholder="e.g. 450"' + (opts ? ' style="margin-top:6px"' : '') + '></label>'; }).join(''),
     foot: '<button class="btn ghost" id="pkX">Leave Lump sum</button><button class="btn" id="pkOk">Save prices</button>',
-    mount: function () { $('#pkX').onclick = function () { closeSheet(); done && done(); };
+    mount: function () { $$('[data-pl]').forEach(function (e) { e.onchange = function () { var q = $('[data-pk="' + e.dataset.pl + '"]'); if (q && e.value) q.value = e.value; }; });
+      $('#pkX').onclick = function () { closeSheet(); done && done(); };
       $('#pkOk').onclick = function () { $$('[data-pk]').forEach(function (e) { var v = e.value.trim().replace(/,/g, ''); if (!v) return; var k = order[+e.dataset.pk]; priceBookSet(p, k, v); groups[k].forEach(function (it) { g.prices[it.id] = v; }); }); saveProjects(); toast('Prices saved'); closeSheet(); done && done(); }; } }; }); }
-function pricesThen(p, go) { var g = genDefaults(p), miss = certList(p).filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); if (!miss.length) return go();
-  toast('Filling the prices from the contract and this year\'s letters…'); autoPrices(p, function (got, left) { var n = got.contract + got.letters + got.book; if (n) toast(n + ' prices filled' + (got.contract ? ' · ' + got.contract + ' from the contract' : '') + (got.letters ? ' · ' + got.letters + ' from this year\'s letters' : ''));
-    if (left.length) askPrices(p, left, go); else go(); }); }
+function pricesThen(p, go, force) { var g = genDefaults(p), miss = certList(p).filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); if (!miss.length && !force) return go();
+  if (force) certList(p).forEach(function (it) { if (/lump/i.test(g.prices[it.id] || '')) g.prices[it.id] = ''; });
+  toast('Looking for the prices – price list, contract and this year\'s letters…'); autoPrices(p, function (got, left, rows) { var n = got.contract + got.letters + got.book;
+    toast(n ? n + ' prices filled from ' + got.src.join(', ') : 'No prices found on SharePoint', !n);
+    if (left.length) askPrices(p, left, go, rows); else go(); }); }
 function htmlPreview(title, html, word) { var paper = '<style>@media screen{html{background:#DFE4EA}body{width:794px;min-height:1123px;margin:12px auto!important;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);box-sizing:border-box;padding:42px 46px!important}}</style>';
   if (!/class="pg"/.test(html)) html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, paper + '</head>') : paper + html;
   openSheet(function () { return { title: title, body: '<div class="pvhint">Whole page shown – pinch to zoom in <b id="pvz"></b></div><div class="pvwrap" id="pvw"><iframe class="pv" id="pvf"></iframe></div>',
