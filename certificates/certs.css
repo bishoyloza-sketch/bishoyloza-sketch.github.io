@@ -322,3 +322,5 @@ body{overflow-wrap:break-word;word-break:normal;hyphens:none;-webkit-hyphens:non
 .tmpl{display:flex;align-items:center;gap:10px;background:#EEF6FF;border:1px solid #C9DDF3;border-radius:12px;padding:10px 12px;margin:12px 0 4px}
 .tmpl .t{flex:1;min-width:0}.tmpl b{display:block;color:var(--navy);font-size:14px}.tmpl small{display:block;color:var(--muted);font-size:12.5px;line-height:1.35}
 .tmpl small a{color:var(--blue,#0B74C8)}
+.kvt.kv2 th{width:37%;word-break:normal;overflow-wrap:normal;hyphens:none;font-size:12.5px;padding-left:9px;padding-right:6px}
+.kvt.kv2 td{width:63%}
