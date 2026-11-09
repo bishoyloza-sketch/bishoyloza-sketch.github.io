@@ -536,8 +536,10 @@ function fillEmpty(it) { var f = (it.old || {}).fields || {}; if (!f) return;
   var rs = tidy(f.resolution || '').match(/(\d*\.?\d+)\s*(\S+)?/); if (rs && !isNum(it.res)) { it.res = rs[1]; it.resUnit = unitKey(rs[2] || it.unit || ''); }
   if (it.unit) it.unit = unitKey(it.unit); }
 function queueOld(p) { if (!spOn()) return; p.items.forEach(function (it) { if ((!it.old || it.old.status === 'searching') && (it.code || it.prevCert) && AQ.q.indexOf(it) < 0) AQ.q.push(it); }); runQ(p); }
-function runQ(p) { if (AQ.busy) return; var it = AQ.q.shift(); if (!it) return; AQ.busy = true; it.old = { status: 'searching' }; if (!sheetFn) render();
-  findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; if (r.status === 'found') fillEmpty(it); saveProjects(); AQ.busy = false; if (!sheetFn) render(); runQ(p); }); }
+function runQ(p) { /* two at a time; one slow certificate never blocks the others */
+  AQ.n = AQ.n || 0; while (AQ.n < 2 && AQ.q.length) (function (it) { AQ.n++; it.old = { status: 'searching', at: Date.now() }; if (!sheetFn) render();
+    withTime(findOldCert(p, it), 90000).catch(function (e) { return { status: 'error', note: e && e.message === 'slow' ? 'SharePoint took too long – tap “Search again”' : (e && e.message) || 'error' }; })
+      .then(function (r) { it.old = r; if (r.status === 'found') fillEmpty(it); saveProjects(); AQ.n--; if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
 
 /* ---- 5. items: photo / Excel / unit or machine ---- */
 var UNITS = ['°C', '°F', '%RH', 'bar', 'mbar', 'psi', 'kPa', 'MPa', 'Pa', 'inH2O', 'mmH2O', 'mmHg', 'g', 'mg', 'kg', 'rpm', 's', 'min', 'h', 'lux', 'm/s', 'm³/h', 'CFM', 'V', 'mV', 'A', 'mA', 'Ω', 'mm', 'µm', 'L', 'mL', 'µL', 'pH', 'µS/cm', '%'];
