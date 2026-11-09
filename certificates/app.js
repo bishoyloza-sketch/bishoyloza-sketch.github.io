@@ -1461,7 +1461,11 @@ function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer
 function itemSpan(it) { var f = (it.old && it.old.fields) || {}, n = oldNums(f);
   var u = unitKey(it.unit || n.unit), lo = isNum(it.cMin) ? numv(it.cMin) : isNum(it.rMin) ? numv(it.rMin) : isNum(n.rMin) ? numv(n.rMin) : null, hi = isNum(it.cMax) ? numv(it.cMax) : isNum(it.rMax) ? numv(it.rMax) : isNum(n.rMax) ? numv(n.rMax) : null;
   return { u: u, lo: lo, hi: hi }; }
-function refOptions(p, it) { var s = itemSpan(it), inf = p.info || {}; if (!UCAT[s.u] || s.lo == null || s.hi == null) return [];
+function refOptions(p, it) { var r0 = refOptions0(p, it); if (r0.length) return r0; var s = itemSpan(it), u = UCAT[s.u] || UCAT[unitKey(it.unit || '')]; if (!u) return []; var inf = p.info || {}, cat = u[0].toLowerCase(), syn = { weight: ['weight', 'mass', 'balance'], temperature: ['temperature', 'thermo'], pressure: ['pressure', 'manometer', 'gauge'], timer: ['timer', 'time', 'stopwatch'], 'air velocity': ['velocity', 'anemometer', 'air'], light: ['light', 'lux'], rpm: ['rpm', 'tachometer', 'speed'] }[cat] || [cat];
+  /* no reference has a range on record for this kind → suggest by kind only */
+  return labDevices().filter(function (d) { var t = ((d.category || '') + ' ' + (d.description || '')).toLowerCase(); return !devRange(d) && syn.some(function (w) { return t.indexOf(w) >= 0; }); })
+    .map(function (d) { return { d: d, ex: refExpired(d, inf) ? 1 : 0, span: 0, fine: 0, kindOnly: true }; }).sort(function (a, b) { return a.ex - b.ex; }); }
+function refOptions0(p, it) { var s = itemSpan(it), inf = p.info || {}; if (!UCAT[s.u] || s.lo == null || s.hi == null) return [];
   return labDevices().map(function (d) { var r = devRange(d); if (!r || !UCAT[r.unit] || UCAT[r.unit][1] !== UCAT[s.u][1]) return null;
     var dl = toBase(r.lo, r.unit), dh = toBase(r.hi, r.unit), il = toBase(s.lo, s.u), ih = toBase(s.hi, s.u); if (dl > il + 1e-9 || dh < ih - 1e-9) return null;
     var rr = (inf.refRes || {})[d.id] || LS.get('refRes', {})[d.id], ir = isNum(it.res) ? Math.abs(toBase(numv(it.res), it.resUnit || s.u) - toBase(0, it.resUnit || s.u)) : null, dr = isNum(rr) ? Math.abs(toBase(numv(rr), r.unit) - toBase(0, r.unit)) : null;
@@ -1698,7 +1702,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
     var cr = rngNums(f.calRange || ''); if (!isNum(it.cMin) && cr && isNum(cr.lo) && isNum(cr.hi) && !(rg && cr.lo === rg.lo && cr.hi === rg.hi)) { it.cMin = cr.lo; it.cMax = cr.hi; }
     var rm = String(f.resolution || '').match(/(\d*\.?\d+)\s*([^\d\s].*)?$/); if (!isNum(it.res) && rm) { it.res = rm[1]; it.resUnit = unitKey((rm[2] || '').trim()) || it.unit || ''; }
     if (!it.unit && it.resUnit) it.unit = it.resUnit; o.split = 1; saveProjects(); }
-  if ([deriveRes(it), deriveCal(it)].some(Boolean)) saveProjects(); d = resDec(it);
+  if ([deriveRes(it), deriveCal(it), autoRef(p, it)].some(Boolean)) { syncRefs(p); saveProjects(); } d = resDec(it);
   var dirs = o.dirs === 2 ? [1, 2] : [1];
   var rows = o.points.map(function (q, i) { return dirs.map(function (dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] || {}, oR = dr === 2 ? q.reading2 : q.reading;
       return '<tr data-pt="' + i + '|' + dr + '"><td class="pt">' + esc(q.point) + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : '') + '<small>' + esc(ptLimit(it, q) || '') + '</small></td><td><input data-k="ref" inputmode="decimal" enterkeyhint="next"' + (d == null ? ' disabled' : '') + ' value="' + esc(v.ref || '') + '" placeholder="' + esc(q.ref || '') + '"></td><td><input data-k="reading" inputmode="decimal" enterkeyhint="next"' + (d == null ? ' disabled' : '') + ((it.rounded || {})[k] != null ? ' class="rnd" title="Was ' + esc(it.rounded[k]) + '"' : '') + ' value="' + esc(v.reading || '') + '" placeholder="' + esc(fmtRes(oR, d)) + '"></td><td data-dv class="dv"></td><td data-rs class="rs"></td></tr><tr class="wn"><td colspan="5" data-wn></td></tr>'; }).join(''); }).join('');
@@ -1724,7 +1728,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   $('#cnx').onclick = function () { if (!certDone(it) && !confirm0) { confirm0 = 1; return dialog('Some readings are empty', 'Go on anyway? You can come back to this certificate.', 'Go on').then(function (y) { confirm0 = 0; if (y) nx(); }); } nx(); };
   var confirm0 = 0, nx = function () { certPreview(p, it, function () { var k = -1; for (var i = 0; i < L.length; i++) { var j = (p.ci + 1 + i) % L.length; if (!L[j].saved) { k = j; break; } }
       toast('Saved – ' + savedN(p) + ' of ' + L.length + ' done'); if (k < 0) toHub(p); else to(k); }); };
-  $$('[data-rf]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rf, k = it.refs.indexOf(id); if (k >= 0) it.refs.splice(k, 1); else { it.refs.push(id); var x = byId[id]; if (x && refExpired(x, inf)) toast('This reference\'s certificate is expired!', true); } it.refAuto = false; syncRefs(p); tCertEd(p); }; });
+  $$('[data-rf]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rf, k = it.refs.indexOf(id); it.refUser = true; if (k >= 0) it.refs.splice(k, 1); else { it.refs.push(id); var x = byId[id]; if (x && refExpired(x, inf)) toast('This reference\'s certificate is expired!', true); } it.refAuto = false; syncRefs(p); tCertEd(p); }; });
   $('#rOther').onclick = function () { pickRef(p, it, function () { syncRefs(p); tCertEd(p); }); };
   $('#eItem').onclick = function () { itemSheet(p, it.id); };
   $$('[data-ef]').forEach(function (inp) { inp.onchange = function () { setField(p, it, inp.dataset.ef, inp.value.trim(), function () { tCertEd(p); }); }; inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }; });
@@ -1795,7 +1799,7 @@ function renderOverview(p) {
   ({ certs: tCerts, refs: tRefs, det: tDet, cert: tCertEd, gen: tGen })[p.tab](p);
 }
 function openProjectPage(p) { if (!p.company) return; if (p.stage !== 'done') p.wizStage = p.stage; p.stage = 'done'; p.tab = 'cert'; p.ci = null; p.reached = Math.max(p.reached || 0, FIDX.cert); saveProjects(); }
-function tHub(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p), n = savedN(p), left = L.length - n; queueOld(p); if (L.map(function (x) { return [deriveRes(x), deriveCal(x)].some(Boolean); }).some(Boolean)) saveProjects(); genGroups(p);
+function tHub(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p), n = savedN(p), left = L.length - n; queueOld(p); if (L.map(function (x) { return [deriveRes(x), deriveCal(x), autoRef(p, x)].some(Boolean); }).some(Boolean)) { syncRefs(p); saveProjects(); } genGroups(p);
   if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && p.ci == null && !sheetFn) tHub(p); });
   var nxt = -1; for (var i = 0; i < L.length; i++) if (!L[i].saved) { nxt = i; break; }
   var pct = L.length ? Math.round(n / L.length * 100) : 0, setupOk = !!(p.company && inf.cal), codesOk = L.length > 0, certsOk = L.length > 0 && !left, filesOk = !!p.filesAt;
@@ -1835,6 +1839,10 @@ function useSimilar(p, it, s) { return pdfPages(s.driveId, s.id).then(function (
 
 
 /* ---------- editable certificate fields ---------- */
+function autoRef(p, it) { if ((it.refs || []).length || it.refUser || !(it.old && (it.old.points || []).length)) return false;
+  if (!it.unit) { var rg = rngNums(((it.old.fields || {}).range) || ''); if (rg && rg.u) it.unit = unitKey(rg.u) || rg.u; }
+  var best = refOptions(p, it)[0]; if (!best) return false; it.refs = [best.d.id]; it.refAuto = true; return true; }
+
 function deriveRes(it) { var o = it.old; if (!o || !(o.points || []).length || isNum(it.res) || o.resDone) return false; o.resDone = 1; var f = o.fields || {};
   var rm = String(f.resolution || '').match(/(\d*\.?\d+)\s*([^\d\s].*)?$/);
   if (rm && numv(rm[1]) > 0) { it.res = rm[1]; it.resUnit = unitKey((rm[2] || '').trim()) || it.unit || ''; it.resFrom = 'cert'; }
