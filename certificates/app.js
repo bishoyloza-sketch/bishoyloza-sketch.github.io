@@ -1258,7 +1258,7 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
     '<div class="sec"><h2>Receipt letter</h2></div><div class="dgrid">' + signerFields(g) + '</div>' +
     '<div class="sec"><h2>Finish</h2></div><div class="cats one">' +
       '<button id="gPv">' + I.doc + '<b>1 · Preview the certificates</b><small>All covers and certificates one after the other</small></button>' +
-      '<button id="gP">' + I.doc + '<b>2 · Save as PDF</b><small>All in one PDF, in order (opens the print window – choose “Save as PDF”)</small></button>' +
+      '<button id="gP">' + I.doc + '<b>2 · Save as PDF</b><small>One PDF with all the certificates in order – you see it first, then save</small></button>' +
       '<button id="gS">' + I.ok + '<b>2 · Save the Word files on SharePoint</b><small>Certificates › Cert ' + ((s2d(inf.cal) || new Date()).getFullYear()) + ' › ' + esc(certFolderName(p)) + (p.savedSP ? ' · saved ' + esc(fmtDate(p.savedSP.at)) : '') + '</small></button></div>' +
       '<div class="cf"><button class="btn ghost sm" id="gW">Download Word (.zip)</button></div>' +
     '<div class="small" style="margin-top:8px">Word: for every cover a “… cover page.docx” and a “… cal. cert.docx”, plus the receipt letter. One font (Arial), all borders, page X of N. ' + (iss.length || ph.length ? 'The final PDF waits until nothing is missing.' : '') + '</div>';
@@ -1272,7 +1272,7 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !genDefaults(p).a
   var r = $('#phR'); if (r) r.onclick = function (e) { e.preventDefault(); phSheet(p); };
   $('#gW').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var b = buildAll(p); dlZip(b.files, (p.company.name + ' ' + monYear(inf.cal) + ' certificates').trim() + '.zip'); };
   var pv = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } htmlPreview(p.company.name + ' · ' + certList(p).length + ' certificates', html); if (iss.length || ph.length) toast('Draft – something is still missing', true); };
-  $('#gPv').onclick = pv; $('#gP').onclick = pv; $('#gS').onclick = function () { saveWordSP(p); };
+  $('#gPv').onclick = pv; $('#gP').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); var html; try { html = printView(p); } catch (e) { return toast(e.message, true); } pdfPreview(p.company.name + ' ' + monYear(inf.cal) + ' certificates', html); }; $('#gS').onclick = function () { saveWordSP(p); };
 }
 function dlZip(files, name) { var cp = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (cp) { cp.filesAt = new Date().toISOString(); saveProjects(); } var z = zipFiles(files.map(function (f) { return { name: f.name, data: f.data }; }));
   if (CL.on) return clSave(new Blob([z], { type: 'application/zip' }), name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); });
@@ -2054,10 +2054,10 @@ function letterHtml(p, lid) { var all = buildAll(p), inf = p.info, g = genDefaul
     '<table><tr><th>No.</th><th>Item To be Calibrated</th><th>Code or Serial</th><th>Cal. Date</th><th>Due Date</th><th>Cert. No.</th><th>Unit Price</th></tr>' + rows.join('') + '</table>' +
     (tot ? '<p class="tot">Price without VAT: ' + tot.toLocaleString('en') + ' EGP</p>' : '') + '<p class="ar" style="margin-top:18px">مع جزيل الشكر وتفضلوا بقبول فائق الاحترام،</p><p class="ar"><b>' + esc(g.signerPos) + '</b></p><p class="ar"><b>' + esc(g.signer) + '</b></p></body></html>'; }
 function htmlPreview(title, html, word) { openSheet(function () { return { title: title, body: '<iframe class="pv" id="pvf"></iframe>',
-  foot: '<button class="btn ghost" id="pvC">Close</button>' + (word ? '<button class="btn ghost" id="pvW">Word</button>' : '') + '<button class="btn" id="pvP">Print / PDF</button>',
+  foot: '<button class="btn ghost" id="pvC">Close</button>' + (word ? '<button class="btn ghost" id="pvW">Word</button>' : '') + '<button class="btn ghost" id="pvPr">Print</button><button class="btn" id="pvPdf">PDF</button>',
   mount: function () { var f = $('#pvf'); f.srcdoc = html; f.onload = function () { try { f.style.height = Math.max(600, f.contentDocument.documentElement.scrollHeight + 20) + 'px'; } catch (e) {} };
-    $('#pvC').onclick = closeSheet; if (word) $('#pvW').onclick = word;
-    $('#pvP').onclick = function () { if (CL.on) return clSave(new Blob([html], { type: 'text/html' }), title.replace(/[^\w\- ]+/g, '') + '.html').then(function () { toast('Open the file in Chrome and print it or save it as PDF'); }).catch(function () {});
+    $('#pvC').onclick = closeSheet; if (word) $('#pvW').onclick = word; $('#pvPdf').onclick = function () { closeSheet(); pdfPreview(title, html); };
+    $('#pvPr').onclick = function () { if (CL.on) return clSave(new Blob([html], { type: 'text/html' }), title.replace(/[^\w\- ]+/g, '') + '.html').then(function () { toast('Open the file in Chrome and print it or save it as PDF'); }).catch(function () {});
       try { f.contentWindow.focus(); f.contentWindow.print(); toast('To get a PDF choose “Save as PDF” as the printer'); } catch (e) { toast('Printing is not allowed here', true); } }; } }; }); }
 function exportSheet(p) { genGroups(p); var L = certList(p).filter(function (it) { return it.old && (it.old.points || []).length; });
   if (!L.length) return toast('No certificates with readings yet', true);
@@ -2156,6 +2156,32 @@ function saveWordSP(p) { var g = genDefaults(p); if (!String(g.start).trim()) re
       return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: fid, filename: f.name, contentBase64: b64(data), conflictBehavior: 'rename' }).then(function (r) { var o = clObjs(r)[0] || {}; st.done[i] = { webUrl: o.webUrl }; st.d = i + 1; if (sheetFn) renderSheet(); }); }); }, Promise.resolve()); })
     .then(function () { p.filesAt = new Date().toISOString(); p.savedSP = { folder: 'Cert ' + yr + '/' + folder, at: p.filesAt }; saveProjects(); toast('All files saved on SharePoint'); if (sheetFn) renderSheet(); })
     .catch(function (e) { st.err = (e && e.message) || 'Could not save'; if (sheetFn) renderSheet(); }); }
+
+
+/* ---------- a real PDF made in the app (pages drawn as images) – previewed before saving ---------- */
+function needPdf() { return window.jspdf ? Promise.resolve() : loadScript('jspdf.umd.min.js').catch(function () { return loadScript('../jspdf.umd.min.js'); }); }
+function htmlToPdf(html, prog) { return needPdf().then(function () { return new Promise(function (res, rej) {
+  var fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;visibility:hidden'; document.body.appendChild(fr);
+  fr.onload = function () { try { var doc = fr.contentDocument, css = Array.prototype.map.call(doc.querySelectorAll('style'), function (x) { return x.textContent; }).join('\n').replace(/@page\s*\{[^}]*\}/g, '');
+      var pgs = Array.prototype.slice.call(doc.querySelectorAll('.pg')); if (!pgs.length) pgs = [doc.body]; var xs = new XMLSerializer(), imgs = [];
+      var one = function (i) { if (i >= pgs.length) return Promise.resolve(); var el = pgs[i], w = 794, h = Math.max(1050, Math.ceil(el.scrollHeight) + 10);
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:' + w + 'px;background:#fff;padding:0 18px;box-sizing:border-box"><style>' + css.replace(/</g, '&lt;') + ' .pg{min-height:0 !important;padding-bottom:4mm !important}</style>' + xs.serializeToString(el) + '</div></foreignObject></svg>';
+        return new Promise(function (ok, no) { var im = new Image(); im.onload = function () { try { var c = document.createElement('canvas'), k = 2; c.width = w * k; c.height = h * k; var g2 = c.getContext('2d'); g2.fillStyle = '#fff'; g2.fillRect(0, 0, c.width, c.height); g2.scale(k, k); g2.drawImage(im, 0, 0);
+            imgs.push({ src: c.toDataURL('image/jpeg', 0.9), w: w, h: h }); prog && prog(i + 1, pgs.length); ok(); } catch (e) { no(e); } }; im.onerror = function () { no(new Error('Could not draw page ' + (i + 1))); };
+          im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); }).then(function () { return one(i + 1); }); };
+      one(0).then(function () { var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true }), M = 8, W0 = 210 - 2 * M, H0 = 297 - 2 * M;
+        imgs.forEach(function (im, i) { if (i) pdf.addPage(); var wmm = W0, hmm = W0 * im.h / im.w; if (hmm > H0) { wmm = wmm * H0 / hmm; hmm = H0; } pdf.addImage(im.src, 'JPEG', M + (W0 - wmm) / 2, M, wmm, hmm); });
+        fr.remove(); res({ blob: pdf.output('blob'), pages: imgs }); }).catch(function (e) { fr.remove(); rej(e); });
+    } catch (e) { fr.remove(); rej(e); } };
+  fr.srcdoc = html; }); }); }
+function pdfPreview(title, html, fname) { var st = { busy: true, d: 0, n: 0, pages: null, blob: null, err: '' };
+  openSheet(function () { return { title: 'PDF · ' + title,
+    body: st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Making the PDF… ' + (st.n ? st.d + ' / ' + st.n + ' pages' : '') + '</b></div>'
+      : '<div class="note">' + st.pages.length + (st.pages.length === 1 ? ' page' : ' pages') + ' – this is the PDF. Check it, then <b>Save PDF</b>.</div>' + st.pages.map(function (pg, i) { return '<div class="pdfpg"><img src="' + pg.src + '" alt="page ' + (i + 1) + '"><span>' + (i + 1) + ' / ' + st.pages.length + '</span></div>'; }).join(''),
+    foot: '<button class="btn ghost" id="pdC">Close</button>' + (st.blob ? '<button class="btn" id="pdS">Save PDF</button>' : ''),
+    mount: function () { $('#pdC').onclick = closeSheet; var sv = $('#pdS'); if (sv) sv.onclick = function () { saveBlob(st.blob, (fname || title).replace(/[\\\/:*?"<>|]+/g, ' ').trim() + '.pdf'); }; } }; });
+  htmlToPdf(html, function (d, n) { st.d = d; st.n = n; if (sheetFn) renderSheet(); }).then(function (r) { st.busy = false; st.pages = r.pages; st.blob = r.blob; if (sheetFn) renderSheet(); })
+    .catch(function (e) { st.busy = false; st.err = 'Could not make the PDF here (' + ((e && e.message) || 'error') + '). Use Print and choose “Save as PDF”.'; if (sheetFn) renderSheet(); }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
