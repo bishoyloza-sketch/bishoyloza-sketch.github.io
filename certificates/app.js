@@ -1920,8 +1920,14 @@ function ordState(p) { var t = p.orderType ? TYPES[p.orderType][0] : 'Order';
   if (p.orderType) return ['no', t + ' not found']; return ['', '']; }
 function subProject(p, its) { var first = its[0], n = parseInt((String(first.certNo || '').replace(/-\d{4}$/, '').match(/(\d+)$/) || [])[1], 10);
   return Object.assign({}, p, { items: its, machines: (p.machines || []).filter(function (m) { return its.some(function (it) { return it.machineId === m.id; }); }), gen: Object.assign({}, p.gen, { start: isNaN(n) ? (p.gen || {}).start : String(n) }) }); }
-function outPrint(p, its, pdf) { genGroups(p); var p2 = its.length === 1 ? subProject(p, its) : Object.assign({}, p, { items: its });
-  try { openPrint(p2); } catch (e) { return toast('Could not prepare it: ' + e.message, true); } genGroups(p); if (pdf && !CL.on) toast('In the print window choose “Save as PDF”'); }
+function outPrint(p, its, pdf) { genGroups(p); var p2 = its.length === 1 ? subProject(p, its) : Object.assign({}, p, { items: its }), html;
+  try { html = printView(p2); } catch (e) { return toast('Could not prepare it: ' + e.message, true); } genGroups(p);
+  openSheet(function () { return { title: (pdf ? 'PDF preview · ' : 'Print preview · ') + (its.length === 1 ? esc(its[0].code || its[0].certNo || '') : its.length + ' certificates'),
+    body: '<div class="note">Check the pages, then ' + (pdf ? '“Save as PDF”' : '“Print”') + '.</div><iframe class="pv" id="pvf"></iframe>',
+    foot: '<button class="btn ghost" id="pvC">Close</button><button class="btn" id="pvP">' + (pdf ? 'Save as PDF' : 'Print') + '</button>',
+    mount: function () { var f = $('#pvf'); f.srcdoc = html; f.onload = function () { try { f.style.height = Math.max(600, f.contentDocument.documentElement.scrollHeight + 20) + 'px'; } catch (e) {} };
+      $('#pvC').onclick = closeSheet;
+      $('#pvP').onclick = function () { if (CL.on) return openPrint(p2); try { f.contentWindow.focus(); f.contentWindow.print(); if (pdf) toast('Choose “Save as PDF” as the printer'); } catch (e) { openPrint(p2); } }; } }; }); }
 function saveBlob(blob, name) { if (CL.on) return clSave(blob, name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); });
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 function xlsxFile(sheets) { /* sheets: [{name, rows: [[v]], bold: [rowIndex]}] – a small real .xlsx, no library */
@@ -1937,7 +1943,7 @@ function xlsxFile(sheets) { /* sheets: [{name, rows: [[v]], bold: [rowIndex]}] �
       sh.rows.map(function (r, ri) { var st = (sh.bold || []).indexOf(ri) >= 0 ? 2 : r.length ? 1 : 0; return '<row r="' + (ri + 1) + '">' + r.map(function (v, ci) { var ref = col(ci) + (ri + 1), sty = (sh.boldCol0 && ci === 0 && st === 1) ? 2 : st;
         return typeof v === 'number' && isFinite(v) ? '<c r="' + ref + '" s="' + sty + '"><v>' + String(v).replace(',', '.') + '</v></c>' : '<c r="' + ref + '" s="' + sty + '" t="inlineStr"><is><t xml:space="preserve">' + X2(v) + '</t></is></c>'; }).join('') + '</row>'; }).join('') + '</sheetData></worksheet>' }); });
   return new Blob([zipFiles(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); }
-function certXlsx(p, its) { genGroups(p); var inf = ensureInfo(p), g = genDefaults(p), byId = {}; labDevices().forEach(function (d) { byId[d.id] = d; });
+function certSheets(p, its) { genGroups(p); var inf = ensureInfo(p), g = genDefaults(p), byId = {}; labDevices().forEach(function (d) { byId[d.id] = d; });
   var sheets = its.map(function (it) { var f = (it.old || {}).fields || {}, dirs = it.old.dirs === 2, cal = it.calDate || inf.cal;
     var info = [['Certificate No.', it.certNo || ''], ['Customer', p.company.official || p.company.name], ['Code', it.code || ''], ['Description', it.description || f.description || ''], ['Manufacturer', it.manufacturer || f.manufacturer || ''], ['Model / S/N', [it.model || f.model, it.serial || f.serial].filter(Boolean).join(' / ')],
       ['Range', rangeText(it) || f.range || ''], ['Cal. range', calRangeText(it) || f.calRange || ''], ['Resolution', isNum(it.res) ? it.res + ' ' + (it.resUnit || it.unit || '') : f.resolution || ''], ['Calibration date', monYear(cal)], ['Due date', monYear(cal, 1)], ['Date of issue', dmy(inf.iss)],
@@ -1947,8 +1953,14 @@ function certXlsx(p, its) { genGroups(p); var inf = ensureInfo(p), g = genDefaul
     var rows = info.concat([[]], [head], it.old.points.map(function (q, i) { var a1 = evalPt(it, i, 1), v1 = (it.nv || {})[i] || {}, r = [q.point, v1.ref || '', v1.reading || '', fx(a1.dev)];
       if (dirs) { var a2 = evalPt(it, i, 2), v2 = (it.nv || {})[i + 'd'] || {}; r.push(v2.reading || '', fx(a2.dev)); } r.push(ptLimit(it, q) || ''); return r; }));
     return { name: (it.certNo || it.code || 'Cert').replace(/\//g, '-'), rows: rows, bold: [info.length + 1], boldCol0: true }; });
-  var nm = (its.length === 1 ? (its[0].certNo || its[0].code) : p.company.name + ' certificates') + '.xlsx';
-  saveBlob(xlsxFile(sheets), nm.replace(/\//g, '-')); }
+  return sheets; }
+function certXlsx(p, its) { var sheets = certSheets(p, its), nm = ((its.length === 1 ? (its[0].certNo || its[0].code) : p.company.name + ' certificates') + '.xlsx').replace(/\//g, '-');
+  openSheet(function () { return { title: 'Excel preview · ' + (its.length === 1 ? esc(its[0].code || its[0].certNo || '') : its.length + ' certificates'),
+    body: '<div class="note">This is what the Excel file holds' + (sheets.length > 1 ? ' – one sheet per certificate' : '') + '.</div>' + sheets.map(function (sh) { var mx = 0; sh.rows.forEach(function (r) { mx = Math.max(mx, r.length); });
+      return (sheets.length > 1 ? '<h4 class="xlh">' + esc(sh.name) + '</h4>' : '') + '<div class="xlwrap"><table class="xlv">' + sh.rows.map(function (r, ri) { var hd = (sh.bold || []).indexOf(ri) >= 0;
+        if (!r.length) return '<tr class="gap"><td colspan="' + mx + '"></td></tr>'; return '<tr' + (hd ? ' class="hd"' : '') + '>' + r.map(function (v, ci) { return '<td' + (ci === 0 && !hd ? ' class="k"' : r.length === 2 ? ' class="v"' : '') + (r.length === 2 && ci === 1 ? ' colspan="' + (mx - 1) + '"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>'; }).join(''),
+    foot: '<button class="btn ghost" id="xlC">Close</button><button class="btn" id="xlD">Download Excel</button>',
+    mount: function () { $('#xlC').onclick = closeSheet; $('#xlD').onclick = function () { saveBlob(xlsxFile(sheets), nm); }; } }; }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });

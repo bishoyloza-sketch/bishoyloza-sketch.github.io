@@ -183,3 +183,11 @@ select.fin{background-image:linear-gradient(45deg,transparent 50%,#8792A2 50%),l
 .outs{display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap}.outs button{border:1px solid #DDE3EA;background:#fff;border-radius:7px;padding:3px 7px;font:500 11.5px var(--font);color:var(--navy);cursor:pointer}
 .outs button:active{background:var(--blue-soft)}
 .tl-b small .ordst{display:block;margin:2px 0 0}
+.xlwrap{overflow-x:auto;border:1px solid #D9DEE5;border-radius:8px;margin-top:10px;background:#fff}
+.xlv{border-collapse:collapse;font:13px Arial,sans-serif;min-width:100%}
+.xlv td{border:1px solid #E1E5EA;padding:5px 8px;white-space:nowrap;text-align:center}
+.xlv td.k{background:#F7F9FB;font-weight:700;text-align:left;color:#13294B}
+.xlv tr.hd td{background:#E7ECF2;font-weight:700;color:#13294B}
+.xlv tr.gap td{border:0;height:10px}
+.xlh{margin:16px 0 0;font:600 14px var(--font);color:var(--navy)}
+.xlv td.v{text-align:left}
