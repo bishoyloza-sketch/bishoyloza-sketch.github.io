@@ -301,3 +301,21 @@ body{overflow-wrap:break-word;word-break:normal;hyphens:none;-webkit-hyphens:non
 .kvt select.pin{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2313294B' stroke-width='1.6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 7px center;padding-right:22px!important}
 .kvt .split select.pin.unit{border:1px solid #C9D6E8}
 .kvt .split input.pin.num{border:1px solid #DCE3EC}
+/* date fields shown as 10 Nov 2026 everywhere */
+.dpick{position:relative;display:flex;align-items:center;gap:8px;width:100%;min-height:34px;border:1px solid #DCE3EC;border-radius:8px;background:#fff;padding:5px 10px;cursor:pointer}
+.dpick b{flex:1;font-weight:500;color:var(--navy);font-size:14.5px;white-space:nowrap}
+.dpick i{display:flex;color:var(--blue,#0B74C8);flex:none}
+.dpick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;margin:0;padding:0;border:0}
+.dpick.big{min-height:48px;border-radius:12px;padding:0 14px}.dpick.big b{font-size:16px}
+.kvt .dpick input.pin{position:absolute;margin:0}
+/* inputs inside the certificate */
+.kvt .split{display:flex;align-items:center;gap:6px}
+.kvt .split .u{color:var(--muted);font-weight:600;flex:none}
+.kvt .split input.pin.num{height:34px;border-radius:8px;background:#fff;font-weight:500}
+.kvt .split select.pin.unit{height:34px;border-radius:8px}
+.kvt input.pin:not(.num){border:1px solid #E3E8EF;border-radius:8px;background:#fff;margin:0;padding:6px 8px}
+.kvt.kv2 th{width:30%}.kvt.kv2 td{width:70%}
+.kvt .split{flex-wrap:wrap;row-gap:6px}
+.kvt .split input.pin.num{flex:1 1 64px;min-width:64px;width:64px}
+.kvt .split select.pin.unit{flex:0 0 auto;max-width:none;min-width:58px}
+.kvt .split > i{flex:none;color:var(--muted)}
