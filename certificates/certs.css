@@ -204,3 +204,9 @@ select.fin{background-image:linear-gradient(45deg,transparent 50%,#8792A2 50%),l
 .machline{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px;font-size:13.5px;color:#6B7686}.machline b{color:var(--navy)}
 .rt td.pt input.ptin{width:100%;min-width:0;height:30px;border:1px solid #DDE3EA;background:#fff;border-radius:6px;font:600 14px var(--font);color:var(--navy);text-align:center;padding:0 2px}
 .rt td.pt{position:relative}.ptx{position:absolute;top:2px;right:2px;border:0;background:none;color:#C0392B;font:700 14px/1 var(--font);cursor:pointer;padding:2px 4px}
+/* machine groups in the certificates table */
+.letter tr.mrow td{background:#EAF1FB;border-top:2px solid #13294B;padding:8px 10px;text-align:left;width:auto;color:#13294B;font-family:var(--font)}
+.letter tr.mrow b{display:inline;color:#13294B;font-size:14.5px}
+.letter tr.mrow small{display:inline;margin-left:8px;color:var(--muted,#667)}
+.letter tr.mrow .mi{color:#13294B;margin-right:6px}
+.letter tr.sub td:nth-child(2){padding-left:22px;border-left:3px solid #C9D6E8}
