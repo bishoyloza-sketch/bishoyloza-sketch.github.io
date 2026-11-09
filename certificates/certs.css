@@ -334,3 +334,6 @@ body{overflow-wrap:break-word;word-break:normal;hyphens:none;-webkit-hyphens:non
 .mach-h{cursor:pointer}.mach.shut .mach-h{border-bottom:0}
 .mach-h .mcnt{display:inline-block;background:#EEF2F7;color:var(--muted);border-radius:999px;padding:0 7px;font-size:12px;font-weight:600;margin-left:4px}
 .mach-h b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cball{flex:none;min-width:28px;height:28px;padding:0 6px;border-radius:999px;background:#13294B;color:#fff;display:grid;place-items:center;font:700 13px var(--font);box-shadow:0 1px 3px rgba(19,41,75,.25)}
+.cball.ok{background:var(--office,#1E8E5A)}
+.cgh .chev,.mach-h .chev{width:12px}
