@@ -1855,6 +1855,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
     if (!it.unit && it.resUnit) it.unit = it.resUnit; o.split = 1; saveProjects(); }
   if ([deriveRes(it), deriveCal(it), deriveLim(it), autoRef(p, it)].some(Boolean)) { syncRefs(p); saveProjects(); } d = resDec(it);
   knowCo(p, it); if (knowApply(p, it)) saveProjects(); knowSeed();
+  (it.refs || []).forEach(function (rid) { refResAuto(p, rid, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); }); });
   autoTemplate(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); });
   var dirs = o.dirs === 2 ? [1, 2] : [1];
   var rows = o.points.map(function (q, i) { return dirs.map(function (dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] || {}, oR = dr === 2 ? q.reading2 : q.reading;
@@ -1871,7 +1872,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
     
 
     '<h5>Standard(s) used</h5><div class="chips" style="margin:0">' + refOptions(p, it).slice(0, 5).map(function (x) { var on = it.refs.indexOf(x.d.id) >= 0; return '<button class="chip' + (on ? ' on' : '') + '" data-rf="' + x.d.id + '">' + esc(x.d.manufacturer + ' ' + x.d.model) + ' · ' + esc(String(x.d.serial).slice(-6)) + (x.ex ? ' · expired' : '') + '</button>'; }).join('') +
-      it.refs.filter(function (id) { return !refOptions(p, it).some(function (x) { return x.d.id === id; }); }).map(function (id) { var x = byId[id]; return x ? '<button class="chip on" data-rf="' + id + '">' + esc(x.manufacturer + ' ' + x.model) + '</button>' : ''; }).join('') + '<button class="chip" id="rOther">Other…</button></div>' +
+      it.refs.filter(function (id) { return !refOptions(p, it).some(function (x) { return x.d.id === id; }); }).map(function (id) { var x = byId[id]; return x ? '<button class="chip on" data-rf="' + id + '">' + esc(x.manufacturer + ' ' + x.model) + '</button>' : ''; }).join('') + '<button class="chip" id="rOther">Other…</button></div>' + (function () { var rid = (it.refs || [])[0], rr = rid && refResOf(p, rid); return rid ? '<div class="tiny" style="margin-top:4px">' + (isNum(rr) ? 'Reference resolution <b>' + esc(rr) + '</b> – the Ref column follows it' : REFQ[rid] ? 'Reading the reference resolution from its certificate…' : 'Reference resolution not known yet') + '</div>' : ''; })() +
 
     (it.old.status === 'manual' ? '<div class="tmpl">' + (it.tmplBusy ? '<span class="spin dark"></span><span class="t"><b>Looking for a similar certificate…</b><small>points, accepted limits, SOP and resolution will be filled for you</small></span>'
         : it.tmpl ? '<span class="t"><b>Filled from a similar certificate</b><small>' + esc((it.tmpl.used || []).join(' · ') || 'nothing new') + ' — ' + (it.tmpl.webUrl ? '<a href="' + esc(it.tmpl.webUrl) + '" target="_blank" rel="noopener">' + esc(it.tmpl.name) + '</a>' : esc(it.tmpl.name)) + '</small></span><span class="iacts"><button class="ia" id="tmOther">Other</button>' + (it.tmplBak ? '<button class="ia" id="tmUndo">Undo</button>' : '') + '</span>'
@@ -1939,7 +1940,19 @@ function lastCertNo(p) { var pre = String(p.company.code || '').replace(/[^A-Za-
 function autoStart(p, done) { var g = genDefaults(p); if (String(g.start).trim() || g.autoTried) return done && done();
   g.autoTried = 1; lastCertNo(p).then(function (r) { if (r && r.n && !String(g.start).trim()) { g.start = String(r.n + 1); g.lastSeen = r; saveProjects(); toast('Certificate numbers continue after ' + certNo(g, r.n)); } done && done(); }).catch(function () { done && done(); }); }
 function padTo(v, d) { if (d == null || !isNum(v)) return v; var s = String(v).trim().replace(',', '.'); return decOf(s) < d ? numv(s).toFixed(d) : s; }
-function refDec(p, it) { var id = (it.refs || [])[0], r = id && p.info.refRes && p.info.refRes[id]; return isNum(r) ? decOf(r) : null; }
+function refResOf(p, id) { var r = p && p.info && p.info.refRes && p.info.refRes[id]; if (isNum(r)) return r; r = LS.get('refRes', {})[id]; return isNum(r) ? r : null; }
+function refDec(p, it) { var id = (it.refs || [])[0], r = id && refResOf(p, id); return isNum(r) ? decOf(r) : null; }
+var REFQ = {};
+function refResAuto(p, id, done) { /* the resolution of our own reference, read once from its calibration certificate (client 25 = Akhnaton) and kept for good */
+  if (!id || isNum(refResOf(p, id)) || REFQ[id] || !spOn()) return; var d = labDevices().filter(function (x) { return x.id === id; })[0]; if (!d) return; REFQ[id] = 1;
+  var sn = norm(d.serial || ''), qs = ['"' + (d.model || d.description) + '" filename:25-*', '"' + (d.serial || '') + '" "CLIENT ID"'];
+  var tryQ = function (k) { if (k >= qs.length) return Promise.resolve(null); return spSearch(qs[k], 20).then(function (fs) { fs = fs.filter(function (f) { return isCalCert(f.name) && /^25-/.test(f.name); }).sort(function (a, b) { return yearOf(b) - yearOf(a); });
+      return fs.slice(0, 4).reduce(function (pr, f) { return pr.then(function (got) { if (got) return got; return pdfPages(f.driveId, f.id).then(function (pages) { var t = pages.map(function (pg) { return pg.join(' | '); }).join(' | ');
+          if (sn && norm(t).indexOf(sn) < 0) return null; var fl = parseFields(t), rm = String(fl.resolution || '').match(/(\d*\.?\d+)/); if (rm && isNum(rm[1])) return { res: rm[1], from: f.name };
+          var dm = -1, on = false; [].concat.apply([], pages).forEach(function (l) { if (/uut/i.test(l) && /reading/i.test(l)) { on = true; return; } if (!on) return; if (/remarks|standard\(s\)\s*utilized|uncertainty/i.test(l)) { on = false; return; }
+            var nums = l.replace(/±\s*/g, '±').split(/[|\s]+/).filter(function (x) { return NUM.test(x) && x[0] !== '±'; }); if (nums.length >= 4) dm = Math.max(dm, decOf(nums[2])); else if (nums.length === 3) dm = Math.max(dm, decOf(nums[2])); });
+          return dm >= 0 ? { res: dm ? (1 / Math.pow(10, dm)).toFixed(dm) : '1', from: f.name } : null; }).catch(function () { return null; }); }); }, Promise.resolve(null)); }).catch(function () { return null; }).then(function (r) { return r || tryQ(k + 1); }); };
+  tryQ(0).then(function (r) { if (!r) return; var m = LS.get('refRes', {}); m[id] = r.res; LS.set('refRes', m); p.info.refRes = p.info.refRes || {}; p.info.refRes[id] = r.res; saveProjects(); toast('Resolution of ' + (d.manufacturer + ' ' + d.model).trim() + ': ' + r.res + ' – from its certificate ' + certBase(r.from)); done && done(); }); }
 
 /* ---------- v4: project hub – what is done, what is left ---------- */
 PHASES = [{ t: 'Company', s: ['company', 'date', 'dept', 'type', 'order'] }, { t: 'Codes', s: ['items'] }, { t: 'Certificates', s: ['cert', 'gen'] }];
