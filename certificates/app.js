@@ -1176,9 +1176,9 @@ function certBody(p, it, first) { var inf = p.info, g = genDefaults(p), f = it.o
   return body; }
 function certDoc(p, gr, total) { var body = gr.items.map(function (it, i) { return certBody(p, it, i === 0); }).join(''), f0 = (gr.items[0].old.fields || {}).procedure || 'SOP';
   return W.doc(body, { header: wHeader(), footer: wFooter(f0 + '  Rev. (0) 15/05/2019', total), pgStart: 2 }); }
-function letterDoc(p, groups) { var inf = p.info, g = genDefaults(p), o = p.order || {}, rows = [], tot = 0, n = 0;
+function letterDoc(p, groups, lid) { var inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0;
   var cal = s2d(inf.cal), mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
-  groups.forEach(function (gr) { gr.items.forEach(function (it) { n++; var pr = g.prices[it.id] || ''; if (isNum(pr)) tot += numv(pr);
+  groups.forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '')) return; n++; var pr = g.prices[it.id] || ''; if (isNum(pr)) tot += numv(pr);
     rows.push([String(n), (gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || ''), it.code || it.serial || '', mm, dueShort(p, it) || dd, it.certNo, pr || 'Lump sum']); }); });
   var hd = [[{ t: 'No.', b: true, shade: 'E7ECF2' }, { t: 'Item To be Calibrated', b: true, shade: 'E7ECF2' }, { t: 'Code or Serial', b: true, shade: 'E7ECF2' }, { t: 'Cal. Date', b: true, shade: 'E7ECF2' }, { t: 'Due Date', b: true, shade: 'E7ECF2' }, { t: 'Cert. No.', b: true, shade: 'E7ECF2' }, { t: 'Unit Price', b: true, shade: 'E7ECF2' }]];
   var ar = function (t, o2) { return W.p(W.r(t, Object.assign({ sz: 20, rtl: true }, o2 || {})), { jc: 'right', bidi: true, after: 60 }); };
@@ -1194,7 +1194,7 @@ function fileBase(g, gr) { var pre = String(g.prefix).replace(/[\/\\]/g, ''), a 
 function buildAll(p) { var groups = genGroups(p), g = genDefaults(p), files = [];
   groups.forEach(function (gr) { var total = 1 + gr.items.reduce(function (a, it) { return a + pagesOf(it); }, 0), base = fileBase(g, gr);
     files.push({ name: base + ' cover page.docx', data: coverDoc(p, gr, total) }, { name: base + ' cal. cert.docx', data: certDoc(p, gr, total) }); });
-  files.push({ name: 'Letter - ' + p.company.name + ' - ' + monYear(p.info.cal) + '.docx', data: letterDoc(p, groups) });
+  letterIds(p).forEach(function (lid, i) { files.push({ name: 'Letter' + (i ? ' ' + (i + 1) : '') + ' - ' + p.company.name + ' - ' + monYear(p.info.cal) + (lid ? ' - ' + letterName(p, lid) : '') + '.docx', data: letterDoc(p, groups, lid) }); });
   return { files: files, groups: groups }; }
 
 /* --- print view (PDF): every cover followed by its certificates --- */
@@ -1810,15 +1810,16 @@ function tHub(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p),
       tl(codesOk, curK === 2, 2, L.length + (L.length === 1 ? ' code chosen' : ' codes chosen'), codesOk ? esc(L.slice(0, 4).map(function (x) { return x.code || x.description; }).join(', ') + (L.length > 4 ? ' …' : '')) : 'Choose what will be calibrated', '<button class="btn ' + (codesOk ? 'ghost' : 'blue') + ' sm" id="tCodes">' + (codesOk ? '+ Add' : 'Choose') + '</button>') +
       tl(certsOk, curK === 3, 3, codesOk ? n + ' done · ' + left + ' pending' : 'Certificates', codesOk ? '<span class="tl-bar"><em style="width:' + pct + '%"></em></span>' : 'After the codes', codesOk && nxt >= 0 ? '<button class="btn blue sm" id="tNext">' + (n ? 'Continue' : 'Start') + '</button>' : '') +
       tl(filesOk, curK === 4, 4, 'Files', filesOk ? 'Made ' + esc(fmtDate(p.filesAt)) : certsOk ? 'Ready to make' : 'When all certificates are saved', certsOk || filesOk ? '<button class="btn ' + (filesOk ? 'ghost' : 'blue') + ' sm" id="tFiles">' + (filesOk ? 'Again' : 'Make') + '</button>' : '') + '</div>' +
-    (L.length ? '<div class="sec"><h2>Certificates</h2><button class="btn ghost sm" id="hPrint" style="flex:none">Print / Export</button></div>' +
+    (L.length ? '<div class="sec"><h2>Certificates</h2><span style="display:flex;gap:6px"><button class="btn ghost sm" id="hSplit" style="flex:none">Split</button><button class="btn ghost sm" id="hPrint" style="flex:none">Print / Export</button></span></div>' +
       '<div class="letter"><table><tr><th>No.</th><th>Code / description</th><th>Cert. No.</th><th>Status</th></tr>' + L.map(function (it, i) { var f = (it.old || {}).fields || {}, st = cState(it), pr = it.old && it.old.points && it.old.points.length ? itemProg(it) : null;
-        return '<tr data-ci="' + i + '" class="' + (it.saved ? 'lt-done' : '') + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.code || '—') + '</b><small>' + esc(it.description || f.description || '') + '</small></td><td class="cn">' + esc(it.certNo || '—') + '</td><td>' + (it.saved ? '<span class="st lt-ok">Done ✓</span>' : st === 'none' ? '<span class="st bad">No old cert</span>' : st === 'loading' ? '<span class="st">Loading…</span>' : '<span class="st pend">Pending' + (pr && pr.fil ? ' · ' + pr.fil + '/' + pr.tot : '') + '</span>') + '</td></tr>'; }).join('') + '</table></div>' : '') +
+        return '<tr data-ci="' + i + '" class="' + (it.saved ? 'lt-done' : '') + '"><td>' + (i + 1) + '</td><td><b>' + esc(it.code || '—') + '</b><small>' + esc(it.description || f.description || '') + '</small>' + (it.letterId && letterIds(p).length > 1 ? '<span class="lt-tag">' + esc(letterName(p, it.letterId)) + '</span>' : '') + '</td><td class="cn">' + esc(it.certNo || '—') + '</td><td>' + (it.saved ? '<span class="st lt-ok">Done ✓</span>' : st === 'none' ? '<span class="st bad">No old cert</span>' : st === 'loading' ? '<span class="st">Loading…</span>' : '<span class="st pend">Pending' + (pr && pr.fil ? ' · ' + pr.fil + '/' + pr.tot : '') + '</span>') + '</td></tr>'; }).join('') + '</table></div>' : '') +
     '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Project details</h3><button class="btn ghost sm" id="hDet" style="flex:none">Edit</button></div>' +
       '<div class="kvgrid">' + [['Calibration', dmy(inf.cal)], ['Date of issue', dmy(inf.iss)], ['Received', dmy(inf.rec)], ['Work order', woNo(inf)], ['Technician', inf.tech], ['Conditions', inf.eT + ' °C · ' + inf.eH + ' %RH'], ['First cert. no.', String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : (g.autoTried || !spOn() ? 'not set' : 'finding…')], ['Department', (p.depts || []).join(', ')]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + esc(x[1] || '—') + '</b></div>'; }).join('') + '</div></div>';
   $('#cf').innerHTML = !codesOk ? '<button class="btn blue" id="hGo">Choose the codes ›</button>' : nxt >= 0 ? '<button class="btn blue" id="hGo">' + (n ? 'Continue: ' : 'Start: ') + esc(L[nxt].code || L[nxt].description) + ' ›</button>' : '<button class="btn blue" id="hGo">Make the files ›</button>';
   var open = function (i) { p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }, files = function () { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); }, codes = function () { go(p, 'items'); };
   $$('[data-ci]').forEach(function (b) { b.onclick = function () { open(+b.dataset.ci); }; });
   if ($('#hPrint')) $('#hPrint').onclick = function () { exportSheet(p); };
+  if ($('#hSplit')) $('#hSplit').onclick = function () { splitSheet(p); };
   var x; if ((x = $('#tNext'))) x.onclick = function () { open(nxt); }; if ((x = $('#tFiles'))) x.onclick = files; $('#tCodes').onclick = codes;
   if ($('#tEditCo')) $('#tEditCo').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); };
   $('#hGo').onclick = function () { if (!codesOk) codes(); else if (nxt >= 0) open(nxt); else files(); };
@@ -1995,9 +1996,9 @@ function certXlsx(p, its) { var sheets = certSheets(p, its), nm = ((its.length =
 
 
 /* ---------- Print / Export: receipt letter or certificates ---------- */
-function letterHtml(p) { var all = buildAll(p), inf = p.info, g = genDefaults(p), o = p.order || {}, rows = [], tot = 0, n = 0, cal = s2d(inf.cal);
+function letterHtml(p, lid) { var all = buildAll(p), inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0, cal = s2d(inf.cal);
   var mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
-  all.groups.forEach(function (gr) { gr.items.forEach(function (it) { n++; var pr = g.prices[it.id] || ''; if (isNum(pr)) tot += numv(pr);
+  all.groups.forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '')) return; n++; var pr = g.prices[it.id] || ''; if (isNum(pr)) tot += numv(pr);
     rows.push('<tr><td>' + n + '</td><td class="l">' + esc((gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || '')) + '</td><td>' + esc(it.code || it.serial || '') + '</td><td>' + mm + '</td><td>' + (dueShort(p, it) || dd) + '</td><td>' + esc(it.certNo || '') + '</td><td>' + esc(pr || 'Lump sum') + '</td></tr>'); }); });
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt letter</title><style>@page{size:A4;margin:16mm}body{font-family:Arial,sans-serif;font-size:10pt;color:#000;margin:0;padding:14px}.ar{direction:rtl;text-align:right;margin:0 0 6px}.h{font-size:12pt;font-weight:700}.s{font-size:9pt}table{width:100%;border-collapse:collapse;margin:10px 0;font-size:9pt}th,td{border:1px solid #000;padding:4px 5px;text-align:center}th{background:#E7ECF2}td.l{text-align:left}.tot{font-weight:700;margin:6px 0}.po{font-weight:700;margin:6px 0}</style></head><body>' +
     '<p class="ar h">أخناتون تريدنج أند ربريسنتاشن</p><p class="ar s">المركز الرئيسي: 13 ش الموسيقار علي اسماعيل – الدقي &nbsp;&nbsp; الفرع: 9 شارع الشركات – عابدين</p><p class="ar s">المكتب الفني: 113 ش طومان باي - الزيتون &nbsp;&nbsp; التليفون: 24515197 &nbsp;&nbsp; الفاكس: 24514690</p>' +
@@ -2017,10 +2018,13 @@ function exportSheet(p) { genGroups(p); var L = certList(p).filter(function (it)
   var chosen = function () { return st.which === 'all' ? L : st.which === 'range' ? L.slice(Math.min(st.from, st.to), Math.max(st.from, st.to) + 1) : L.filter(function (it, i) { return st.on[i]; }); };
   var lbl = function (it, i) { return (i + 1) + '. ' + (it.certNo || '—') + ' · ' + (it.code || it.description || ''); };
   openSheet(function () {
+    var showLetter = function (lid) { closeSheet(); var all = buildAll(p); htmlPreview('Receipt letter' + (lid ? ' · ' + letterName(p, lid) : ''), letterHtml(p, lid), function () { saveBlob(new Blob([letterDoc(p, all.groups, lid)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), p.company.name + ' receipt letter' + (lid ? ' - ' + letterName(p, lid) : '') + '.docx'); }); };
+    if (st.what === 'letters') return { title: 'Which letter?', body: '<div class="cats one">' + letterIds(p).map(function (lid, i) { var n0 = L.filter(function (it) { return (it.letterId || '') === lid; }).length; return '<button data-lt="' + lid + '"><b>Letter ' + (i + 1) + ' · ' + esc(letterName(p, lid)) + '</b><small>' + n0 + ' items</small></button>'; }).join('') + '</div>', foot: '<button class="btn ghost" id="ltB">‹ Back</button>',
+      mount: function () { $('#ltB').onclick = function () { st.what = ''; renderSheet(); }; $$('[data-lt]').forEach(function (b) { b.onclick = function () { showLetter(b.dataset.lt); }; }); } };
     if (!st.what) return { title: 'Print / Export', body: '<div class="cats one">' +
-      '<button data-w="letter">' + I.doc + '<b>Receipt letter</b><small>One letter for the project – ' + L.length + ' items with cal. and due dates</small></button>' +
+      '<button data-w="letter">' + I.doc + '<b>Receipt letter' + (letterIds(p).length > 1 ? 's (' + letterIds(p).length + ')' : '') + '</b><small>' + (letterIds(p).length > 1 ? 'One letter per order – choose which' : 'One letter for the project – ' + L.length + ' items with cal. and due dates') + '</small></button>' +
       '<button data-w="certs">' + I.ok + '<b>Certificates</b><small>All, from … to …, or the ones you choose</small></button></div>', foot: '<button class="btn ghost" id="exX">Close</button>',
-      mount: function () { $('#exX').onclick = closeSheet; $$('[data-w]').forEach(function (b) { b.onclick = function () { if (b.dataset.w === 'letter') { closeSheet(); var all = buildAll(p); return htmlPreview('Receipt letter', letterHtml(p), function () { saveBlob(new Blob([letterDoc(p, all.groups)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), p.company.name + ' receipt letter.docx'); }); } st.what = 'certs'; renderSheet(); }; }); } };
+      mount: function () { $('#exX').onclick = closeSheet; $$('[data-w]').forEach(function (b) { b.onclick = function () { if (b.dataset.w === 'letter') { var ids = letterIds(p); if (ids.length > 1 && st.lid == null) { st.what = 'letters'; return renderSheet(); } return showLetter(ids[0]); } st.what = 'certs'; renderSheet(); }; }); } };
     var n = chosen().length, opts = function (sel) { return L.map(function (it, i) { return '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(lbl(it, i)) + '</option>'; }).join(''); };
     return { title: 'Certificates', body:
       '<div class="seg">' + [['all', 'All (' + L.length + ')'], ['range', 'From … to …'], ['pick', 'Choose']].map(function (t) { return '<button class="' + (st.which === t[0] ? 'on' : '') + '" data-wh="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' +
@@ -2058,6 +2062,33 @@ function orderSheet(p, done) { var st = { t: p.orderType || 'contract', busy: fa
         $('#oAtt').onclick = function () { pickFiles('application/pdf,image/*,.doc,.docx').then(function (fs) { var f = fs[0]; if (!f) return; var rec = { attached: true, fileName: f.name, number: '' };
           if (!spOn()) return finish(rec, 'found'); toast('Saving…'); uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; finish(rec, 'found'); }).catch(function (e) { toast(e.message, true); finish(rec, 'found'); }); }); };
         if (!st.list && !st.busy) load(); } }; }); }
+
+
+/* ---------- split: some items belong to another order ---------- */
+function letterIds(p) { var ids = [''];  (p.letters || []).forEach(function (l) { if (certList(p).some(function (it) { return it.letterId === l.id; })) ids.push(l.id); }); return ids; }
+function letterName(p, lid) { if (!lid) { var o = p.order || {}; return o.number ? 'PO ' + o.number : (p.orderType ? TYPES[p.orderType][0] : 'Main'); } var l = (p.letters || []).filter(function (x) { return x.id === lid; })[0]; return l ? (l.po ? 'PO ' + l.po : l.name || 'Letter') : 'Letter'; }
+function letterOrder(p, lid) { if (!lid) return p.order || {}; var l = (p.letters || []).filter(function (x) { return x.id === lid; })[0] || {}; return { number: l.po || '' }; }
+function splitSheet(p) { var L = certList(p), st = { on: {}, how: 'project', po: '' };
+  openSheet(function () { var n = L.filter(function (it, i) { return st.on[i]; }).length;
+    return { title: 'Split', body: '<div class="note">Choose the items that belong to another order.</div>' +
+      '<div class="selbar"><span><b>' + n + '</b> of ' + L.length + ' chosen</span></div><div class="list">' + L.map(function (it, i) { var on = !!st.on[i]; return '<button class="row' + (on ? ' sel' : '') + '" data-sp="' + i + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(it.code || '—') + ' · ' + esc(it.description || ((it.old || {}).fields || {}).description || '') + '</b><small>' + esc([it.certNo, letterIds(p).length > 1 ? letterName(p, it.letterId || '') : '', it.saved ? 'saved ✓' : ''].filter(Boolean).join(' · ')) + '</small></span></button>'; }).join('') + '</div>' +
+      '<h4 class="xlh">Put them in</h4><div class="seg"><button class="' + (st.how === 'project' ? 'on' : '') + '" data-hw="project">A new project</button><button class="' + (st.how === 'letter' ? 'on' : '') + '" data-hw="letter">A separate letter here</button></div>' +
+      '<label class="fld" style="margin-top:12px"><span>PO / order No. for them (optional)</span><input class="fin" id="spPo" value="' + esc(st.po) + '" placeholder="e.g. 4500123456"></label>' +
+      '<div class="note" style="margin-top:12px">' + (st.how === 'project' ? 'A new project opens with the same company, dates, details and the readings you typed. It gets its own letter and certificate numbers.' : 'They stay in this project, with their own receipt letter. Certificate numbers do not change.') + '</div>',
+      foot: '<button class="btn ghost" id="spX">Close</button><button class="btn" id="spGo"' + (n && n < L.length + (st.how === 'letter' ? 0 : 1) ? '' : ' disabled') + '>' + (st.how === 'project' ? 'Move ' + n + ' to a new project' : 'Make a letter for ' + n) + '</button>',
+      mount: function () { $$('[data-sp]').forEach(function (b) { b.onclick = function () { var i = +b.dataset.sp; st.on[i] = !st.on[i]; renderSheet(); }; });
+        $$('[data-hw]').forEach(function (b) { b.onclick = function () { st.po = $('#spPo').value.trim(); st.how = b.dataset.hw; renderSheet(); }; });
+        $('#spX').onclick = closeSheet;
+        $('#spGo').onclick = function () { st.po = $('#spPo').value.trim(); var its = L.filter(function (it, i) { return st.on[i]; }); if (!its.length) return;
+          if (st.how === 'letter') { p.letters = p.letters || []; var l = { id: uid(), po: st.po, name: st.po ? '' : 'Letter ' + (p.letters.length + 2) }; p.letters.push(l); its.forEach(function (it) { it.letterId = l.id; }); saveProjects(); closeSheet(); toast(its.length + ' items have their own letter now'); return tHub(p); }
+          if (its.length === L.length) return toast('Leave at least one item in this project', true);
+          var g = genDefaults(p), keep = L.filter(function (it) { return its.indexOf(it) < 0; }), start = parseInt(g.start, 10);
+          var np = JSON.parse(JSON.stringify(p)); np.id = uid(); np.created = new Date().toISOString(); np.items = its.map(function (it) { var c = JSON.parse(JSON.stringify(it)); delete c.letterId; return c; });
+          np.machines = (p.machines || []).filter(function (m) { return its.some(function (it) { return it.machineId === m.id; }); }); np.letters = []; np.filesAt = null; np.ci = null; np.stage = 'done'; np.tab = 'cert'; np.splitFrom = p.id;
+          np.orderType = st.po ? 'po' : ''; np.order = st.po ? { number: st.po } : null; np.orderCheck = st.po ? 'found' : '';
+          np.gen = Object.assign({}, p.gen || {}, { start: isNaN(start) ? '' : String(start + keep.filter(function (it) { return it.old && (it.old.points || []).length; }).length), autoTried: 1 });
+          p.items = p.items.filter(function (it) { return its.indexOf(it) < 0; }); S.projects.push(np); saveProjects(); closeSheet();
+          dialog('Moved ' + its.length + ' items', 'A new project was made for them' + (st.po ? ' (PO ' + esc(st.po) + ')' : '') + '. Open it now?', 'Open it', 'Stay here').then(function (y) { if (y) { S.cur = np.id; render(); window.scrollTo(0, 0); } else tHub(p); }); }; } }; }); }
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
