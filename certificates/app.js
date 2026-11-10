@@ -2227,7 +2227,7 @@ function refResAuto(p, id, done) { /* the resolution of our own reference, read 
 PHASES = [{ t: 'Company', s: ['company', 'date', 'dept', 'type', 'order'] }, { t: 'Codes', s: ['items'] }, { t: 'Certificates', s: ['cert', 'gen'] }];
 function phaseOf(s) { if (['certs', 'refs', 'det', 'cert', 'gen'].indexOf(s) >= 0) return 2; if (s === 'items') return 1; return 0; }
 function certList(p) { var out = []; coverGroups(p).forEach(function (g) { out = out.concat(g.items); }); return out; }
-function cState(it) { var o = it.old || {}; if (it.saved) return 'saved'; if (o.status === 'searching') return 'loading'; if (!(o.points || []).length) return 'none'; var x = itemProg(it); return x.fil ? 'progress' : 'ready'; }
+function cState(it) { var o = it.old || {}; if (it.saved) return 'saved'; if (o.status === 'searching') return 'loading'; if (!(o.points || []).length && !genOn(it)) return 'none'; if (genOn(it)) return genPh(it).length ? 'progress' : 'ready'; var x = itemProg(it); return x.fil ? 'progress' : 'ready'; }
 var CST = { saved: ['Saved ✓', 'var(--office)', 'var(--office-soft)'], progress: ['In progress', 'var(--blue)', 'var(--blue-soft)'], ready: ['To do', 'var(--muted)', 'var(--oos-soft)'], loading: ['Loading…', 'var(--blue)', 'var(--blue-soft)'], none: ['No old cert', 'var(--danger)', 'var(--danger-soft)'] };
 function cPill(it) { var s = CST[cState(it)]; return '<span class="pill" style="--s-fg:' + s[1] + ';--s-bg:' + s[2] + '">' + s[0] + '</span>'; }
 function savedN(p) { return certList(p).filter(function (i) { return i.saved; }).length; }
@@ -2259,14 +2259,14 @@ function groupHints(p) { /* loose items whose codes share a machine code, e.g. P
   return Object.keys(by).filter(function (k) { return by[k].length > 1; }).map(function (k) { return { code: k, items: by[k] }; }); }
 function grpKey(gr) { return gr.machine ? 'm' + gr.machine.id : 'u' + gr.items[0].id; }
 function grpOpen(p, gr) { var o = (p.hubOpen || {})[grpKey(gr)]; if (o != null) return !!o; var nx = certList(p).filter(function (x) { return !x.saved; })[0]; return !!nx && gr.items.indexOf(nx) >= 0; }
-function hubList(p, L) { var idx = 0, sel = p.hubSel || (p.hubSel = {}), ed = p.hubEdit, nSel = L.filter(function (x) { return sel[x.id]; }).length, gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
-  var hints = ed ? [] : groupHints(p), miss = ed ? [] : coverGroups(p).filter(function (g2) { return missingHint(p, g2); });
+function hubDetails(p, L, only) { var idx = 0, sel = p.hubSel || (p.hubSel = {}), ed = p.hubEdit, nSel = L.filter(function (x) { return sel[x.id]; }).length, gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
+  var hints = ed || only ? [] : groupHints(p), miss = [];
   return miss.map(function (g2) { return '<div class="ghint"><span class="t"><b>' + esc(g2.machine ? g2.machine.name : (g2.items[0].code || g2.items[0].description)) + ': ' + missingHint(p, g2) + ' more items were in this cover last year</b><small>you have ' + g2.items.length + ' of ' + (g2.items.length + missingHint(p, g2)) + '</small></span><button class="btn sm" data-miss="' + esc(grpKey(g2)) + '">See &amp; bring</button></div>'; }).join('') + hints.map(function (h, k) { return '<div class="ghint"><span class="t"><b>' + h.items.length + ' items share the code ' + esc(h.code) + '</b><small>' + esc(h.items.map(function (x) { return x.code; }).join(', ')) + ' – one machine, one cover?</small></span><button class="btn sm" data-gh="' + k + '">One cover</button></div>'; }).join('') +
     (ed ? '<div class="selbar2"><span><b>' + nSel + '</b> selected</span><button class="btn sm" id="hGroup"' + (nSel ? '' : ' disabled') + '>Put under one cover</button></div>' : '') +
-    (L.length > 6 ? '<div class="hubtools"><div class="search sm">' + I.search + '<input id="hq" placeholder="Find a code or description in this project" value="' + esc(p.hubQ || '') + '" autocomplete="off"></div><button class="ia" id="hLy" title="Put every certificate under the same cover as last year">Covers as last year</button><button class="ia" id="hExp">' + (coverGroups(p).every(function (g2) { return grpOpen(p, g2); }) ? 'Collapse all' : 'Expand all') + '</button></div>' : '') +
-    coverGroups(p).map(function (gr, gi) { var m = gr.machine, done = gr.items.filter(function (x) { return x.saved; }).length, g0 = gen[gr.items[0].id], nums = gr.items.map(function (x) { return x.certNo; }).filter(Boolean);
-      var q = norm(p.hubQ || ''), hit = function (it) { return !q || norm((it.code || '') + ' ' + (it.description || '') + ' ' + (it.certNo || '') + ' ' + (m ? m.name + ' ' + (m.code || '') : '')).indexOf(q) >= 0; }, nHit = gr.items.filter(hit).length;
-      if (q && !nHit) { idx += gr.items.length; return ''; } var open = q ? true : grpOpen(p, gr);
+    ''+
+    coverGroups(p).map(function (gr, gi) { if (only && grpKey(gr) !== only) { idx += gr.items.length; return ''; } var m = gr.machine, done = gr.items.filter(function (x) { return x.saved; }).length, g0 = gen[gr.items[0].id], nums = gr.items.map(function (x) { return x.certNo; }).filter(Boolean);
+      var q = norm(p.hubQ || ''), hit = function (it) { return !q || norm((it.code || '') + ' ' + (it.description || '') + ' ' + (it.certNo || '') + ' ' + (it.prevCert || '') + ' ' + ((it.old && it.old.fields && it.old.fields.certNo) || '') + ' ' + (m ? m.name + ' ' + (m.code || '') : '')).indexOf(q) >= 0; }, nHit = gr.items.filter(hit).length;
+      if (q && !nHit) { idx += gr.items.length; return ''; } var open = q || only ? true : grpOpen(p, gr);
       var title = m ? m.name + (m.code ? ' · ' + m.code : '') : (gr.items[0].description || (gr.items[0].old && gr.items[0].old.fields && gr.items[0].old.fields.description) || 'Units');
       return '<div class="cgrp' + (open ? ' open' : '') + (done === gr.items.length ? ' alldone' : '') + '"><div class="cgh" data-tg="' + esc(grpKey(gr)) + '"><span class="chev">' + (open ? '▾' : '▸') + '</span><span class="cball' + (done === gr.items.length ? ' ok' : '') + '">' + gr.items.length + '</span><span class="t"><b>' + esc(title) + '</b><small>' + gr.items.length + (gr.items.length === 1 ? ' certificate' : ' certificates') + ' · ' + done + ' done' + (nums.length ? ' · <span class="nw">' + esc(nums[0]) + '</span>' + (nums.length > 1 ? ' → <span class="nw">' + esc(nums[nums.length - 1]) + '</span>' : '') : '') + '</small></span>' +
         '<span class="cgbar"><i style="width:' + Math.round(done / gr.items.length * 100) + '%"></i></span>' +
@@ -2276,6 +2276,30 @@ function hubList(p, L) { var idx = 0, sel = p.hubSel || (p.hubSel = {}), ed = p.
           return '<div class="crow' + (it.saved ? ' done' : '') + (sel[it.id] && ed ? ' on' : '') + '" data-ci="' + i + '">' + (ed ? '<span class="ck">' + (sel[it.id] ? '✓' : '') + '</span>' : '<span class="cn">' + (i + 1) + '</span>') +
             '<span class="t"><b>' + esc(it.code || '—') + '</b><small>' + esc(it.description || f.description || '') + '</small>' + (it.certNo ? '<em>' + esc(it.certNo) + '</em>' : '') + (it.letterId && letterIds(p).length > 1 ? '<span class="lt-tag">' + esc(letterName(p, it.letterId)) + '</span>' : '') + '</span>' +
             (ed ? '<span class="iacts"><button class="ia" data-hie="' + it.id + '">Edit</button><button class="ia del" data-hix="' + it.id + '">×</button></span>' : stx) + '</div>'; }).join('') + '</div>'; }).join(''); }
+/* the certificates page: Tiles / Grid / Details – like the devices app */
+function gState(p, gr) { var n = gr.items.length, done = gr.items.filter(function (x) { return x.saved; }).length, none = gr.items.filter(function (x) { return cState(x) === 'none'; }).length, load = gr.items.filter(function (x) { return cState(x) === 'loading'; }).length;
+  return { n: n, done: done, none: none, load: load, cls: done === n ? 'ok' : none ? 'bad' : load ? 'load' : done ? 'mid' : 'new', txt: done === n ? 'All saved ✓' : load ? 'Getting last year…' : none ? none + ' without last year\'s certificate' : done ? done + ' of ' + n + ' saved' : 'Not started' }; }
+function hubList(p, L) { var hv = LS.get('hubView', 'tiles'), q = norm(p.hubQ || ''), gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
+  var gs = coverGroups(p), foc = p.hubFocus && gs.some(function (g2) { return grpKey(g2) === p.hubFocus; }) ? p.hubFocus : null;
+  var bar = '<div class="viewbar" role="radiogroup">' + [['tiles', '▦', 'Tiles'], ['grid', '⊞', 'Grid'], ['list', '☰', 'Details']].map(function (v) { return '<button data-hv="' + v[0] + '" class="' + (hv === v[0] ? 'on' : '') + '"><i>' + v[1] + '</i>' + v[2] + '</button>'; }).join('') + '</div>';
+  var tools = '<div class="hubtools"><div class="search sm">' + I.search + '<input id="hq" placeholder="Search a code, description, cover or certificate no." value="' + esc(p.hubQ || '') + '" autocomplete="off"></div><button class="ia" id="hLy" title="Put every certificate under the same cover as last year">Covers as last year</button>' + (hv === 'list' && !foc ? '<button class="ia" id="hExp">' + (gs.every(function (g2) { return grpOpen(p, g2); }) ? 'Collapse all' : 'Expand all') + '</button>' : '') + '</div>';
+  if (p.hubEdit) return tools + hubDetails(p, L);
+  if (foc) { var gr = gs.filter(function (g2) { return grpKey(g2) === foc; })[0], gi = gs.indexOf(gr), st = gState(p, gr), mh = missingHint(p, gr), g0 = gen[gr.items[0].id];
+    var title = gr.machine ? gr.machine.name + (gr.machine.code ? ' · ' + gr.machine.code : '') : (gr.items[0].description || 'Units');
+    return '<button class="backcat" id="hBack">‹ All covers</button><div class="covhead st-' + st.cls + '"><span class="tcnt">' + st.n + '</span><b>' + esc(title) + '</b><small>' + (g0 ? esc(g0.from + (g0.to !== g0.from ? ' → ' + g0.to : '')) + ' · ' : '') + esc(st.txt) + '</small>' +
+      '<div class="cf" style="margin:8px 0 0"><button class="btn ghost sm" data-cov="' + gi + '">Cover page</button>' + (mh ? '<button class="btn sm" data-miss="' + esc(grpKey(gr)) + '">+ ' + mh + ' from last year\'s cover</button>' : '') + '</div></div>' + hubDetails(p, L, foc); }
+  if (hv === 'list') return bar + tools + hubDetails(p, L);
+  var hitG = function (gr) { if (!q) return true; var m = gr.machine; return gr.items.some(function (it) { return norm([it.code, it.description, it.certNo, it.prevCert, it.old && it.old.fields && it.old.fields.certNo, m && m.name, m && m.code].join(' ')).indexOf(q) >= 0; }); };
+  var tiles = gs.map(function (gr, gi) { if (!hitG(gr)) return ''; var st = gState(p, gr), m = gr.machine, g0 = gen[gr.items[0].id], mh = missingHint(p, gr), title = m ? m.name : (gr.items[0].description || 'Units'), code = m ? m.code : (gr.items.length === 1 ? gr.items[0].code : '');
+      return '<button class="htile ctile st-' + st.cls + (hv === 'grid' ? ' wide' : '') + '" data-ft="' + esc(grpKey(gr)) + '"><span class="tcnt">' + st.n + '</span><b>' + esc(title) + '</b>' + (code ? '<small class="cd">' + esc(code) + '</small>' : '') +
+        (g0 ? '<small>' + esc(g0.from + (g0.to !== g0.from ? ' → ' + g0.to.replace(/^.*?-(\d+)-\d{4}$/, '$1') : '')) + '</small>' : '') + '<small class="stx">' + esc(st.txt) + '</small>' +
+        (hv === 'grid' ? '<span class="cmini">' + gr.items.slice(0, 8).map(function (it) { return '<i class="' + (it.saved ? 'ok' : cState(it) === 'none' ? 'bad' : '') + '">' + esc(it.code || it.description || '—') + '</i>'; }).join('') + (gr.items.length > 8 ? '<i>+' + (gr.items.length - 8) + '</i>' : '') + '</span>' : '') +
+        (mh ? '<small class="mh">+ ' + mh + ' more on last year\'s cover</small>' : '') + '<span class="tbar"><em style="width:' + Math.round(st.done / st.n * 100) + '%"></em></span></button>'; }).join('');
+  return bar + tools + (tiles ? '<div class="' + (hv === 'tiles' ? 'htiles' : 'hgrid') + '">' + tiles + '</div>' : '<div class="empty"><b>Nothing matches</b>Try another code or certificate number.</div>'); }
+/* "Working…" ball for anything that takes time */
+var BUSY_N = 0;
+function busy(on, txt) { BUSY_N = Math.max(0, BUSY_N + (on ? 1 : -1)); var el = $('#loadov'); if (!el) { el = document.createElement('div'); el.id = 'loadov'; el.setAttribute('role', 'status'); el.innerHTML = '<div class="lbox"><div class="lball"></div><span id="loadtx">Working…</span></div>'; document.body.appendChild(el); }
+  if (on && txt) $('#loadtx').textContent = txt; else if (!BUSY_N) $('#loadtx').textContent = 'Working…'; el.classList.toggle('on', BUSY_N > 0); }
 function groupSheet(p, items, pre) { var mach = (p.machines || []).slice(), st = { name: '', code: pre || codePre(items[0] && items[0].code) || '', use: '' };
   var same = mach.filter(function (m) { return st.code && norm(m.code) === norm(st.code); })[0]; if (same) st.use = same.id;
   openSheet(function () { return { title: 'One cover for ' + items.length + ' items', body: '<div class="note">' + esc(items.map(function (x) { return x.code || x.description; }).join(', ')) + '</div>' +
@@ -2396,10 +2420,13 @@ function tHub(p) { if (!$('#pm')) return; knowSeed(); certList(p).forEach(functi
   $$('[data-cov]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); coverSheet(p, +b.dataset.cov); }; });
   $$('[data-tg]').forEach(function (b) { b.onclick = function () { var k = b.dataset.tg; p.hubOpen = p.hubOpen || {}; var gr = coverGroups(p).filter(function (g2) { return grpKey(g2) === k; })[0]; p.hubOpen[k] = !(gr && grpOpen(p, gr)); saveProjects(); var y = window.scrollY; tHub(p); window.scrollTo(0, y); }; });
   var hq = $('#hq'); if (hq) hq.oninput = function () { p.hubQ = hq.value; var pos = hq.selectionStart, y = window.scrollY; tHub(p); window.scrollTo(0, y); var n2 = $('#hq'); if (n2) { n2.focus(); n2.setSelectionRange(pos, pos); } };
+  $$('[data-hv]').forEach(function (b) { b.onclick = function () { LS.set('hubView', b.dataset.hv); p.hubFocus = null; tHub(p); }; });
+  $$('[data-ft]').forEach(function (b) { b.onclick = function () { p.hubFocus = b.dataset.ft; saveProjects(); tHub(p); window.scrollTo(0, 0); }; });
+  var hb = $('#hBack'); if (hb) hb.onclick = function () { p.hubFocus = null; saveProjects(); tHub(p); };
   var hl = $('#hLy'); if (hl) hl.onclick = function () { var bases = {}; p.items.forEach(function (it) { var b = itBase(it); if (b) bases[b] = 1; }); var B = Object.keys(bases), left = B.filter(function (b) { return !covRanges(b); });
-    if (!B.length) return toast('No last-year certificates linked yet', true); toast('Reading last year\'s covers…');
+    if (!B.length) return toast('No last-year certificates linked yet', true); busy(true, 'Reading last year\'s covers…');
     var go = function () { var byC = {}, order = []; p.items.forEach(function (it) { var k = coverKey(it); if (!k) return; if (!byC[k]) { byC[k] = []; order.push(k); } byC[k].push(it); });
-      if (!order.length) return toast('Could not read last year\'s covers', true);
+      busy(false); if (!order.length) return toast('Could not read last year\'s covers', true);
       var moved = {}; order.forEach(function (k) { byC[k].forEach(function (it) { moved[it.id] = 1; }); });
       p.machines = (p.machines || []).filter(function (m) { return p.items.some(function (it) { return it.machineId === m.id && !moved[it.id]; }); });
       order.forEach(function (k) { var its = byC[k], f = its[0], nm = (f.description || (f.old && f.old.fields && f.old.fields.description) || 'Cover'), m = { id: uid(), name: nm, code: codePre(f.code) || cleanCode(f.code).replace(/p(?=\/)/i, ''), dept: f.dept || (p.depts || [])[0] || '' };
@@ -2787,7 +2814,7 @@ function askPrices(p, left, done, rows) { var g = genDefaults(p), groups = {}, o
       $('#pkOk').onclick = function () { $$('[data-pk]').forEach(function (e) { var v = e.value.trim().replace(/,/g, ''); if (!v) return; var k = order[+e.dataset.pk]; priceBookSet(p, k, v); groups[k].forEach(function (it) { g.prices[it.id] = v; }); }); saveProjects(); toast('Prices saved'); closeSheet(); done && done(); }; } }; }); }
 function pricesThen(p, go, force) { var g = genDefaults(p), miss = certList(p).filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); if (!miss.length && !force) return go();
   if (force) certList(p).forEach(function (it) { if (/lump/i.test(g.prices[it.id] || '')) g.prices[it.id] = ''; });
-  toast('Looking for the prices – price list, contract and this year\'s letters…'); autoPrices(p, function (got, left, rows) { var n = got.contract + got.letters + got.book;
+  busy(true, 'Getting the prices…'); autoPrices(p, function (got, left, rows) { busy(false); var n = got.contract + got.letters + got.book;
     toast(n ? n + ' prices filled from ' + got.src.join(', ') : 'No prices found on SharePoint', !n);
     if (left.length) askPrices(p, left, go, rows); else go(); }); }
 function htmlPreview(title, html, word) { var paper = '<style>@media screen{html{background:#DFE4EA}body{width:794px;min-height:1123px;margin:12px auto!important;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);box-sizing:border-box;padding:42px 46px!important}}</style>';
