@@ -566,7 +566,7 @@ var Core = (function () {
         ex = { id: 'D' + now, status: 'In Office', companyId: '', holders: [], since: iso(now), expectedReturn: '', checkoutId: '', note: '', pending: '' };
         db.devices.push(ex);
       }
-      ['category', 'manufacturer', 'description', 'model', 'serial', 'accuracy', 'resolution', 'range', 'calDate', 'calDue', 'certNo', 'certUrl', 'remarks', 'calLab', 'parentId'].forEach(function (k) {
+      ['category', 'manufacturer', 'description', 'model', 'serial', 'accuracy', 'resolution', 'range', 'calDate', 'calDue', 'certNo', 'certUrl', 'remarks', 'calLab', 'parentId', 'sub', 'site'].forEach(function (k) {
         if (d[k] !== undefined) ex[k] = String(d[k] == null ? '' : d[k]).trim();
       });
       ex.certStatus = d.certStatus === 'none' ? 'none' : 'dated';

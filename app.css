@@ -323,3 +323,5 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .inc{margin:0;padding-left:18px;font-size:14px;line-height:1.6;color:var(--ink)}
 .row.part{margin-left:22px;border-left:3px solid var(--line)}
 .jobnums span.ok{background:var(--office-soft);border-color:transparent;color:var(--office);font-weight:700}
+.sethead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 4px 4px;font-weight:700;color:var(--navy);font-size:14px}
+.sethead small{color:var(--muted);font-weight:500}

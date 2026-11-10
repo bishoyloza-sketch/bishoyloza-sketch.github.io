@@ -182,7 +182,7 @@
   }
   function devTitle(d) { return d.description; }
   function partsOf(d) { return S.data.devices.filter(function (x) { return x.parentId === d.id && x.active !== false; }); }
-  function devSub(d) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
+  function devSub(d) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (d.sub ? d.sub + ' · ' : par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + (d.site ? '📍 ' + d.site + ' · ' : '') + [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
   function coName(id) { return id && !IDX.co[id] ? 'Removed company' : (IDX.co[id] || {}).name || '—'; }
   function names(list) { return (list || []).map(function (h) { return h.name; }).join(', '); }
   function can(what) {
@@ -509,7 +509,7 @@
   }
 
   /* ---------- Devices ---------- */
-  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service']];
+  var DEV_FILTERS = [['all', 'All'], ['office', 'In office'], ['out', 'Outside now'], ['client', 'At clients'], ['service', 'In service'], ['expired', 'Cal. expired'], ['oos', 'Out of service'], ['zaitoun', 'Zaitoun office']];
   /* ---------- Loggers & kits tab: each group with in / out and who has what ---------- */
   var KIT_TABS = [['Data Loggers', 'Loggers'], ['Validator Sensors', 'Validation'], ['Connections', 'Connections'], ['Tools & Accessories', 'Tools'], ['Consumables', 'Consumables']];
   function kitGroup() { return S.kgrp || 'Data Loggers'; }
@@ -643,6 +643,7 @@
       if (f === 'client' && d.status !== 'At Client') return false;
       if (f === 'service' && (Core.SERVICE.indexOf(d.status) < 0)) return false;
       if (f === 'oos' && d.status !== 'Out of Service') return false;
+      if (f === 'zaitoun' && d.site !== 'Zaitoun office') return false;
       if (f === 'expired' && cert(d).kind !== 'expired') return false;
       return matches(d, q);
     });
@@ -651,6 +652,7 @@
   function placeOf(d) {
     if (isReq(d)) return { k: 'request', title: 'In office · waiting approval', rank: 0.5 };
     if (d.pending) return { k: 'pending', title: 'Transfer waiting', rank: 2 };
+    if (d.status === 'In Office' && d.site) return { k: 'office:' + d.site, title: 'In ' + d.site, rank: 0.2 };
     if (d.status === 'In Office') return { k: 'office', title: 'In office', rank: 0 };
     if (d.status === 'At Client') return { k: 'co:' + d.companyId, title: coName(d.companyId), rank: 1 };
     if (d.status === 'Out of Service') return { k: 'oos', title: 'Out of service', rank: 6 };
@@ -1243,8 +1245,11 @@
         (d.calDate ? '<dt>Calibrated on</dt><dd>' + fmtDate(d.calDate) + '</dd>' : '') +
         (d.certNo ? '<dt>Certificate no.</dt><dd>' + esc(d.certNo) + '</dd>' : '') +
         (d.calLab ? '<dt>Calibrated at</dt><dd>' + esc(d.calLab) + '</dd>' : '') +
+        (d.sub ? '<dt>Sub category</dt><dd>' + esc(d.sub) + '</dd>' : '') +
+        '<dt>Kept at</dt><dd>' + esc(d.site || 'Main lab') + '</dd>' +
         (d.remarks ? '<dt>Remarks</dt><dd>' + esc(d.remarks) + '</dd>' : '') +
         '<dt>Type</dt><dd>' + esc(d.category) + '</dd></dl></div>' +
+        (d.sub && S.data.devices.some(function (x) { return x.id !== d.id && x.sub === d.sub && x.active !== false; }) ? '<div class="box"><h4>Same set · ' + esc(d.sub) + '</h4><div class="list" style="margin:0">' + S.data.devices.filter(function (x) { return x.id !== d.id && x.sub === d.sub && x.active !== false; }).map(function (x) { return devRow(x); }).join('') + '</div><div class="meta" style="margin-top:6px">Each one can go out on its own, or pick the whole set.</div></div>' : '') +
         (partsOf(d).length ? '<div class="box"><h4>Parts of this device</h4><div class="list" style="margin:0">' + partsOf(d).map(function (x) { return devRow(x); }).join('') + '</div><div class="meta" style="margin-top:6px">Each part can also go out on its own.</div></div>' : '') +
         (d.parentId && IDX.dev[d.parentId] ? '<div class="box"><h4>Part of</h4><div class="list" style="margin:0">' + devRow(IDX.dev[d.parentId]) + '</div></div>' : '') +
         '<div class="box"><h4>History</h4><ul class="tl" id="hist"><li><small>Loading…</small></li></ul></div>';
@@ -1351,9 +1356,7 @@
       var inGroup = grp === null ? null : groups.filter(function (g) { return g[0] === grp; })[0];
       var list = S.data.devices.filter(function (d) { return filterFn(d) && matches(d, q) && (q || !inGroup || inGroup[1].indexOf(d.category) >= 0); });
       list.sort(function (a, b) { return a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); });
-      (function () { var inL = {}, outL = []; list.forEach(function (d) { inL[d.id] = 1; });
-        list.forEach(function (d) { if (d.parentId && inL[d.parentId]) return; outL.push(d); list.forEach(function (c) { if (c.parentId === d.id) outL.push(c); }); });
-        list = outL; })();
+      list.sort(function (a, b) { return (a.sub ? 0 : 1) - (b.sub ? 0 : 1) || (a.sub || '').localeCompare(b.sub || '') || a.description.localeCompare(b.description) || a.serial.localeCompare(b.serial); });
       var picked = selected.map(function (id) { return IDX.dev[id]; }).filter(Boolean);
       var isStock = items && grp && grp.indexOf('stock:') === 0;
       var head = '<div class="selbar"><div class="search" style="margin-bottom:8px">' + ICON.search + '<input id="dq" type="search" placeholder="Search all: name or last digits of serial" value="' + esc(q) + '" autocomplete="off"></div>' +
@@ -1396,15 +1399,25 @@
         };
       } else {
         container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
-        (list.length ? '<div class="list">' + list.map(function (d) {
+        (list.length ? '<div class="list">' + list.map(function (d, i, arr) {
           var on = selected.indexOf(d.id) >= 0, c = cert(d);
-          return '<button class="row' + (on ? ' sel' : '') + (d.parentId ? ' part' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
+          var setHead = '';
+          if (d.sub && (i === 0 || arr[i - 1].sub !== d.sub)) {
+            var mates = arr.filter(function (x) { return x.sub === d.sub; }), allOn = mates.every(function (x) { return selected.indexOf(x.id) >= 0; });
+            setHead = '<div class="sethead"><span>' + esc(d.sub) + ' <small>· ' + mates.length + '</small></span>' + (mates.length > 1 ? '<button class="btn sm ghost" data-set="' + esc(d.sub) + '">' + (allOn ? 'Unselect set' : 'Select whole set') + '</button>' : '') + '</div>';
+          }
+          return setHead + '<button class="row' + (on ? ' sel' : '') + (d.sub ? ' part' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
             (c.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
         }).join('') + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
       }
       $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; onChange && onChange(); }; });
       $$('[data-back]', container).forEach(function (b) { b.onclick = function () { api.back(); }; });
       var inp = $('#dq', container); inp.oninput = function () { var was = !!q; q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} if (was !== !!q) onChange && onChange(); };
+      $$('[data-set]', container).forEach(function (b) { b.onclick = function () {
+        var sub = b.dataset.set, mates = list.filter(function (x) { return x.sub === sub; }).map(function (x) { return x.id; });
+        var allOn = mates.every(function (id) { return selected.indexOf(id) >= 0; });
+        mates.forEach(function (id) { var k = selected.indexOf(id); if (allOn && k >= 0) selected.splice(k, 1); if (!allOn && k < 0) selected.push(id); });
+        draw(); onChange && onChange(); }; });
       $$('[data-d]', container).forEach(function (b) { b.onclick = function () {
         var id = b.dataset.d, i = selected.indexOf(id), parts = S.data.devices.filter(function (x) { return x.parentId === id && x.active !== false && filterFn(x); }).map(function (x) { return x.id; });
         if (i >= 0) { selected.splice(i, 1); parts.forEach(function (p) { var k = selected.indexOf(p); if (k >= 0) selected.splice(k, 1); }); }
@@ -1862,13 +1875,14 @@
     });
   }
   function editDevice(d, after) {
-    var f = d ? JSON.parse(JSON.stringify(d)) : { category: '', manufacturer: '', description: '', model: '', serial: '', range: '', accuracy: '', resolution: '', calDate: '', calDue: '', certNo: '', certUrl: '', remarks: '', calLab: '', parentId: '', certStatus: 'dated' };
+    var f = d ? JSON.parse(JSON.stringify(d)) : { category: '', manufacturer: '', description: '', model: '', serial: '', range: '', accuracy: '', resolution: '', calDate: '', calDue: '', certNo: '', certUrl: '', remarks: '', calLab: '', parentId: '', sub: '', site: '', certStatus: 'dated' };
     openSheet(function (body, setFoot, setTitle) {
       setTitle(d ? 'Edit device' : 'Add a device');
       var fields = [['description', 'Name (e.g. Digital Tachometer)'], ['manufacturer', 'Manufacturer'], ['model', 'Model'], ['serial', 'Serial number'], ['category', 'Type (e.g. Temperature, Pressure)'], ['range', 'Range'], ['resolution', 'Resolution'], ['accuracy', 'Accuracy'], ['remarks', 'Remarks']];
       body.innerHTML = fields.map(function (x) { return '<label class="f"><span>' + x[1] + '</span><input class="inp" data-k="' + x[0] + '" value="' + esc(f[x[0]]) + '"></label>'; }).join('') +
-        '<label class="f"><span>Part of another device? (e.g. the matrix of a capture hood)</span><select class="inp" data-k="parentId"><option value="">— No, it is a main device —</option>' +
-          S.data.devices.filter(function (x) { return x.active !== false && !x.parentId && (!d || x.id !== d.id); }).sort(bySerial).map(function (x) { return '<option value="' + x.id + '"' + (f.parentId === x.id ? ' selected' : '') + '>' + esc(x.description + ' · ' + (x.manufacturer || '') + ' · S/N ' + x.serial) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="f"><span>Sub category (a set of devices that go together, e.g. Testo 445)</span><input class="inp" data-k="sub" list="sublist" value="' + esc(f.sub || '') + '"><datalist id="sublist">' +
+          S.data.devices.map(function (x) { return x.sub; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort().map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist></label>' +
+        '<label class="f"><span>Kept at</span><select class="inp" data-k="site">' + [['', 'Main lab'], ['Zaitoun office', 'Zaitoun office']].map(function (o) { return '<option value="' + o[0] + '"' + ((f.site || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
         '<div class="box" style="margin:4px 0 14px"><h4>Certificate</h4><div class="seg" style="margin-bottom:12px"><button data-cs="dated" class="' + (f.certStatus !== 'none' ? 'on' : '') + '">Has a calibration certificate</button><button data-cs="none" class="' + (f.certStatus === 'none' ? 'on' : '') + '">No certificate needed</button></div>' +
         '<label class="f"><span>Calibration date</span><input class="inp" type="date" data-k="calDate" value="' + esc(f.calDate) + '"></label>' +
         '<label class="f"><span>Calibration due date</span><input class="inp" type="date" data-k="calDue" value="' + esc(f.calDue) + '"></label>' +
@@ -2108,20 +2122,20 @@
     toast('Preparing Excel…');
     loadXlsx().then(function (X) {
       function where(d) { if (Core.isCoReq(d)) return 'Lab (waiting approval)'; if (d.pending) return 'Transfer waiting'; if (d.status === 'At Client') return coName(d.companyId); if (d.status === 'In Office') return 'Lab'; return d.note || ''; }
-      var head = ['#', 'Location group', 'Category', 'Device', 'Manufacturer', 'Model', 'Serial no.', 'Status', 'Where', 'With', 'Since', 'Expected back', 'Cal. due', 'Certificate', 'Calibrated?', 'Last cal.', 'Calibrated at', 'Resolution', 'Accuracy', 'Range'];
+      var head = ['#', 'Location group', 'Category', 'Sub category', 'Kept at', 'Device', 'Manufacturer', 'Model', 'Serial no.', 'Status', 'Where', 'With', 'Since', 'Expected back', 'Cal. due', 'Certificate', 'Calibrated?', 'Last cal.', 'Calibrated at', 'Resolution', 'Accuracy', 'Range'];
       var rows = [], n = 0, ordered = [];
       if (S.sort === 'place') { var G = groupByPlace(list); G.keys.forEach(function (k) { G.groups[k].forEach(function (d) { ordered.push([G.meta[k].title, d]); }); }); }
-      else list.slice().sort(function (a, b) { return a.category.localeCompare(b.category) || bySerial(a, b); }).forEach(function (d) { ordered.push([d.category, d]); });
+      else list.slice().sort(function (a, b) { return (a.site || '').localeCompare(b.site || '') || a.category.localeCompare(b.category) || (a.sub || '~').localeCompare(b.sub || '~') || bySerial(a, b); }).forEach(function (d) { ordered.push([d.category, d]); });
       ordered.forEach(function (x) {
         var d = x[1]; n++;
-        rows.push([n, x[0], d.category, d.description, d.manufacturer || '', d.model && d.model !== 'N/A' ? d.model : '', d.serial, d.pending ? (Core.isCoReq(d) ? 'Requested' : 'Transfer') : d.status,
+        rows.push([n, x[0], d.category, d.sub || '', d.site || 'Main lab', d.description, d.manufacturer || '', d.model && d.model !== 'N/A' ? d.model : '', d.serial, d.pending ? (Core.isCoReq(d) ? 'Requested' : 'Transfer') : d.status,
           where(d), names(d.holders), d.status === 'In Office' || !d.since ? '' : fmtDate(d.since), d.expectedReturn ? fmtDate(d.expectedReturn) : '',
           d.certStatus === 'none' ? 'Not required' : (d.calDue ? fmtDate(d.calDue) : ''), d.certUrl || '', d.certStatus === 'none' ? 'No' : 'Yes', d.calDate ? fmtDate(d.calDate) : '', d.calLab || '', d.resolution || '', d.accuracy || '', d.range || '']);
       });
       var wb = X.utils.book_new();
       var ws = X.utils.aoa_to_sheet([['Akhnaton Lab Devices — ' + title + ' — as of ' + fmtDate(now) + ' ' + fmtTime(now)], [], head].concat(rows));
-      ws['!cols'] = [4, 22, 18, 34, 18, 16, 22, 14, 30, 26, 12, 13, 12, 30, 11, 12, 14, 12, 14, 20].map(function (w) { return { wch: w }; });
-      ws['!autofilter'] = { ref: 'A3:T' + (rows.length + 3) };
+      ws['!cols'] = [4, 20, 18, 24, 14, 34, 18, 16, 22, 14, 30, 26, 12, 13, 12, 30, 11, 12, 14, 12, 14, 20].map(function (w) { return { wch: w }; });
+      ws['!autofilter'] = { ref: 'A3:V' + (rows.length + 3) };
       X.utils.book_append_sheet(wb, ws, 'Devices');
       var hs = holdings().filter(function (h) { return +h.qty > 0; });
       var krows = stockList().map(function (st) { return [st.group, st.name, st.note || '', st.total === '' ? '' : +st.total, stockOut(st.id), stockFree(st) == null ? '' : stockFree(st)]; });
