@@ -343,3 +343,16 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .setbody .row{padding-left:26px;border-left:4px solid var(--blue-soft)}
 .setbody .row:last-child{border-bottom:0}
 .sethd .setall{flex:none}
+/* full names, no "…" */
+.row .t b,.row .t small,.setbtn .t b,.setbtn .t small{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.rng{display:inline-block;font-weight:700;font-size:13px;color:var(--blue);background:var(--blue-soft);border-radius:6px;padding:1px 7px;margin-left:4px;white-space:nowrap;vertical-align:1px}
+.devcats{margin-top:6px}
+.devcats button{min-height:96px}
+.cmini{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.cmini em{font-style:normal;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px}
+.cmini em.in{background:var(--office-soft);color:var(--office)}
+.cmini em.out{background:var(--client-soft);color:var(--client)}
+.cmini em.bad{background:var(--danger-soft);color:var(--danger)}
+.hero h3 .rng{font-size:14px}
+.sortbar{flex-wrap:wrap;row-gap:8px}
+.sortbar .sortseg{margin-left:auto}
