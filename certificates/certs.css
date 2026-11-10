@@ -653,3 +653,10 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 .paper.wl .rt.bt th{height:40px}.paper.wl .rt.bt th .fob{display:inline-flex;margin-top:2px}
 .paper.wl .rt.bt .fo,.paper.wl .rt.bt .fx{width:24px;height:24px;font-size:12px}
 .paper.wl .rt.bt th:first-child,.paper.wl .rt.bt tr>th{text-align:center}
+@media (max-width:700px){
+ .paper.wl .kvt.wd,.paper.wl .kvt.wd tbody{display:block;width:100%}
+ .paper.wl .kvt.wd tr{display:grid!important;grid-template-columns:38% 62%}
+ .paper.wl .kvt.wd th,.paper.wl .kvt.wd td{width:auto!important;max-width:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;display:block}
+ .paper.wl .kvt.wd td{min-width:0}
+ .wlg{font-size:10px}.wlg th,.wlg td{padding:3px 2px;word-break:break-word}
+}
