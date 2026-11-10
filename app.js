@@ -49,7 +49,15 @@
     me: null, session: LS.get('session', null), data: null, lastSync: 0, online: true,
     view: 'home', filter: 'all', q: '', sort: LS.get('sort2', 'type'), devGrp: null, dv: LS.get('dv', 'tiles'), hv: LS.get('hv', 'list'), jv: LS.get('jv', 'list'), people: LS.get('people', null)
   };
+  var loadN = 0;
+  function loading(on) {
+    loadN = Math.max(0, loadN + (on ? 1 : -1));
+    var el = document.getElementById('loadov');
+    if (!el) { el = document.createElement('div'); el.id = 'loadov'; el.setAttribute('role', 'status'); el.innerHTML = '<div class="lbox"><div class="lball"></div><span>Working…</span></div>'; document.body.appendChild(el); }
+    el.classList.toggle('on', loadN > 0);
+  }
   function req(action, payload) {
+    if (action !== 'state') { loading(true); var pr = Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); pr.then(function () { loading(false); }, function () { loading(false); }); return pr; }
     return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} });
   }
   function refresh(silent) {
@@ -178,7 +186,9 @@
   }
   function tag(d, size) {
     var s = stOf(d);
-    return '<span class="tag' + (size ? ' ' + size : '') + '" style="--c:' + s.c + '" aria-label="Serial ending ' + esc(d.serialTail) + '"><i></i><span>' + esc(d.serialTail) + '</span></span>';
+    var br = [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ');
+    var t = '<span class="tag' + (size ? ' ' + size : '') + '" style="--c:' + s.c + '" aria-label="Serial ending ' + esc(d.serialTail) + '"><i></i><span>' + esc(d.serialTail) + '</span></span>';
+    return size === 'xl' || !br ? t : '<span class="tagw' + (size ? ' ' + size : '') + '">' + t + '<small class="tb">' + esc(br) + '</small></span>';
   }
   function devTitle(d) { return d.description; }
   function devName(d) { return esc(d.description) + (d.range && !/^(n\/?a|-+|—|none)$/i.test(String(d.range).trim()) ? ' <span class="rng">' + esc(d.range) + '</span>' : ''); }
@@ -189,7 +199,7 @@
     return Object.keys(c).sort(function (a, b) { return c[b] - c[a] || a.localeCompare(b); })[0] || d.category;
   }
   function partsOf(d) { return S.data.devices.filter(function (x) { return x.parentId === d.id && x.active !== false; }); }
-  function devSub(d, inSet) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (d.sub && !inSet ? d.sub + ' · ' : par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + (d.site ? '📍 ' + d.site + ' · ' : '') + [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
+  function devSub(d, inSet) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (d.sub && !inSet ? d.sub + ' · ' : par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + (d.site ? '📍 ' + d.site + ' · ' : '') + 'S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
   function coName(id) { return id && !IDX.co[id] ? 'Removed company' : (IDX.co[id] || {}).name || '—'; }
   function names(list) { return (list || []).map(function (h) { return h.name; }).join(', '); }
   function can(what) {
@@ -583,7 +593,16 @@
     });
     return out;
   }
+  /* devices kept outside the main lab (e.g. Zaitoun office): folded away at the bottom */
+  function awayFold(list, rowFn, key) {
+    if (!list.length) return '';
+    var sites = {}; list.forEach(function (d) { sites[d.site] = 1; });
+    var open = !!OPEN_SETS['away|' + key];
+    return '<div class="awayf' + (open ? ' open' : '') + '"><button class="awayb" data-awayt="' + esc(key) + '"><span>📍 Kept in ' + esc(Object.keys(sites).join(', ')) + '</span><span class="tcnt">' + list.length + '</span><span class="chev">›</span></button>' +
+      '<div class="awayl">' + rowFn(list) + '</div></div>';
+  }
   function wireSets(root) {
+    $$('[data-awayt]', root).forEach(function (b) { b.onclick = function () { var k = 'away|' + b.dataset.awayt, box = b.closest('.awayf'), o = !box.classList.contains('open'); OPEN_SETS[k] = o; box.classList.toggle('open', o); }; });
     $$('[data-tset]', root).forEach(function (b) { b.onclick = function () {
       var k = b.dataset.tset, box = b.closest('.set'), open = !box.classList.contains('open');
       OPEN_SETS[k] = open; box.classList.toggle('open', open); b.setAttribute('aria-expanded', open);
@@ -781,7 +800,9 @@
   }
   function viewDevices() {
     var f = S.filter, q = S.q;
-    var list = filteredDevices();
+    var list = filteredDevices(), away = [];
+    if (S.filter !== 'zaitoun' && !q) { away = list.filter(function (d) { return d.site; }); list = list.filter(function (d) { return !d.site; }); }
+    var awayHtml = awayFold(away, function (l) { return '<div class="list">' + l.map(function (d) { return devRow(d); }).join('') + '</div>'; }, 'dev');
     var byPlace = S.sort === 'place';
     var fl = DEV_FILTERS;
     var h = header('Devices') + '</header><main>' +
@@ -820,7 +841,7 @@
           return '<button data-dgrp="' + esc(g[0]) + '"><span class="tcnt">' + all.length + '</span><b>' + esc(g[0]) + '</b>' +
             '<span class="cmini"><em class="in">' + inN + ' in</em>' + (out ? '<em class="out">' + out + ' out</em>' : '') + (warn ? '<em class="bad">' + warn + ' expired</em>' : '') + '</span></button>';
         }).join('') + '</div>';
-        return h + '<div style="height:24px"></div></main>';
+        return h + awayHtml + '<div style="height:24px"></div></main>';
       }
       if (dv === 'tiles' && !q) { list = list.filter(function (d) { return grpOf(d) === S.devGrp; }); h += '<button class="backcat" data-dgrpback>‹ Categories <span>' + esc(S.devGrp) + '</span></button>'; }
       if (!list.length) h += '<div class="empty"><b>No devices here with this filter.</b></div>';
@@ -834,7 +855,7 @@
                  : '<div class="list">' + setGroups(byCat[cat], function (d, inSet) { return devRow(d, false, inSet); }, { scope: 't:' + cat, forceOpen: !!q }) + '</div>');
       });
     }
-    return h + '<div style="height:24px"></div></main>';
+    return h + awayHtml + '<div style="height:24px"></div></main>';
   }
 
   /* ---------- Jobs: one per client visit, every request inside it; data-sheet follow-up ---------- */
@@ -927,7 +948,7 @@
         return '<button class="htile' + (jv === 'grid' ? ' wide' : '') + (cl ? ' closed' : '') + '" data-job="' + j.id + '"><span class="tcnt">' + k.rs.length + '</span><b>' + esc(coName(j.companyId)) + '</b>' +
           '<small><b>' + esc(j.id) + '</b>' + (j.basis ? ' · ' + esc(jobBasis(j)) : '') + '</small>' +
           (jv === 'grid' && j.title ? '<small>' + esc(j.title) + '</small>' : '') +
-          (team.length ? '<small>Team: ' + esc(team.join(', ')) + '</small>' : '') +
+          (team.length ? '<small>Team: ' + esc(team.join(', ')) + '</small>' : '') + (j.contactPhone ? '<small>📞 ' + esc(j.contactName || '') + ' ' + esc(j.contactPhone) + '</small>' : '') +
           '<span class="cmini">' + (cl ? '<em>Closed</em>' : '<em class="in">Open</em>') + (k.out ? '<em class="out">' + k.out + ' out</em>' : '') + (k.dsMissing ? '<em class="bad">' + k.dsMissing + ' DS missing</em>' : '') + (k.pending ? '<em>' + k.pending + ' waiting</em>' : '') + '</span></button>';
       }).join('') + '</div>';
       list = [];
@@ -938,6 +959,7 @@
         '<div class="meta"><b>' + esc(j.id) + '</b>' + (j.title ? ' · ' + esc(j.title) : '') + '</div>' +
         (j.basis ? '<div class="meta"><span class="jbadge">' + esc(jobBasis(j)) + '</span></div>' : '') +
         '<div class="meta">Opened by ' + esc(j.byName) + ' · ' + esc(when(j.ts)) + (j.status === 'Closed' ? ' · <b class="jclosed">Closed ' + esc(fmtDate(j.closedTs)) + '</b>' : '') + '</div>' +
+        (j.contactName || j.contactPhone ? '<div class="meta">Contact: <b>' + esc(j.contactName || '') + '</b>' + (j.contactPhone ? ' · <a class="tel" href="tel:' + esc(j.contactPhone) + '">📞 ' + esc(j.contactPhone) + '</a>' : '') + '</div>' : '') +
         (jobTeam(j).length ? '<div class="meta">Team: <b>' + esc(jobTeam(j).join(', ')) + '</b> · ' + jobReceipts(j).reduce(function (n, c) { return n + (c.deviceIds || []).length; }, 0) + ' devices</div>' : '') + '</div>' +
         '<span class="cnt">' + k.rs.length + ' req.</span></div>' +
         '<div class="jobnums"><span' + (k.out ? ' class="o"' : '') + '><b>' + k.out + '</b> still out</span><span' + (k.dsMissing ? ' class="r"' : '') + '><b>' + k.dsMissing + '</b> data sheet' + (k.dsMissing === 1 ? '' : 's') + ' missing</span>' + (k.pending ? '<span class="p"><b>' + k.pending + '</b> waiting</span>' : '') + (j.status !== 'Closed' && k.rs.length && !k.out && !k.pending ? '<span class="ok">✓ All back' + (can('job') ? ' — ready to close' : '') + '</span>' : '') + '</div>' +
@@ -983,7 +1005,7 @@
       function draw() {
       var k = jobStats(j);
       var h = '<div class="hero" style="padding-bottom:6px"><h3>' + esc(coName(j.companyId)) + '</h3><div class="sub">' + esc(j.title || 'Job') + ' · ' + (j.status === 'Closed' ? 'Closed ' + esc(fmtDate(j.closedTs)) : 'Open') + '</div></div>' +
-        '<div class="box" style="margin-top:0"><dl class="kv">' + (j.basis ? '<dt>Under</dt><dd>' + esc(jobBasis(j)) + '</dd>' : '') + '<dt>Opened by</dt><dd>' + esc(j.byName) + ' · ' + esc(fmtDate(j.ts)) + '</dd>' + (j.note ? '<dt>Note</dt><dd>' + esc(j.note) + '</dd>' : '') +
+        '<div class="box" style="margin-top:0"><dl class="kv">' + (j.basis ? '<dt>Under</dt><dd>' + esc(jobBasis(j)) + '</dd>' : '') + '<dt>Opened by</dt><dd>' + esc(j.byName) + ' · ' + esc(fmtDate(j.ts)) + '</dd>' + (j.contactName || j.contactPhone ? '<dt>Contact</dt><dd>' + esc(j.contactName || '') + (j.contactPhone ? ' · <a class="tel" href="tel:' + esc(j.contactPhone) + '">📞 ' + esc(j.contactPhone) + '</a>' : '') + '</dd>' : '') + (j.note ? '<dt>Note</dt><dd>' + esc(j.note) + '</dd>' : '') +
         '<dt>Requests</dt><dd>' + k.rs.length + '</dd><dt>Still outside</dt><dd>' + k.out + '</dd><dt>Data sheets missing</dt><dd>' + k.dsMissing + '</dd></dl></div>';
       if (!k.rs.length) h += '<div class="empty"><b>No requests in this job yet.</b></div>';
       k.rs.slice().reverse().forEach(function (c) {
@@ -1017,7 +1039,7 @@
       .catch(function (e) { toast(e.message, true); }).then(function (r) { busy(false); return r; });
   }
   function editJob(j, onCreated) {
-    var f = j ? { id: j.id, companyId: j.companyId, title: j.title || '', note: j.note || '', basis: j.basis || '', ref: j.ref || '' } : { companyId: '', title: '', note: '', basis: '', ref: '' };
+    var f = j ? { id: j.id, companyId: j.companyId, title: j.title || '', note: j.note || '', basis: j.basis || '', ref: j.ref || '', contactName: j.contactName || '', contactPhone: j.contactPhone || '' } : { companyId: '', title: '', note: '', basis: '', ref: '', contactName: '', contactPhone: '' };
     openSheet(function (body, setFoot, setTitle) {
       setTitle(j ? 'Edit job' : 'Open a new job', j ? j.id : '');
       function refLabel() { var b = BASIS.filter(function (x) { return x[0] === f.basis; })[0]; return b ? b[2] : ''; }
@@ -1025,9 +1047,20 @@
         '<label class="f" id="jrefw" style="margin:12px 0 0;' + (f.basis ? '' : 'display:none') + '"><span id="jrefl">' + esc(refLabel()) + '</span><input class="inp" id="jref" value="' + esc(f.ref) + '"></label></div>' +
         '<label class="f"><span>What is the job? (e.g. Thermal mapping – stores)</span><input class="inp" id="jt" value="' + esc(f.title) + '"></label>' +
         '<label class="f"><span>Note (optional)</span><input class="inp" id="jn" value="' + esc(f.note) + '"></label>' +
+        '<div class="box"><h4>Contact person at the client</h4>' + (('contacts' in navigator && 'ContactsManager' in window) ? '<button class="btn sm blue" data-pickc style="margin-bottom:10px">📇 Pick from phone contacts</button>' : '') +
+        '<div class="jfgrid"><label class="f"><span>Name</span><input class="inp" id="jcn" value="' + esc(f.contactName) + '" autocomplete="name"></label><label class="f"><span>Phone</span><input class="inp" id="jcp" type="tel" inputmode="tel" value="' + esc(f.contactPhone) + '" autocomplete="tel"></label></div></div>' +
         '<div class="sec" style="margin-top:4px"><h2>Company</h2></div><div id="jc"></div>';
       $('#jt', body).oninput = function (e) { f.title = e.target.value; };
       $('#jn', body).oninput = function (e) { f.note = e.target.value; };
+      $('#jcn', body).oninput = function (e) { f.contactName = e.target.value; };
+      $('#jcp', body).oninput = function (e) { f.contactPhone = e.target.value; };
+      var pc = $('[data-pickc]', body); if (pc) pc.onclick = function () {
+        navigator.contacts.select(['name', 'tel'], { multiple: false }).then(function (r) {
+          var c = r && r[0]; if (!c) return;
+          f.contactName = (c.name && c.name[0]) || f.contactName; f.contactPhone = ((c.tel && c.tel[0]) || f.contactPhone || '').replace(/[^\d+]/g, '');
+          $('#jcn', body).value = f.contactName; $('#jcp', body).value = f.contactPhone;
+        }).catch(function () { toast('Could not open the contacts', true); });
+      };
       $('#jref', body).oninput = function (e) { f.ref = e.target.value; foot(); };
       $$('[data-jbasis]', body).forEach(function (b) { b.onclick = function () { f.basis = b.dataset.jbasis; $$('[data-jbasis]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); $('#jrefw', body).style.display = ''; $('#jrefl', body).textContent = refLabel(); foot(); }; });
       companyPicker($('#jc', body), f.companyId, function (id) { f.companyId = id; foot(); });
@@ -1304,6 +1337,7 @@
     $$('[data-vs]').forEach(function (b) { b.onclick = function () { S[b.dataset.vs] = b.dataset.v; LS.set(b.dataset.vs, b.dataset.v); S._keepScroll = true; render(); }; });
     $$('[data-goco]').forEach(function (b) { b.onclick = function () { S.filter = 'client'; S.q = ''; S.sort = 'place'; location.hash = '#devices'; }; });
     $$('[data-job]').forEach(function (b) { b.onclick = function () { openJob(b.dataset.job); }; });
+    $$('a.tel').forEach(function (a) { a.onclick = function (e) { e.stopPropagation(); }; });
     $$('[data-jobreq]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); checkoutFlow(null, b.dataset.jobreq); }; });
     $$('[data-newjob]').forEach(function (b) { b.onclick = function () { editJob(null); }; });
     $$('[data-jf]').forEach(function (b) { b.onclick = function () { S.jf = b.dataset.jf; render(); }; });
@@ -1386,7 +1420,7 @@
     req('transferDecide', { transferId: id, accept: ok }).then(function () { toast(ok ? 'Transfer confirmed' : 'Transfer declined'); return refresh(true); })
       .catch(function (e) { toast(e.message, true); }).then(function () { busy(false); });
   }
-  function busy(on) { document.body.style.pointerEvents = on ? 'none' : ''; document.body.style.opacity = on ? '.85' : ''; }
+  function busy(on) { document.body.style.pointerEvents = on ? 'none' : ''; loading(!!on); }
 
   /* ================= sheets ================= */
   var sheetStack = [];
@@ -1586,7 +1620,7 @@
           var free = all.filter(filterFn).length;
           var chosen = all.filter(function (d) { return selected.indexOf(d.id) >= 0; }).length;
           return '<button data-grp="' + esc(g[0]) + '"' + (free ? '' : ' class="none"') + '><b>' + esc(g[0]) + '</b><small>' + free + ' available' + (all.length !== free ? ' of ' + all.length : '') + '</small>' + (chosen ? '<i>' + chosen + ' picked</i>' : '') + '</button>';
-        }).join('') + (items ? Core.STOCK_GROUPS.map(function (g) {
+        }).join('') + (items ? Core.STOCK_GROUPS.filter(function (g) { return g !== 'Connections'; }).map(function (g) {
           var sts = stockList().filter(function (x) { return x.group === g; });
           var n = items.filter(function (it) { return it.group === g; }).reduce(function (a, it) { return a + it.qty; }, 0);
           return '<button data-grp="stock:' + esc(g) + '" class="qtile"><b>' + esc(g) + '</b><small>' + sts.length + ' type' + (sts.length === 1 ? '' : 's') + (g === 'Consumables' ? ' · used up' : ' · by quantity') + '</small>' + (n ? '<i>' + n + ' picked</i>' : '') + '</button>';
@@ -1614,14 +1648,31 @@
           items.push({ stockId: '', name: n, group: g, qty: k }); draw(); onChange && onChange();
         };
       } else {
-        container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
-        (list.length ? '<div class="list">' + setGroups(list, function (d, inSet) {
+        var pickRow = function (d, inSet) {
           var on = selected.indexOf(d.id) >= 0, c = cert(d);
           return '<button class="row' + (on ? ' sel' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + devName(d) + '</b><small>' + esc(devSub(d, inSet)) + '</small>' +
             (c.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
-        }, { scope: 'pick', forceOpen: !!q,
+        };
+        var away = q ? [] : list.filter(function (d) { return d.site; }), main = q ? list : list.filter(function (d) { return !d.site; });
+        var connQr = null;
+        if (items && grp === 'Pressure' && !q) {
+          connQr = qtyRows(stockList().filter(function (x) { return x.group === 'Connections'; }).map(function (st) {
+            var free = stockFree(st), cur = items.filter(function (it) { return it.stockId === st.id; })[0];
+            return { key: st.id, name: st.name, sub: (st.contents ? st.contents + ' · ' : '') + (free == null ? 'Count not set' : free + ' in the lab'), max: free, qty: cur ? cur.qty : 0 };
+          }), function (k, v) {
+            var st = stockList().filter(function (x) { return x.id === k; })[0], i;
+            for (i = items.length - 1; i >= 0; i--) if (items[i].stockId === k) items.splice(i, 1);
+            if (v > 0) items.push({ stockId: k, name: st.name, group: st.group, qty: v });
+            draw(); onChange && onChange();
+          });
+        }
+        container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
+        (main.length ? '<div class="list">' + setGroups(main, pickRow, { scope: 'pick', forceOpen: !!q,
           info: function (m) { var n = m.filter(function (x) { return selected.indexOf(x.id) >= 0; }).length; return n ? n + ' picked' : 'tap to see the parts'; },
-          extra: function (m, sub) { var allOn = m.every(function (x) { return selected.indexOf(x.id) >= 0; }); return '<button class="btn sm ' + (allOn ? 'ghost' : 'blue') + ' setall" data-set="' + esc(sub) + '">' + (allOn ? 'Unselect all' : 'Select all') + '</button>'; } }) + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
+          extra: function (m, sub) { var allOn = m.every(function (x) { return selected.indexOf(x.id) >= 0; }); return '<button class="btn sm ' + (allOn ? 'ghost' : 'blue') + ' setall" data-set="' + esc(sub) + '">' + (allOn ? 'Unselect all' : 'Select all') + '</button>'; } }) + '</div>' : (away.length ? '' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>')) +
+        awayFold(away, function (l) { return '<div class="list">' + l.map(function (d) { return pickRow(d); }).join('') + '</div>'; }, 'pick') +
+        (connQr ? '<div class="sec"><h2>Pressure connections &amp; kits</h2><small>by quantity</small></div>' + connQr.html : '');
+        if (connQr) connQr.wire(container);
       }
       $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; onChange && onChange(); }; });
       $$('[data-back]', container).forEach(function (b) { b.onclick = function () { api.back(); }; });
@@ -1691,7 +1742,7 @@
           body.innerHTML =
             (expired.length ? '<div class="note warnbox"><b>' + expired.length + ' device' + (expired.length > 1 ? 's have' : ' has') + ' an expired calibration:</b> ' + expired.map(function (d) { return esc(d.description) + ' …' + esc(d.serialTail); }).join(', ') + '. You can still check out.</div>' : '') +
             (notIn.length ? '<div class="note warnbox">' + notIn.map(function (d) { return esc(d.description) + ' …' + esc(d.serialTail); }).join(', ') + ' is not marked in the office. Checking out will move it here.</div>' : '') +
-            '<div class="box" style="margin-top:0"><h4>Going to</h4><div class="where">' + esc(coName(st.companyId)) + '</div><div class="meta">Job <b>' + esc(st.jobId) + '</b>' + (jb && jb.title ? ' · ' + esc(jb.title) : '') + '</div><div class="meta">With <b>' + esc(st.engineers.map(function (id) { return IDX.user[id].name; }).join(', ')) + '</b></div></div>' +
+            '<div class="box" style="margin-top:0"><h4>Going to</h4><div class="where">' + esc(coName(st.companyId)) + '</div>' + (jb && (jb.contactName || jb.contactPhone) ? '<div class="meta">Contact: <b>' + esc(jb.contactName || '') + '</b>' + (jb.contactPhone ? ' · <a class="tel" href="tel:' + esc(jb.contactPhone) + '">📞 ' + esc(jb.contactPhone) + '</a>' : '') + '</div>' : '') + '<div class="meta">Job <b>' + esc(st.jobId) + '</b>' + (jb && jb.title ? ' · ' + esc(jb.title) : '') + '</div><div class="meta">With <b>' + esc(st.engineers.map(function (id) { return IDX.user[id].name; }).join(', ')) + '</b></div></div>' +
             (devs.length ? '<div class="box"><h4>' + devs.length + ' device' + (devs.length > 1 ? 's' : '') + '</h4><div class="chips" style="margin-top:0">' + devs.map(function (d) { return '<span class="dchip">' + tag(d, 'sm') + '<em>' + esc(d.description) + '</em></span>'; }).join('') + '</div>' +
               (portions.length ? '<div class="meta" style="margin-top:8px">💧 ' + portions.length + ' buffer' + (portions.length > 1 ? 's' : '') + ' — only a portion goes out, the bottle stays in the lab.</div>' : '') + '</div>' : '') +
             (st.items.length ? '<div class="box"><h4>Loggers, sensors &amp; kits</h4><div class="chips" style="margin-top:0">' + itemChips(st.items) + '</div></div>' : '') +

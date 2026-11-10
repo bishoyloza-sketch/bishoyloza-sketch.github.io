@@ -412,3 +412,23 @@ button.ks.out{border-color:var(--client);background:var(--client-soft)}
 .jsx{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:var(--bg);color:var(--muted);width:24px;height:24px;border-radius:50%;font-size:12px}
 .jsq{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .jsq .fbtn{padding:5px 11px;font-size:13px}
+/* brand + model under the device code */
+.tagw{display:inline-flex;flex-direction:column;align-items:center;gap:3px;flex:none;max-width:96px}
+.tagw .tb{font-size:10.5px;line-height:1.15;color:var(--muted);font-weight:600;text-align:center;text-transform:uppercase;letter-spacing:.2px;overflow-wrap:anywhere;max-width:96px}
+.tagw.sm{max-width:74px}.tagw.sm .tb{font-size:9px;max-width:74px}
+.dchip .tagw{flex-direction:row;gap:5px;max-width:none}.dchip .tagw .tb{text-align:left;max-width:90px}
+/* loading ball */
+#loadov{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(19,41,75,.18);pointer-events:all}
+#loadov.on{display:flex}
+#loadov .lbox{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--surface);border-radius:18px;padding:20px 26px;box-shadow:0 10px 30px rgba(19,41,75,.25);font-weight:600;color:var(--navy)}
+#loadov .lball{width:44px;height:44px;border-radius:50%;border:5px solid var(--blue-soft);border-top-color:var(--blue);animation:lspin .8s linear infinite}
+@keyframes lspin{to{transform:rotate(360deg)}}
+/* kept elsewhere fold */
+.awayf{margin-top:18px;border:1.5px dashed var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.awayb{width:100%;display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:13px 14px;font:inherit;font-weight:600;color:var(--muted);text-align:left}
+.awayb span:first-child{flex:1}
+.awayb .tcnt{position:static;background:var(--muted)}
+.awayf.open .chev{transform:rotate(90deg)}
+.awayl{display:none;padding:0 10px 10px}
+.awayf.open .awayl{display:block}
+a.tel{color:var(--blue);font-weight:700;text-decoration:none;white-space:nowrap}

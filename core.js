@@ -320,6 +320,8 @@ var Core = (function () {
       }
       if (j.title !== undefined) ex.title = String(j.title || '').trim();
       if (j.note !== undefined) ex.note = String(j.note || '').trim();
+      if (j.contactName !== undefined) ex.contactName = String(j.contactName || '').trim().slice(0, 80);
+      if (j.contactPhone !== undefined) ex.contactPhone = String(j.contactPhone || '').replace(/[^\d+ ]/g, '').trim().slice(0, 30);
       if (j.status === 'Closed' && ex.status !== 'Closed') { ex.status = 'Closed'; ex.closedTs = iso(now); }
       if (j.status === 'Open') { ex.status = 'Open'; ex.closedTs = ''; }
       touch(db, 'jobs');
