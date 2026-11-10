@@ -47,7 +47,7 @@
   /* ================= state ================= */
   var S = {
     me: null, session: LS.get('session', null), data: null, lastSync: 0, online: true,
-    view: 'home', filter: 'all', q: '', sort: LS.get('sort2', 'type'), devGrp: null, dv: LS.get('dv', 'tiles'), people: LS.get('people', null)
+    view: 'home', filter: 'all', q: '', sort: LS.get('sort2', 'type'), devGrp: null, dv: LS.get('dv', 'tiles'), hv: LS.get('hv', 'list'), jv: LS.get('jv', 'list'), people: LS.get('people', null)
   };
   function req(action, payload) {
     return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} });
@@ -181,7 +181,7 @@
     return '<span class="tag' + (size ? ' ' + size : '') + '" style="--c:' + s.c + '" aria-label="Serial ending ' + esc(d.serialTail) + '"><i></i><span>' + esc(d.serialTail) + '</span></span>';
   }
   function devTitle(d) { return d.description; }
-  function devName(d) { return esc(d.description) + (d.range ? ' <span class="rng">' + esc(d.range) + '</span>' : ''); }
+  function devName(d) { return esc(d.description) + (d.range && !/^(n\/?a|-+|—|none)$/i.test(String(d.range).trim()) ? ' <span class="rng">' + esc(d.range) + '</span>' : ''); }
   /* a set shows under one category even if its parts were filed under different ones */
   function setCat(d) {
     if (!d.sub) return d.category;
@@ -404,6 +404,23 @@
   function isOut(c) { return !c.status || c.status === 'Approved'; }
 
   /* ---------- Today ---------- */
+  /* the same three looks everywhere: Tiles / Grid (cards) / Details (full) */
+  function viewSwitch(key, cur, labels) {
+    return '<div class="viewbar" role="radiogroup">' + (labels || [['tiles', '▦', 'Tiles'], ['grid', '⊞', 'Grid'], ['list', '☰', 'Details']]).map(function (v) {
+      return '<button data-vs="' + key + '" data-v="' + v[0] + '" class="' + (cur === v[0] ? 'on' : '') + '" role="radio" aria-checked="' + (cur === v[0]) + '"><i>' + v[1] + '</i>' + v[2] + '</button>'; }).join('') + '</div>';
+  }
+  function siteInfo(coId, devs) {
+    var engs = {}, since = null, exp = '', hs = holdingsAt(coId), n = devs.length;
+    hs.forEach(function (h) { n += +h.qty || 0; (h.holders || []).forEach(function (p) { engs[p.name] = 1; }); if (!since || h.since < since) since = h.since; });
+    devs.forEach(function (d) { (d.holders || []).forEach(function (p) { engs[p.name] = 1; }); if (!since || d.since < since) since = d.since; if (d.expectedReturn && (!exp || d.expectedReturn < exp)) exp = d.expectedReturn; });
+    return { n: n, people: Object.keys(engs), since: since, exp: exp, late: exp && daysUntil(exp) < 0 };
+  }
+  function siteTile(coId, devs, wide) {
+    var I = siteInfo(coId, devs);
+    return '<button class="htile' + (wide ? ' wide' : '') + (I.late ? ' late' : '') + '" data-goco="' + esc(coId) + '"><span class="tcnt">' + I.n + '</span><b>' + esc(coName(coId)) + '</b>' +
+      '<small>With ' + esc(I.people.join(', ') || '—') + '</small><small>Since ' + esc(when(I.since)) + '</small>' +
+      (I.exp ? '<small class="' + (I.late ? 'lt' : '') + '">' + (I.late ? 'Overdue · was ' : 'Back ') + fmtDate(I.exp) + '</small>' : '') + '</button>';
+  }
   function viewHome() {
     var c = counts(), tot = S.data.devices.length || 1;
     var first = (S.me.name || '').split(' ')[0];
@@ -472,7 +489,10 @@
     var keys = Object.keys(groups).sort(function (a, b) { return groups[b].length - groups[a].length || coName(a).localeCompare(coName(b)); });
     h += '<div class="sec"><h2>At clients today</h2><small>' + keys.length + ' compan' + (keys.length === 1 ? 'y' : 'ies') + '</small></div>';
     if (!keys.length) h += '<div class="empty"><b>Every device is home.</b>' + (can('keep') ? 'Tap “Check out” when a team leaves with devices.' : 'Nothing is out at a client right now.') + '</div>';
-    keys.forEach(function (k) { h += siteCard(k, groups[k]); });
+    var hv = S.hv || 'list';
+    if (keys.length) h += viewSwitch('hv', hv);
+    if (hv === 'list') keys.forEach(function (k) { h += siteCard(k, groups[k]); });
+    else h += '<div class="' + (hv === 'tiles' ? 'htiles' : 'hgrid') + '">' + keys.map(function (k) { return siteTile(k, groups[k], hv === 'grid'); }).join('') + '</div>';
 
     var serv = S.data.devices.filter(function (d) { return Core.SERVICE.indexOf(d.status) >= 0; });
     if (serv.length) {
@@ -857,6 +877,19 @@
     if (fdev && list.length) { var cs = {}; list.forEach(function (j) { cs[coName(j.companyId)] = 1; }); h += '<div class="note"><b>' + esc(fdev.description) + ' …' + esc(fdev.serialTail) + '</b> went to: ' + esc(Object.keys(cs).join(', ')) + '</div>'; }
     if (!list.length && (jq || jflCount())) h += '<div class="empty"><b>No job matches these filters.</b>Try a company, an engineer\'s name, a job or receipt number, or the last digits of a serial.</div>';
     else if (!list.length) h += '<div class="empty"><b>' + (f === 'closed' ? 'No closed jobs yet.' : 'No open jobs.') + '</b>' + (f === 'closed' ? '' : can('job') ? 'Open a job for each client visit, then add requests inside it.' : 'The site supervisor opens a job for each client visit.') + '</div>';
+    var jv = S.jv || 'list';
+    if (list.length) h += viewSwitch('jv', jv);
+    if (jv !== 'list') {
+      h += '<div class="' + (jv === 'tiles' ? 'htiles' : 'hgrid') + '">' + list.map(function (j) {
+        var k = jobStats(j), team = jobTeam(j), cl = j.status === 'Closed';
+        return '<button class="htile' + (jv === 'grid' ? ' wide' : '') + (cl ? ' closed' : '') + '" data-job="' + j.id + '"><span class="tcnt">' + k.rs.length + '</span><b>' + esc(coName(j.companyId)) + '</b>' +
+          '<small><b>' + esc(j.id) + '</b>' + (j.basis ? ' · ' + esc(jobBasis(j)) : '') + '</small>' +
+          (jv === 'grid' && j.title ? '<small>' + esc(j.title) + '</small>' : '') +
+          (team.length ? '<small>Team: ' + esc(team.join(', ')) + '</small>' : '') +
+          '<span class="cmini">' + (cl ? '<em>Closed</em>' : '<em class="in">Open</em>') + (k.out ? '<em class="out">' + k.out + ' out</em>' : '') + (k.dsMissing ? '<em class="bad">' + k.dsMissing + ' DS missing</em>' : '') + (k.pending ? '<em>' + k.pending + ' waiting</em>' : '') + '</span></button>';
+      }).join('') + '</div>';
+      list = [];
+    }
     list.forEach(function (j) {
       var k = jobStats(j);
       h += '<div class="site job" data-job="' + j.id + '" style="--c:' + (j.status === 'Closed' ? 'var(--muted)' : 'var(--blue)') + '"><div class="site-h"><div><h3>' + esc(coName(j.companyId)) + '</h3>' +
@@ -1226,6 +1259,7 @@
     $$('[data-kwhere]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); kitWhere(b.dataset.kwhere); }; });
     $$('[data-kwst]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); kitWhere(b.dataset.g, b.dataset.kwst); }; });
     $$('[data-gokits]').forEach(function (b) { b.onclick = function () { S.kgrp = b.dataset.gokits; location.hash = '#kits'; }; });
+    $$('[data-vs]').forEach(function (b) { b.onclick = function () { S[b.dataset.vs] = b.dataset.v; LS.set(b.dataset.vs, b.dataset.v); S._keepScroll = true; render(); }; });
     $$('[data-goco]').forEach(function (b) { b.onclick = function () { S.filter = 'client'; S.q = ''; S.sort = 'place'; location.hash = '#devices'; }; });
     $$('[data-job]').forEach(function (b) { b.onclick = function () { openJob(b.dataset.job); }; });
     $$('[data-jobreq]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); checkoutFlow(null, b.dataset.jobreq); }; });
