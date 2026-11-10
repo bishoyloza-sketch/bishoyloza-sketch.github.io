@@ -1449,7 +1449,8 @@
     DEV_GROUPS.forEach(function (g) { g[1].forEach(function (c) { known[c] = 1; }); });
     S.data.devices.forEach(function (d) { if (d.active !== false && !known[d.category]) cats[d.category] = 1; });
     var other = Object.keys(cats).sort();
-    return DEV_GROUPS.concat(other.length ? [['Other devices', other]] : []);
+    /* every other category gets its own tile, not one "Other devices" box */
+    return DEV_GROUPS.concat(other.map(function (c) { return [c, [c]]; }));
   }
   function devicePicker(container, selected, filterFn, onChange, opts) {
     opts = opts || {};
