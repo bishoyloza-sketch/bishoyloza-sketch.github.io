@@ -698,3 +698,6 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 .isr .inp{flex:1 1 0}
 .iskd{margin-top:14px;background:#EEF5FC;border-radius:10px;padding:10px 12px;font-size:13.5px;color:#13294B}
 @media (max-width:700px){.isg{grid-template-columns:1fr}.iscard{padding:14px}}
+.rladd{margin:10px 8px 4px;width:calc(100% - 16px);border:1.5px dashed #9FB6D3;background:#F6FAFE;color:#1F6FB5;font:700 13px inherit;border-radius:10px;padding:9px;cursor:pointer}
+.rladd:hover{background:#EAF3FC;border-color:#1F6FB5}
+@media (max-width:999px){.rladd{width:auto;margin:4px 6px;flex:none;white-space:nowrap}}
