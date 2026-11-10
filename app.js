@@ -812,10 +812,19 @@
     var y = dsBack(c);
     return '<div class="dsrow"><span>Data sheet back in the office?</span><div class="sortseg"><button class="' + (y ? 'on' : '') + '" data-ds="' + c.id + '" data-v="Yes">Yes</button><button class="' + (!y ? 'on no' : '') + '" data-ds="' + c.id + '" data-v="No">No</button></div></div>';
   }
+  /* Search jobs / receipts by company, person, job no., receipt no., device or serial */
+  function rcptText(c) {
+    return [c.id, coName(c.companyId), names(c.engineers), c.byName || '', c.note || '', itemsText(c.items)]
+      .concat((c.deviceIds || []).map(function (id) { var d = IDX.dev[id]; return d ? d.description + ' ' + d.serial + ' ' + (d.model || '') + ' ' + (d.sub || '') : id; })).join(' ');
+  }
+  function jobText(j) { return [j.id, j.title || '', j.ref || '', jobBasis(j), coName(j.companyId), j.byName || ''].concat(jobReceipts(j).map(rcptText)).join(' '); }
+  function qHit(text, q) { if (!q) return true; text = String(text).toLowerCase(); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return text.indexOf(w) >= 0; }); }
+  function jobTeam(j) { var p = {}; jobReceipts(j).forEach(function (c) { (c.engineers || []).forEach(function (e) { p[e.name] = 1; }); }); return Object.keys(p); }
   function viewJobs() {
-    var f = S.jf || 'open', rep = can('report');
-    var tabs = [['open', 'Open jobs'], ['closed', 'Closed']].concat(rep ? [['ds', 'Data sheets']] : []);
+    var f = S.jf || 'all', rep = can('report'), jq = S.jq || '';
+    var tabs = [['all', 'All'], ['open', 'Open'], ['closed', 'Closed']].concat(rep ? [['ds', 'Data sheets']] : []);
     var h = header('Jobs') + '</header><main>' +
+      '<div class="search">' + ICON.search + '<input id="jq" type="search" placeholder="Search: company, engineer, job no., device or serial" value="' + esc(jq) + '" autocomplete="off" aria-label="Search jobs"></div>' +
       '<div class="filters" role="tablist">' + tabs.map(function (t) { return '<button class="fbtn' + (f === t[0] ? ' on' : '') + '" data-jf="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
     if (rep && f !== 'ds') {
       var allJ = jobsList(), openN = allJ.filter(function (x) { return x.status !== 'Closed'; }).length, m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
@@ -823,17 +832,20 @@
       h += '<div class="placesum"><button data-jf="open"><b>' + openN + '</b><span>open jobs</span></button><button data-jf="closed"><b>' + (allJ.length - openN) + '</b><span>closed</span></button><div class="ks"><b>' + closedM + '</b><span>closed this month</span></div></div>' +
         '<div class="sortbar" style="margin-top:12px"><span>Jobs summary</span><button class="printbtn" data-jobspdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-dsxls>' + ICON.pdf + 'Excel</button></div>';
     }
-    if (can('job') && f !== 'ds') h += '<button class="btn blue wide" data-newjob style="margin:4px 0 6px">＋ Open a new job</button>';
+    if (can('job') && f !== 'ds' && !jq) h += '<button class="btn blue wide" data-newjob style="margin:4px 0 6px">＋ Open a new job</button>';
     if (f === 'ds') return h + dsReport() + '<div style="height:24px"></div></main>';
-    var list = jobsList().filter(function (j) { return f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed'; })
-      .sort(function (a, b) { return (b.ts || '').localeCompare(a.ts || ''); });
-    if (!list.length) h += '<div class="empty"><b>' + (f === 'closed' ? 'No closed jobs yet.' : 'No open jobs.') + '</b>' + (f === 'closed' ? '' : can('job') ? 'Open a job for each client visit, then add requests inside it.' : 'The site supervisor opens a job for each client visit.') + '</div>';
+    var list = jobsList().filter(function (j) { return (f === 'all' || (f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed')) && qHit(jobText(j), jq); })
+      .sort(function (a, b) { return (a.status === 'Closed') - (b.status === 'Closed') || (b.ts || '').localeCompare(a.ts || ''); });
+    if (jq) h += '<div class="sortbar"><span>' + list.length + ' job' + (list.length === 1 ? '' : 's') + ' match “' + esc(jq) + '”</span></div>';
+    if (!list.length && jq) h += '<div class="empty"><b>No job matches “' + esc(jq) + '”.</b>Try a company, an engineer\'s name, a job or receipt number, or the last digits of a serial.</div>';
+    else if (!list.length) h += '<div class="empty"><b>' + (f === 'closed' ? 'No closed jobs yet.' : 'No open jobs.') + '</b>' + (f === 'closed' ? '' : can('job') ? 'Open a job for each client visit, then add requests inside it.' : 'The site supervisor opens a job for each client visit.') + '</div>';
     list.forEach(function (j) {
       var k = jobStats(j);
       h += '<div class="site job" data-job="' + j.id + '" style="--c:' + (j.status === 'Closed' ? 'var(--muted)' : 'var(--blue)') + '"><div class="site-h"><div><h3>' + esc(coName(j.companyId)) + '</h3>' +
         '<div class="meta"><b>' + esc(j.id) + '</b>' + (j.title ? ' · ' + esc(j.title) : '') + '</div>' +
         (j.basis ? '<div class="meta"><span class="jbadge">' + esc(jobBasis(j)) + '</span></div>' : '') +
-        '<div class="meta">Opened by ' + esc(j.byName) + ' · ' + esc(when(j.ts)) + (j.status === 'Closed' ? ' · closed ' + esc(fmtDate(j.closedTs)) : '') + '</div></div>' +
+        '<div class="meta">Opened by ' + esc(j.byName) + ' · ' + esc(when(j.ts)) + (j.status === 'Closed' ? ' · <b class="jclosed">Closed ' + esc(fmtDate(j.closedTs)) + '</b>' : '') + '</div>' +
+        (jobTeam(j).length ? '<div class="meta">Team: <b>' + esc(jobTeam(j).join(', ')) + '</b> · ' + jobReceipts(j).reduce(function (n, c) { return n + (c.deviceIds || []).length; }, 0) + ' devices</div>' : '') + '</div>' +
         '<span class="cnt">' + k.rs.length + ' req.</span></div>' +
         '<div class="jobnums"><span' + (k.out ? ' class="o"' : '') + '><b>' + k.out + '</b> still out</span><span' + (k.dsMissing ? ' class="r"' : '') + '><b>' + k.dsMissing + '</b> data sheet' + (k.dsMissing === 1 ? '' : 's') + ' missing</span>' + (k.pending ? '<span class="p"><b>' + k.pending + '</b> waiting</span>' : '') + (j.status !== 'Closed' && k.rs.length && !k.out && !k.pending ? '<span class="ok">✓ All back' + (can('job') ? ' — ready to close' : '') + '</span>' : '') + '</div>' +
         (j.status !== 'Closed' ? '<div class="site-f"><button class="btn sm" data-jobreq="' + j.id + '">＋ ' + (can('keep') ? 'Check out' : 'Request') + ' in this job</button></div>' : '') + '</div>';
@@ -847,7 +859,7 @@
     });
   }
   function dsReport() {
-    var rows = dsRows(), miss = rows.filter(function (r) { return !dsBack(r.c); }), ok = rows.filter(function (r) { return dsBack(r.c); });
+    var jq = S.jq || '', rows = dsRows().filter(function (r) { return qHit(rcptText(r.c) + ' ' + (r.job ? r.job.id + ' ' + (r.job.title || '') + ' ' + jobBasis(r.job) : ''), jq); }), miss = rows.filter(function (r) { return !dsBack(r.c); }), ok = rows.filter(function (r) { return dsBack(r.c); });
     var outMiss = miss.filter(function (r) { return r.out.n; }).length;
     var h = '<div class="placesum"><div class="ks out"><b>' + miss.length + '</b><span>data sheets missing</span></div><div class="ks"><b>' + ok.length + '</b><span>back in office</span></div><div class="ks"><b>' + outMiss + '</b><span>still outside</span></div></div>' +
       '<div class="sortbar" style="margin-top:12px"><span>Data sheet report</span><button class="printbtn" data-dspdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-dsxls>' + ICON.pdf + 'Excel</button></div>';
@@ -1221,6 +1233,8 @@
     $$('[data-dgrp]').forEach(function (b) { b.onclick = function () { S.devGrp = b.dataset.dgrp; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-dgrpback]').forEach(function (b) { b.onclick = function () { S.devGrp = null; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; S.devGrp = null; LS.set('sort2', S.sort); S._keepScroll = false; render(); }; });
+    var jqi = $('#jq');
+    if (jqi) jqi.oninput = function () { S.jq = jqi.value; var pos = jqi.selectionStart; S._keepScroll = true; render(); var n = $('#jq'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} };
     var q = $('#q');
     if (q) {
       q.oninput = function () {
