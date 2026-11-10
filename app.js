@@ -569,7 +569,7 @@
     var s = stOf(d), c = cert(d), od = d.status === 'At Client' && d.expectedReturn && daysUntil(d.expectedReturn) < 0;
     var place = isReq(d) ? 'Waiting approval' : d.pending ? 'Transfer waiting' : d.status === 'In Office' ? 'In office' : d.status === 'At Client' ? coName(d.companyId) : s.short;
     return '<button class="dcard" data-dev="' + d.id + '" style="--st:' + s.c + '">' + tag(d) + '<b>' + devName(d) + '</b>' +
-      '<small>' + esc([d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ')) + '</small>' +
+      '<small>S/N ' + esc(d.serial) + '</small>' +
       '<span class="dst">' + esc(place) + '</span>' + (od ? '<span class="warn">Overdue</span>' : c.kind === 'expired' ? '<span class="warn">Cal. expired</span>' : '') + '</button>';
   }
   /* ---------- Sets: devices with the same sub category fold into one row; tap to open / close ---------- */
