@@ -401,3 +401,14 @@ button.ks.out{border-color:var(--client);background:var(--client-soft)}
 .htile.wide{min-height:0}
 .htile .cmini{margin-top:6px}
 .cmini em{background:var(--bg);color:var(--muted)}
+.jsearch{margin:4px 0 12px;padding:14px}
+.jsh{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.jsh b{font-size:16px;color:var(--navy)}
+.jfgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.jfgrid .f{margin:0;min-width:0}
+.jfgrid .inp{width:100%;min-width:0}
+.jsin{position:relative}
+.jsin .inp{padding-right:34px}
+.jsx{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:var(--bg);color:var(--muted);width:24px;height:24px;border-radius:50%;font-size:12px}
+.jsq{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.jsq .fbtn{padding:5px 11px;font-size:13px}
