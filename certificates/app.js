@@ -232,7 +232,7 @@ function calibrationOrders() { /* rows of "Calibration Orders.xlsx" → Main Das
 var sheetFn = null;
 function openSheet(fn) { sheetFn = fn; renderSheet(); }
 function renderSheet() { var root = $('#sheet-root'); if (!sheetFn) { root.innerHTML = ''; return; } var s = sheetFn(); var b = $('.sheet-b'), keep = b ? b.scrollTop : 0;
-  root.innerHTML = '<div class="sheet-bg"><div class="sheet"><div class="sheet-h"><button class="icon-btn" data-close style="color:var(--navy)">' + I.back + '</button><h2>' + s.title + '</h2>' + (S.cur ? '<button class="btn ghost sm" data-sheethome style="flex:none;margin-right:6px">All projects</button>' : '') + '</div><div class="sheet-b">' + s.body + '</div>' + (s.foot ? '<div class="sheet-f">' + s.foot + '</div>' : '') + '</div></div>';
+  root.innerHTML = '<div class="sheet-bg"><div class="sheet' + (s.wide ? ' wide' : '') + '"><div class="sheet-h"><button class="icon-btn" data-close style="color:var(--navy)">' + I.back + '</button><h2>' + s.title + '</h2>' + (S.cur ? '<button class="btn ghost sm" data-sheethome style="flex:none;margin-right:6px">All projects</button>' : '') + '</div><div class="sheet-b">' + s.body + '</div>' + (s.foot ? '<div class="sheet-f">' + s.foot + '</div>' : '') + '</div></div>';
   $('.sheet-b').scrollTop = keep; $('[data-close]').onclick = function () { if (SHEET_RET) { var rf = SHEET_RET; SHEET_RET = null; return rf(); } closeSheet(); }; var shh = $('[data-sheethome]'); if (shh) shh.onclick = goHome; if (s.mount) s.mount(); }
 function closeSheet() { sheetFn = null; renderSheet(); render(); }
 
@@ -808,12 +808,12 @@ function renderOverview(p) {
   ensureInfo(p);
   if (!p.tab || p.tab === 'over') p.tab = 'certs'; PT.tab = p.tab;
   var titles = { certs: ['Old certificates', 'Last year\'s certificate of every item'], refs: ['References', 'A reference for every item'], det: ['Details', 'Technician, dates and conditions'], read: ['Readings', 'New readings next to last year\'s'], gen: ['Certificates', 'Covers, certificates and the receipt letter'] }[p.tab];
-  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(hub ? titles[1] : p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div>' + projFoot(p);
+  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + topC(esc(hub ? titles[0] : titles[0]), esc(hub ? titles[1] : p.company.name + ' · ' + titles[1])) + '<main id="pm"></main></div>' + projFoot(p);
   bindStepBar(p); bindHome(); bindProjFoot(p);
   ({ certs: tCerts, refs: tRefs, read: tRead, det: tDet, gen: tGen })[p.tab](p);
 }
 function goHome() { sheetFn = null; renderSheet(); $('#dlg-root').innerHTML = ''; S.cur = null; render(); window.scrollTo(0, 0); }
-function bindHome() { var h = $('#goHome2'); if (h) h.onclick = goHome; }
+function bindHome() { var h = $('#goHome2'); if (h) h.onclick = goHome; $$('[data-home], .top .brand').forEach(function (b) { b.style.cursor = 'pointer'; b.onclick = goHome; }); }
 function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; p.items.forEach(function (it) { var s = (it.old || {}).status; if (s === 'found') c.found++; else if (s === 'similar') c.similar++; else if (s === 'missing' || s === 'error') c.missing++; else c.todo++; }); return c; }
 
 /* ---- overview ---- */
@@ -2291,7 +2291,8 @@ function renderOverview(p) {
   ensureInfo(p); if (!p.tab || p.tab === 'over' || p.tab === 'read') p.tab = 'cert'; PT.tab = p.tab;
   var L = certList(p), hub = p.tab === 'cert' && p.ci == null;
   var titles = { certs: ['Old certificates', 'Last year\'s certificate of every code'], refs: ['References', 'A reference for every code'], det: ['Project details', 'Dates, technician and conditions'], cert: hub ? [p.company.name, savedN(p) + ' done · ' + (L.length - savedN(p)) + ' pending'] : ['Certificate ' + ((p.ci || 0) + 1) + ' of ' + L.length, savedN(p) + ' of ' + L.length + ' saved'], gen: ['Files', 'Covers, certificates and the receipt letter'] }[p.tab];
-  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(hub ? titles[1] : p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div><div class="wiz-foot"><div id="cf"></div></div>';
+  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + topC(esc(titles[0]), esc(titles[1]), hub ? '' : esc(p.company.name)) + '<main id="pm"></main></div><div class="wiz-foot"><div id="cf"></div></div>';
+  if ($('#crCo')) $('#crCo').onclick = function () { toHub(p); };
   bindStepBar(p); bindHome();
   if (p.tab === 'det' || p.tab === 'certs' || p.tab === 'refs') { $('#cf').innerHTML = '<button class="btn blue" id="bh">‹ Back to the certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
   if (p.tab === 'gen') { $('#cf').innerHTML = '<button class="btn ghost" id="bh">‹ Certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
@@ -2451,7 +2452,7 @@ function tHub(p) { if (!$('#pm')) return; knowSeed(); certList(p).forEach(functi
   var pct = L.length ? Math.round(n / L.length * 100) : 0, setupOk = !!(p.company && inf.cal), codesOk = L.length > 0, certsOk = L.length > 0 && !left, filesOk = !!p.filesAt;
   var tl = function (ok, cur, num, title, sub, btn) { return '<div class="tl' + (ok ? ' ok' : cur ? ' cur' : '') + '"><i>' + (ok ? '✓' : num) + '</i><div class="tl-b"><b>' + title + '</b><small>' + sub + '</small></div>' + (btn || '') + '</div>'; };
   var curK = !codesOk ? 2 : !certsOk ? 3 : 4;
-  $('#pm').innerHTML = '<div class="card timeline">' +
+  $('#pm').innerHTML = !p.hubEdit ? hubLetter(p, L, inf, g) : ('<div class="card timeline">' +
       tl(setupOk, false, 1, esc(p.company.name), 'Calibration ' + esc(fmtD(inf.cal)) + ' · issue ' + esc(fmtD(inf.iss)) + '<br>Calibrated by <strong class="tlx">' + esc(inf.tech || '—') + '</strong>' + '<span class="ordst ' + ordState(p)[0] + '">' + esc(ordState(p)[1]) + '</span>', '') +
       tl(codesOk, curK === 2, 2, L.length + (L.length === 1 ? ' code chosen' : ' codes chosen'), codesOk ? esc(L.slice(0, 4).map(function (x) { return x.code || x.description; }).join(', ') + (L.length > 4 ? ' …' : '')) : 'Choose what will be calibrated', '<button class="btn ' + (codesOk ? 'ghost' : 'blue') + ' sm" id="tCodes">' + (codesOk ? '+ Add' : 'Choose') + '</button>') +
       tl(certsOk, curK === 3, 3, codesOk ? n + ' done · ' + left + ' pending' : 'Certificates', codesOk ? '<span class="tl-bar"><em style="width:' + pct + '%"></em></span>' : 'After the codes', codesOk && nxt >= 0 ? '<button class="btn blue sm" id="tNext">' + (n ? 'Continue' : 'Start') + '</button>' : '') +
@@ -2459,7 +2460,7 @@ function tHub(p) { if (!$('#pm')) return; knowSeed(); certList(p).forEach(functi
     (L.length ? '<div class="sec hubsec"><h2>Certificates</h2><span class="hubbtns"><button class="btn ' + (p.hubEdit ? 'blue' : 'ghost') + ' sm" id="hEdit" style="flex:none">' + (p.hubEdit ? 'Done' : 'Edit list') + '</button><button class="btn ghost sm" id="hSplit" style="flex:none">Split</button><button class="btn ghost sm" id="hPrint" style="flex:none">Print / Export</button></span></div>' +
       hubList(p, L) : '') +
     '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Project details</h3><button class="btn ghost sm" id="hDet" style="flex:none">Edit</button></div>' +
-      '<div class="kvgrid">' + [['Calibration', fmtD(inf.cal)], ['Date of issue', fmtD(inf.iss)], ['Received', fmtD(inf.rec)], ['Work order', woNo(inf)], ['Technician', inf.tech], ['Conditions', inf.eT + ' °C · ' + inf.eH + ' %RH'], ['First cert. no.', String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : (g.autoTried || !spOn() ? 'not set' : 'finding…')], ['Department', (p.depts || []).join(', ')]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + esc(x[1] || '—') + '</b></div>'; }).join('') + '</div></div>';
+      '<div class="kvgrid">' + [['Calibration', fmtD(inf.cal)], ['Date of issue', fmtD(inf.iss)], ['Received', fmtD(inf.rec)], ['Work order', woNo(inf)], ['Technician', inf.tech], ['Conditions', inf.eT + ' °C · ' + inf.eH + ' %RH'], ['First cert. no.', String(g.start).trim() ? certNo(g, parseInt(g.start, 10)) : (g.autoTried || !spOn() ? 'not set' : 'finding…')], ['Department', (p.depts || []).join(', ')]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + esc(x[1] || '—') + '</b></div>'; }).join('') + '</div></div>');
   $('#cf').innerHTML = !codesOk ? '<button class="btn blue" id="hGo">Choose the codes ›</button>' : nxt >= 0 ? '<button class="btn blue" id="hGo">' + (n ? 'Continue: ' : 'Start: ') + esc(L[nxt].code || L[nxt].description) + ' ›</button>' : '<button class="btn blue" id="hGo">Make the files ›</button>';
   var open = function (i) { p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }, files = function () { p.reached = Math.max(p.reached || 0, FIDX.gen); gotoStep(p, 'gen'); }, codes = function () { go(p, 'items'); };
   $$('[data-ci]').forEach(function (b) { b.onclick = function () { if (p.hubEdit) { var id0 = L[+b.dataset.ci].id; p.hubSel = p.hubSel || {}; p.hubSel[id0] = !p.hubSel[id0]; saveProjects(); return tHub(p); } open(+b.dataset.ci); }; });
@@ -2495,14 +2496,37 @@ function tHub(p) { if (!$('#pm')) return; knowSeed(); certList(p).forEach(functi
   if ($('#tEditCo')) $('#tEditCo').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); };
   $('#hGo').onclick = function () { if (!codesOk) codes(); else if (nxt >= 0) open(nxt); else files(); };
   $('#hDet').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); }; }
+function topC(title, sub, co) {
+  return (DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top tc"><div class="top-row"><button class="homebtn" id="goHome2" title="All projects"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><img class="tclogo" data-home src="logo-en-light.png" alt="Akhnaton" title="Home – all projects"><div class="tct"><nav class="crumb"><button data-home>All projects</button><span>›</span>' + (co ? '<button id="crCo">' + co + '</button><span>›</span>' : '') + '<b>' + title + '</b></nav><small>' + sub + '</small></div>' +
+    '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span></div></div>'; }
+function hubLetter(p, L, inf, g) { var q = norm(p.hubQ || ''), gen = {}; genGroups(p).forEach(function (g2) { g2.items.forEach(function (x) { gen[x.id] = g2; }); });
+  var rng = function (x) { var f = (x.old && x.old.fields) || {}; return f.calRange || f.range || x.range || ''; };
+  var st = function (x) { var c = cState(x); return c === 'saved' ? ['ok', 'Saved'] : c === 'none' ? ['bad', 'No old cert'] : c === 'loading' ? ['ld', 'Searching…'] : c === 'progress' ? ['mid', 'In progress'] : ['', 'Ready']; };
+  var rows = coverGroups(p).map(function (gr, gi) { var its = gr.items.filter(function (x) { return !q || norm([x.code, x.description, x.certNo, rng(x)].join(' ')).indexOf(q) >= 0; }); if (!its.length) return '';
+    var m = gr.machine, g0 = gen[gr.items[0].id], dn = gr.items.filter(function (x) { return x.saved; }).length;
+    return '<tr class="lcov" data-ft="' + grpKey(gr) + '"><td class="ln">' + (gi + 1) + '</td><td class="lno">' + (g0 ? esc(g0.from + (g0.to !== g0.from ? ' → ' + g0.to.replace(/^.*?-(\d+)-(20\d\d)$/, '$1') : '')) : '—') + '<small class="lmob"><b>' + esc(m ? m.name : (gr.items[0].description || '')) + '</b> · COVER</small></td><td>' + esc((m && m.code) || codePre(gr.items[0].code) || '') + '</td><td><b>' + esc(m ? m.name : (gr.items[0].description || '')) + '</b> <span class="lcv">COVER</span></td><td class="lsm">' + gr.items.length + ' cert' + (gr.items.length === 1 ? '' : 's') + '</td><td class="lst ' + (dn === gr.items.length ? 'ok' : '') + '">' + dn + '/' + gr.items.length + ' ›</td></tr>' +
+      its.map(function (x) { var i = L.indexOf(x), k = gr.items.indexOf(x), s2 = st(x); return '<tr class="lit" data-ci="' + i + '"><td class="ln">' + (gi + 1) + '.' + (k + 1) + '</td><td class="lno">' + esc(x.certNo || '—') + '<small class="lmob">' + esc((x.code || '') + ' · ' + (x.description || '')) + '</small></td><td>' + esc(x.code || '') + '</td><td>' + esc(x.description || (x.old && x.old.fields && x.old.fields.description) || '') + '</td><td class="lsm">' + esc(rng(x)) + '</td><td class="lst ' + s2[0] + '"><i></i>' + s2[1] + '</td></tr>'; }).join(''); }).join('');
+  var n = savedN(p);
+  return '<div class="hbar"><div class="hinfo"><span><small>Calibration</small>' + esc(fmtD(inf.cal)) + '</span><span><small>Issue</small>' + esc(fmtD(inf.iss)) + '</span><span><small>Work order</small>' + esc(woNo(inf) || '—') + '</span><span><small>Saved</small>' + n + ' / ' + L.length + '</span></div>' +
+    '<div class="hbtns"><button class="btn ghost sm" id="hDet">✎ Project details</button><button class="btn ghost sm" id="tCodes">+ Codes</button><button class="btn ghost sm" id="hLy">Covers as last year</button><button class="btn ghost sm" id="hEdit">Edit list</button><button class="btn ghost sm" id="hPrint">Export</button><button class="btn ghost sm" id="tFiles">Make files</button></div></div>' +
+    (L.length ? '<div class="search hsr">' + I.search + '<input id="hq" placeholder="Search code, description or certificate no." value="' + esc(p.hubQ || '') + '" autocomplete="off"></div>' +
+      '<div class="ltbw"><table class="ltbl"><thead><tr><th>#</th><th>Certificate No.</th><th>Code</th><th>Description</th><th>Cal. Range</th><th>Status</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="lsm" style="text-align:center;padding:18px">Nothing matches</td></tr>') + '</tbody></table></div>'
+      : '<div class="empty"><b>No codes yet</b>Press “+ Codes” to choose what will be calibrated.</div>'); }
 /* preview one certificate (cover + certificate) */
 function certPreview(p, it, onSave) { var n = parseInt(String(it.certNo || '').replace(/-\d{4}$/, '').match(/(\d+)$/) ? String(it.certNo).replace(/-\d{4}$/, '').match(/(\d+)$/)[1] : genDefaults(p).start, 10);
   var p2 = Object.assign({}, p, { items: [it], machines: (p.machines || []).filter(function (m) { return m.id === it.machineId; }), gen: Object.assign({}, p.gen, { start: isNaN(n) ? '' : String(n) }) });
   var html; try { html = printView(p2); } catch (e) { return toast('Preview failed: ' + e.message, true); }
   genGroups(p);
-  openSheet(function () { return { title: 'Preview · ' + esc(it.code || it.description), body: '<div class="note">This is how the cover and the certificate will look. Check it, then <b>Save</b>.</div><iframe class="pv" id="pvf"></iframe>',
-    foot: '<button class="btn ghost" id="pvE">‹ Edit</button><button class="btn" id="pvS">' + (it.saved ? 'Saved ✓ – next' : 'Save ✓') + '</button>',
-    mount: function () { var f = $('#pvf'); f.srcdoc = html; f.onload = function () { try { var d = f.contentDocument; f.style.height = Math.max(600, d.documentElement.scrollHeight + 20) + 'px'; } catch (e) {} };
+  var lh = /data-lh="1"/.test(html), mode = LS.get('pvMode', lh ? 'cust' : 'plain'); if (!lh) mode = 'plain';
+  var setMode = function () { var f = $('#pvf'); try { var d = f.contentDocument; if (d && d.body) d.body.classList.toggle('cust', mode === 'cust'); } catch (e) {} $$('[data-pvm]').forEach(function (b) { b.classList.toggle('on', b.dataset.pvm === mode); }); };
+  var title = (it.certNo || '') + ' · ' + (it.code || it.description || '');
+  openSheet(function () { return { wide: 1, title: 'Preview · ' + esc(title),
+    body: '<div class="pvtop">' + (lh ? '<div class="seg pvseg"><button data-pvm="cust">For the customer</button><button data-pvm="print">For printing (our paper)</button></div>' : '') + '<span class="pvhint2">Whole page, fitted to the screen</span></div><div class="pvwrap big" id="pvw"><iframe class="pv" id="pvf"></iframe></div>',
+    foot: '<button class="btn ghost" id="pvE">‹ Edit</button><button class="btn ghost" id="pvPr">Print</button><button class="btn ghost" id="pvPdf">PDF</button><button class="btn" id="pvS">' + (it.saved ? 'Saved ✓ – next' : 'Save ✓') + '</button>',
+    mount: function () { var f = $('#pvf'); f.srcdoc = html; f.onload = function () { setMode(); pvFit(); }; setTimeout(pvFit, 60); window.onresize = pvFit;
+      $$('[data-pvm]').forEach(function (b) { b.onclick = function () { mode = b.dataset.pvm; LS.set('pvMode', mode); setMode(); }; });
+      $('#pvPr').onclick = function () { try { f.contentWindow.focus(); f.contentWindow.print(); toast('To get a PDF choose “Save as PDF” as the printer'); } catch (e) { toast('Printing is not allowed here', true); } };
+      $('#pvPdf').onclick = function () { pdfPreview(title, html, title, lh ? mode : null); };
       $('#pvE').onclick = closeSheet; $('#pvS').onclick = function () { it.saved = Date.now(); saveProjects(); closeSheet(); onSave(); }; } }; }); }
 /* ---- new item: start from a similar certificate (points, limits, SOP, resolution, range) ---- */
 function simFind(p, it) { var d = String(it.description || '').trim(); if (!d) return Promise.resolve([]); var toks = d.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
@@ -2865,7 +2889,7 @@ function pricesThen(p, go, force) { var g = genDefaults(p), miss = certList(p).f
     if (left.length) askPrices(p, left, go, rows); else go(); }); }
 function htmlPreview(title, html, word) { var paper = '<style>@media screen{html{background:#DFE4EA}body{width:794px;min-height:1123px;margin:12px auto!important;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);box-sizing:border-box;padding:42px 46px!important}}</style>';
   if (!/class="pg"/.test(html)) html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, paper + '</head>') : paper + html;
-  openSheet(function () { return { title: title, body: '<div class="pvhint">Whole page shown – pinch to zoom in <b id="pvz"></b></div><div class="pvwrap" id="pvw"><iframe class="pv" id="pvf"></iframe></div>',
+  openSheet(function () { return { wide: 1, title: title, body: '<div class="pvhint">Whole page shown – pinch to zoom in <b id="pvz"></b></div><div class="pvwrap" id="pvw"><iframe class="pv" id="pvf"></iframe></div>',
   foot: '<button class="btn ghost" id="pvC">Close</button>' + (word ? '<button class="btn ghost" id="pvW">Word</button>' : '') + (/data-lh="1"/.test(html) ? '<button class="btn ghost" id="pvPr">Print on our paper</button><button class="btn ghost" id="pvPdfP">PDF to print</button><button class="btn" id="pvPdf">PDF for the customer</button>' : '<button class="btn ghost" id="pvPr">Print</button><button class="btn" id="pvPdf">PDF</button>'),
   mount: function () { var f = $('#pvf'); f.srcdoc = html; f.onload = pvFit; setTimeout(pvFit, 50); window.onresize = pvFit;
     $('#pvC').onclick = closeSheet; if (word) $('#pvW').onclick = word; var lhm = /data-lh="1"/.test(html); $('#pvPdf').onclick = function () { closeSheet(); pdfPreview(title, html, null, lhm ? 'cust' : 'plain'); }; var pp = $('#pvPdfP'); if (pp) pp.onclick = function () { closeSheet(); pdfPreview(title, html, null, 'print'); };
