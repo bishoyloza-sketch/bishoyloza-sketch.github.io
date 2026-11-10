@@ -380,3 +380,6 @@ tr.oldr input,.oldin{height:30px;width:86px;padding:0 6px;font-size:13px;border:
 .fob button.fx{color:#C0392B}
 td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 .cf.tbb{margin:8px 0 4px}
+.sheet-f{flex-wrap:wrap}
+.sheet-f .btn{white-space:normal;line-height:1.15;height:auto;min-height:46px;padding-top:6px;padding-bottom:6px;text-overflow:clip}
+@media (max-width:560px){.sheet-f .btn{font-size:14px;flex:1 1 40%}}
