@@ -1439,7 +1439,7 @@
     ['Rotational Speed (RPM)', ['RPM']],
     ['Humidity (RH)', ['Relative Humidity']],
     ['Timer', ['Time']],
-    ['HVAC', ['Air Flow', 'DOP', 'Particle Count', 'Differential Pressure', 'Relative Humidity']],
+    ['HVAC', ['Air Flow', 'DOP', 'Particle Count', 'Differential Pressure', 'Relative Humidity', 'Regulator']],
     ['Thermal Mapping', ['Thermal Mapping', 'Data Logger']],
     ['Weight', ['Weight']],
     ['Lab Solutions', ['pH Solution', 'Conductivity', 'Chlorine', 'Redox', 'Viscosity']]
