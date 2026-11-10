@@ -451,3 +451,40 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
   #pm>.cvbar .cvc{text-align:left;border-radius:10px}
   .htiles{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
 }
+/* ===== the job like PowerPoint: pages on the left, the chosen page on the right ===== */
+.prail{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.rlhead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted);font-weight:600}
+.rlbk{border:0;background:none;font:inherit;font-weight:700;color:var(--blue);cursor:pointer;padding:2px 0;font-size:14px}
+.rllist{display:flex;gap:8px;overflow-x:auto;padding:8px;scroll-snap-type:x proximity}
+.rlgrp{display:flex;gap:6px;flex:none;padding-right:8px;border-right:1px dashed var(--line)}
+.rlgrp:last-child{border-right:0}
+.rl{position:relative;flex:none;display:flex;align-items:center;gap:8px;text-align:left;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:7px 10px 7px 8px;font:inherit;color:inherit;cursor:pointer;min-width:118px;max-width:210px;scroll-snap-align:start}
+.rl .rn{flex:none;min-width:26px;height:26px;padding:0 5px;border-radius:7px;background:#EEF2F7;color:#45556B;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.rl .rlt{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;overflow:hidden}
+.rl .rlt em{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.6px;color:#1F6FB5}
+.rl .rlt b{font-size:13.5px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rl .rlt small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rl .rc{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--muted)}
+.rl .dot{margin-left:auto;flex:none;width:9px;height:9px;border-radius:50%;background:#C9D3E0}
+.rl.ok .dot{background:#1F8A5B}.rl.mid .dot{background:#1F6FB5}.rl.bad .dot{background:#C0392B}
+.rl.cov{background:#F4F7FB;border-color:#C9D6E6}.rl.cov.ok .rc{color:#1F8A5B}
+.rl.on{border-color:#1F6FB5;box-shadow:0 0 0 2px #1F6FB5 inset;background:#EAF3FC}.rl.on .rn{background:#1F6FB5;color:#fff}
+.cvno{position:sticky;top:0;z-index:15}
+@media (min-width:1000px){
+  .shell:has(#pm>.prail){max-width:1320px}
+  body:has(#pm>.prail) .wiz-foot>div{max-width:1288px;padding-left:300px}
+  #pm:has(>.prail){display:grid;grid-template-columns:282px minmax(0,1fr);column-gap:18px;align-items:start}
+  #pm:has(>.prail)>*{grid-column:2}
+  #pm>.prail{grid-column:1;grid-row:1 / span 99;position:sticky;top:12px;margin:0;max-height:calc(100vh - 110px);display:flex;flex-direction:column}
+  #pm>.prail .rllist{flex-direction:column;overflow-y:auto;overflow-x:hidden;gap:10px}
+  #pm>.prail .rlgrp{flex-direction:column;border-right:0;padding:0 0 10px;border-bottom:1px dashed var(--line)}
+  #pm>.prail .rlgrp:last-child{border-bottom:0}
+  #pm>.prail .rl{max-width:none;width:100%}
+  #pm>.prail .rl.crt{margin-left:18px;width:calc(100% - 18px)}
+}
+.cvno{align-items:center}.cvno small{margin-left:auto}
+.cvnav{flex:none;width:32px;height:32px;border-radius:9px;border:1.5px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.cvnav:disabled{opacity:.35;cursor:default}
+@media (max-width:999px){.rlhead{flex-direction:row}.rlbk{white-space:nowrap}.prail .rl{min-width:150px}}
+
+.prail .rl .rlt em{width:auto;height:auto;background:none;align-self:auto;display:block}
