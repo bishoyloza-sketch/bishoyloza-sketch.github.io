@@ -273,7 +273,7 @@ function top(title, sub, extra) {
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
     (S.cur ? '<button class="homebtn" id="goHome2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>All projects</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
-function render() {
+function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (P0 && P0.tab === 'cert' && P0._edCi === P0.ci) window.__keepY = window.scrollY;
   if (!S.session) return renderLogin();
   var p = S.cur ? S.projects.filter(function (x) { return x.id === S.cur; })[0] : null;
   if (!p) { S.cur = null; return renderHome(); }
@@ -1992,7 +1992,9 @@ function lySearch(p, mode, opt) { opt = opt || {};
         if (st.mode === 'month' && !st.batches && !st.busy && !st.err && !st.auto0) { st.auto0 = 1; searchMonth(); } } }; }); }
 
 /* ---------- certificates: one at a time, on paper, last year faint ---------- */
-function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
+function tCertEd(p) { var same = p._edCi === p.ci && p.cv == null && p.tab === 'cert', y0 = window.__keepY != null ? window.__keepY : window.scrollY; window.__keepY = null; tCertEd0(p); p._edCi = p.ci;
+  if (same && y0) { window.scrollTo(0, y0); requestAnimationFrame(function () { window.scrollTo(0, y0); }); setTimeout(function () { window.scrollTo(0, y0); }, 60); } }
+function tCertEd0(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
   if (!L.length) { $('#pm').innerHTML = '<div class="empty"><b>No codes yet</b>Go back to Codes and add them.</div>'; $('#cf').innerHTML = '<button class="btn ghost" id="cb">Back</button>'; $('#cb').onclick = function () { gotoStep(p, 'det'); }; return; }
   genGroups(p); p.ci = Math.min(Math.max(p.ci || 0, 0), L.length - 1);
   if (p.cv != null) return tCover(p, L);
@@ -2228,33 +2230,34 @@ function tCover(p, L) { var gs = coverGroups(p), gi = Math.min(p.cv, gs.length -
   $('#cvP').onclick = function () { railGo(p, seq[k - 1]); }; $('#cvN').onclick = function () { railGo(p, seq[k + 1]); };
   var ce = $('#cvEd'); if (ce) ce.onclick = function (e) { e.preventDefault(); coverSheet(p, gi); }; railBind(p, L);
   $$('[data-cvu]').forEach(function (b) { b.onclick = function () { coverTable(p, gi); }; });
-  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { var x = certList(p)[+b.dataset.cvi]; coverTable(p, gi, x && x.id); }; });
-  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { coverTable(p, gi, 'add'); }; }
+  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { itemSheet(p, gi, certList(p)[+b.dataset.cvi]); }; });
+  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { itemSheet(p, gi, null); }; }
 var STD_OPEN = false;
 function stdTable(p, it) { var ds = refsUsed(p, [it]).filter(function (d) { return (it.refs || []).indexOf(d.id) >= 0; });
   return '<table class="wlg wstd"><tr><th>No.</th><th>Manufacturer</th><th>Description</th><th>Model</th><th>Serial No.</th><th>Range</th><th>Cal. Due Date</th></tr>' + (ds.length ? ds.map(function (d, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(d.manufacturer || '') + '</td><td>' + esc(d.description || '') + '</td><td>' + esc(d.model || '') + '</td><td>' + esc(d.serial || '') + '</td><td>' + esc(d.range || '') + '</td><td>' + esc(dueText(d)) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="wnone">No standard chosen yet – choose it below</td></tr>') + '</table>'; }
 function kind8(desc) { var s = String(desc || '').toLowerCase(); return /diff/.test(s) ? 'Differential Pressure' : /humid|\brh\b/.test(s) ? 'Humidity' : /temp|thermo|°c/.test(s) ? 'Temperature' : /press|gauge|manomet|vacuum/.test(s) ? 'Pressure' : /rpm|speed|rotat|tacho|mixer|centrifug/.test(s) ? 'RPM' : /timer|time|stopwatch/.test(s) ? 'Timer' : /veloc|air ?flow|anemomet|laminar/.test(s) ? 'Air Velocity' : /weigh|balance|scale|mass/.test(s) ? 'Weight' : ''; }
-function coverTable(p, gi, focus) { var gr = coverGroups(p)[gi]; if (!gr) return; var m = gr.machine, g = genDefaults(p), its = gr.items, st = { nw: focus === 'add' ? [{ description: '', code: '', manufacturer: '' }] : [] };
+function coverTable(p, gi, focus) { var gr = coverGroups(p)[gi]; if (!gr) return; var m = gr.machine, g = genDefaults(p), its = gr.items, st = { nw: [] };
   var ff = function (it) { return ((it.old || {}).fields) || {}; };
   var C = function (k, v, ph, cls) { return '<td' + (cls ? ' class="' + cls + '"' : '') + '><input data-ct="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></td>'; };
   var R = function (v) { return '<td class="ro">' + esc(v || '—') + '</td>'; };
   openSheet(function () { var ki = 0;
     var unit = m ? '<tr><td class="no">1</td>' + C('m|manufacturer', m.manufacturer, its[0].manufacturer || ff(its[0]).manufacturer || 'N/A') + C('m|name', m.name, 'Description') + C('m|model', m.model, 'N/A') + C('m|serial', m.serial, 'N/A') + C('m|code', m.code, 'Code') + C('m|loc', m.loc, g.loc || 'N/A') + '</tr>'
       : '<tr><td class="no">1</td>' + C(its[0].id + '|manufacturer', its[0].manufacturer || ff(its[0]).manufacturer, 'N/A') + C(its[0].id + '|description', its[0].description || ff(its[0]).description) + C(its[0].id + '|model', its[0].model || ff(its[0]).model, 'N/A') + C(its[0].id + '|serial', its[0].serial || ff(its[0]).serial, 'N/A') + C(its[0].id + '|code', its[0].code) + C('g|loc', g.loc, 'N/A') + '</tr>';
-    var rows = its.map(function (it, k) { var f = ff(it); ki = k + 1; return '<tr' + (focus === it.id ? ' class="cur"' : '') + '><td class="no">' + (k + 1) + '</td>' + C(it.id + '|description', it.description || f.description) + C(it.id + '|code', it.code) + C(it.id + '|manufacturer', it.manufacturer || f.manufacturer, 'N/A') + C(it.id + '|model', it.model || f.model, 'N/A') + C(it.id + '|serial', it.serial || f.serial, 'N/A') + R(calRangeText(it) || f.calRange) + R(limitsText(it)) + '<td></td></tr>'; }).join('') +
+    var rows = its.map(function (it, k) { var f = ff(it); ki = k + 1; return '<tr class="clk' + (focus === it.id ? ' cur' : '') + '" data-ie="' + it.id + '"><td class="no">' + (k + 1) + '</td><td class="rv"><b>' + esc(it.description || f.description || '—') + '</b></td>' + R(it.code) + R(it.manufacturer || f.manufacturer || 'N/A') + R(it.model || f.model || 'N/A') + R(it.serial || f.serial || 'N/A') + R(calRangeText(it) || f.calRange) + R(limitsText(it)) + '<td class="ed">Edit ›</td></tr>'; }).join('') +
       st.nw.map(function (n, k) { var kd = kind8(n.description), KD = KUNIT[kd]; return '<tr class="nw"><td class="no">' + (ki + k + 1) + '</td><td><input data-nw="' + k + '|description" list="ctKinds" value="' + esc(n.description) + '" placeholder="e.g. Temperature"></td><td><input data-nw="' + k + '|code" value="' + esc(n.code) + '" placeholder="' + esc(((m && m.code) || '') + '/…') + '"></td><td><input data-nw="' + k + '|manufacturer" value="' + esc(n.manufacturer) + '" placeholder="N/A"></td><td class="ro" colspan="2">' + (KD ? esc(kd) + ' · ' + esc(KD[0]) + ' · res. ' + esc(KD[1]) : '<span class="mut">unit and resolution come from the description</span>') + '</td><td class="ro" colspan="2">new – last year\'s certificate is loaded by its code</td><td><button class="ctx" data-nx="' + k + '" title="Remove">×</button></td></tr>'; }).join('');
     return { wide: 1, title: 'Cover ' + (gi + 1) + ' – Unit under Test and its items',
       body: '<datalist id="ctKinds">' + Object.keys(KUNIT).map(function (k) { return '<option value="' + esc(k) + '">'; }).join('') + '</datalist><div class="ctw">' +
         '<h5>Unit under Test</h5><table class="ctb"><tr><th>No.</th><th>Manufacturer</th><th>Description</th><th>Model</th><th>S/N</th><th>Code</th><th>Location</th></tr>' + unit + '</table>' +
         '<h5>Item to be calibrated</h5><table class="ctb"><tr><th>No.</th><th>Description</th><th>Code</th><th>Manufacturer</th><th>Model</th><th>S/N</th><th>Cal. Range</th><th>Accepted Limit</th><th></th></tr>' + rows +
         '<tr class="addrow"><td colspan="9"><button class="wladd" id="ctAdd">+ Add item</button></td></tr></table>' +
-        '<div class="small" style="margin-top:8px">Type in any cell – it is saved as you type. Cal. range and limits are changed inside each certificate. <a href="#" id="uMore">More cover options</a></div></div>',
+        '<div class="small" style="margin-top:8px">Type in the unit row – it is saved as you type. Click an item to edit it on its own page. <a href="#" id="uMore">More cover options</a></div></div>',
       foot: '<button class="btn" id="ctOk">' + (st.nw.length ? 'Add ' + st.nw.length + ' item' + (st.nw.length > 1 ? 's' : '') + ' and close' : 'Done') + '</button>',
       mount: function () {
         $$('[data-ct]').forEach(function (e) { e.oninput = function () { var a = e.dataset.ct.split('|'), v = e.value.trim(); if (a[0] === 'm') m[a[1]] = v; else if (a[0] === 'g') g[a[1]] = v; else { var it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (it) it[a[1]] = v; } saveProjects(); }; });
         $$('[data-nw]').forEach(function (e) { e.oninput = function () { var a = e.dataset.nw.split('|'); st.nw[+a[0]][a[1]] = e.value; if (a[1] === 'description') { var td = e.closest('tr').children[4], kd = kind8(e.value), KD = KUNIT[kd]; td.innerHTML = KD ? esc(kd) + ' · ' + esc(KD[0]) + ' · res. ' + esc(KD[1]) : '<span class="mut">unit and resolution come from the description</span>'; } }; });
         $$('[data-nx]').forEach(function (b) { b.onclick = function () { st.nw.splice(+b.dataset.nx, 1); renderSheet(); }; });
-        $('#ctAdd').onclick = function () { st.nw.push({ description: '', code: '', manufacturer: '' }); renderSheet(); setTimeout(function () { var x = $$('[data-nw$="|description"]'); if (x.length) x[x.length - 1].focus(); }, 30); };
+        $('#ctAdd').onclick = function () { itemSheet(p, gi, null); };
+        $$('[data-ie]').forEach(function (r) { r.onclick = function () { itemSheet(p, gi, p.items.filter(function (x) { return x.id === r.dataset.ie; })[0]); }; });
         var f0 = $('tr.cur input') || (focus === 'add' && $('[data-nw$="|description"]')); if (f0) setTimeout(function () { f0.focus(); }, 30);
         $('#uMore').onclick = function (e) { e.preventDefault(); coverSheet(p, gi); };
         $('#ctOk').onclick = function () { var add = st.nw.filter(function (n) { return n.description.trim() || n.code.trim(); }); if (!add.length) { closeSheet(); render(); return; }
@@ -2263,6 +2266,46 @@ function coverTable(p, gi, focus) { var gr = coverGroups(p)[gi]; if (!gr) return
           add.forEach(function (n) { var desc = n.description.trim() || kind8(n.code) || 'Item', kd = kind8(desc), KD = KUNIT[kd], ni = newItem({ machineId: m.id, code: n.code.trim(), description: desc, manufacturer: n.manufacturer.trim() || after.manufacturer || '', dept: after.dept || '', src: 'sub-item' });
             if (KD) { ni.unit = KD[0]; ni.res = KD[1]; ni.resUnit = KD[0]; ni.resFrom = 'kind'; } var idx = p.items.indexOf(after); p.items.splice(idx + 1, 0, ni); after = ni; if (!ni.code) startManual(ni); first = first || ni; });
           p.cv = null; saveProjects(); closeSheet(); toast(add.length + ' item' + (add.length > 1 ? 's' : '') + ' added'); queueOld(p); var L = certList(p); p.ci = L.indexOf(first); saveProjects(); render(); window.scrollTo(0, 0); }; } }; }); }
+function itemSheet(p, gi, it0) { var gr = coverGroups(p)[gi]; if (!gr) return; var isNew = !it0, m = gr.machine, ff = (it0 && it0.old && it0.old.fields) || {};
+  var KMAP = { 'Humidity': 'RH', 'Differential Pressure': 'Differential pressure', 'Air Velocity': 'Air velocity' };
+  var l0 = (it0 && it0.lim) || { type: 'rdg', val: '', unit: '' };
+  var st = it0 ? { description: it0.description || ff.description || '', code: it0.code || '', manufacturer: it0.manufacturer || ff.manufacturer || '', model: it0.model || ff.model || '', serial: it0.serial || ff.serial || '', unit: it0.unit || '', rMin: it0.rMin || '', rMax: it0.rMax || '', cMin: it0.cMin || '', cMax: it0.cMax || '', res: it0.res || '', procedure: ff.procedure || '', limVal: l0.val || '', limType: l0.type || 'rdg' }
+    : { description: '', code: '', manufacturer: (gr.items[0] || {}).manufacturer || '', model: '', serial: '', unit: '', rMin: '', rMax: '', cMin: '', cMax: '', res: '', procedure: '', limVal: '', limType: 'rdg' }, touched = {};
+  var auto = function () { if (!isNew) return; var kd = kind8(st.description), KU = KUNIT[kd], KD = KDEF[KMAP[kd] || kd];
+    if (KU) { if (!touched.unit) st.unit = KU[0]; if (!touched.res) st.res = KU[1]; } if (KD) { if (!touched.procedure && KD[0]) st.procedure = KD[0]; var mm = !touched.limVal && String(KD[1] || '').match(/±\s*([\d.]+)\s*(%\s*of\s*F\.?S|%\s*of\s*Rdg|.*)/i); if (mm) { st.limVal = mm[1]; st.limType = /F\.?S/i.test(mm[2]) ? 'fs' : /Rdg/i.test(mm[2]) ? 'rdg' : 'abs'; } } return kd; };
+  var F = function (k, l, ph, wide) { return '<label class="isf' + (wide ? ' w2' : '') + '"><span>' + l + '</span><input class="inp" data-is="' + k + '" value="' + esc(st[k] || '') + '" placeholder="' + esc(ph || '') + '"' + (/Min|Max|res|limVal/.test(k) ? ' inputmode="decimal"' : '') + '></label>'; };
+  var units = Object.keys(UCAT);
+  openSheet(function () { var kd = auto(), sops = sopList(); if (st.procedure && sops.indexOf(st.procedure) < 0) sops.unshift(st.procedure);
+    var idx = it0 ? gr.items.indexOf(it0) + 1 : gr.items.length + 1;
+    return { wide: 1, title: (isNew ? 'New item' : 'Item ' + idx) + ' · Cover ' + (gi + 1) + (m ? ' – ' + esc(m.name) : ''),
+      body: '<div class="isw">' +
+        '<div class="iscard"><div class="ish">Item to be calibrated <small>as written on the cover and the certificate</small></div><div class="isg">' +
+          F('description', 'Description', 'e.g. Chamber Temperature Sensor', 1) + F('code', 'Code', ((m && m.code) || '') + '/…') + F('manufacturer', 'Manufacturer', 'N/A') + F('model', 'Model', 'N/A') + F('serial', 'S/N', 'N/A') + '</div>' +
+          (isNew ? '<div class="iskd" id="isKd">' + (kd ? 'Recognised as <b>' + esc(kd) + '</b> – unit, resolution, procedure and limits are filled for you. Change anything you need.' : 'Write the description (e.g. Temperature, Pressure, Humidity, RPM…) and the unit, resolution and limits fill themselves.') + '</div>' : '') + '</div>' +
+        '<div class="iscard"><div class="ish">Measurement</div><div class="isg">' +
+          '<label class="isf"><span>Unit</span><select class="inp" data-is="unit"><option value="">— choose —</option>' + units.map(function (u) { return '<option' + (u === st.unit ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '</select></label>' +
+          F('res', 'Resolution', 'e.g. 0.1') +
+          '<label class="isf"><span>Range</span><div class="isr"><input class="inp" data-is="rMin" value="' + esc(st.rMin) + '" placeholder="min" inputmode="decimal"><i>to</i><input class="inp" data-is="rMax" value="' + esc(st.rMax) + '" placeholder="max" inputmode="decimal"></div></label>' +
+          '<label class="isf"><span>Cal. Range</span><div class="isr"><input class="inp" data-is="cMin" value="' + esc(st.cMin) + '" placeholder="full range" inputmode="decimal"><i>to</i><input class="inp" data-is="cMax" value="' + esc(st.cMax) + '" placeholder="" inputmode="decimal"></div></label>' +
+          '<label class="isf"><span>Accepted limits</span><div class="isr"><b class="pm">±</b><input class="inp" data-is="limVal" value="' + esc(st.limVal) + '" placeholder="value" inputmode="decimal"><select class="inp" data-is="limType">' + [['rdg', '% of Rdg.'], ['fs', '% of F.S'], ['abs', st.unit || 'value']].map(function (o) { return '<option value="' + o[0] + '"' + (st.limType === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></div></label>' +
+          '<label class="isf"><span>Procedure No.</span><select class="inp" data-is="procedure"><option value="">— choose —</option>' + sops.map(function (x) { return '<option' + (x === st.procedure ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
+        '</div></div>' + (isNew ? '<div class="small">If this code had a certificate last year, its points and readings are brought in after you add it.</div>' : '') + '</div>',
+      foot: '<button class="btn ghost" id="isX">Cancel</button>' + (isNew ? '' : '<button class="btn ghost" id="isO">Open its certificate</button>') + '<button class="btn" id="isOk">' + (isNew ? 'Add item' : 'Save') + '</button>',
+      mount: function () {
+        $$('[data-is]').forEach(function (e) { var ev = e.tagName === 'SELECT' ? 'onchange' : 'oninput'; e[ev] = function () { st[e.dataset.is] = e.value.trim(); touched[e.dataset.is] = 1;
+          if (e.dataset.is === 'description' && isNew) { var before = st.unit; auto(); var k2 = kind8(st.description), x = $('#isKd'); if (x) x.innerHTML = k2 ? 'Recognised as <b>' + esc(k2) + '</b> – unit, resolution, procedure and limits are filled for you. Change anything you need.' : 'Write the description (e.g. Temperature, Pressure, Humidity, RPM…) and the unit, resolution and limits fill themselves.';
+            ['unit', 'res', 'procedure', 'limVal', 'limType'].forEach(function (k) { var el = $('[data-is="' + k + '"]'); if (el && !touched[k]) { if (el.tagName === 'SELECT' && st[k] && !Array.prototype.some.call(el.options, function (o) { return o.value === st[k] || o.text === st[k]; })) el.add(new Option(st[k], st[k]), 1); el.value = st[k]; } }); } var lt = $('[data-is="limType"]'); if (lt && lt.options[2]) lt.options[2].text = st.unit || 'value'; }; });
+        $('#isX').onclick = function () { closeSheet(); render(); };
+        var o = $('#isO'); if (o) o.onclick = function () { closeSheet(); p.ci = certList(p).indexOf(it0); p.cv = null; saveProjects(); render(); window.scrollTo(0, 0); };
+        $('#isOk').onclick = function () { if (!st.description && !st.code) return toast('Write the description or the code', true);
+          var it = it0;
+          if (isNew) { if (!m) { var f0 = (gr.items[0].old && gr.items[0].old.fields) || {}; m = { id: uid(), name: gr.items[0].description || f0.description || 'Machine', code: (gr.items[0].code || '').replace(/[\/\-][^\/\-]*$/, ''), dept: gr.items[0].dept || (p.depts || [])[0] || '' }; p.machines = p.machines || []; p.machines.push(m); gr.items.forEach(function (x) { x.machineId = m.id; }); }
+            var after = gr.items[gr.items.length - 1]; it = newItem({ machineId: m.id, code: st.code, description: st.description || kind8(st.code) || 'Item', dept: after.dept || '', src: 'sub-item' }); p.items.splice(p.items.indexOf(after) + 1, 0, it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
+          ['description', 'code', 'manufacturer', 'model', 'serial', 'unit', 'rMin', 'rMax', 'cMin', 'cMax', 'res'].forEach(function (k) { it[k] = st[k]; }); it.resUnit = st.unit;
+          if (st.limVal) { it.lim = { type: st.limType, val: st.limVal, unit: st.limType === 'abs' ? st.unit : '' }; it.limFrom = it.limFrom || 'user'; }
+          if (st.procedure) { var o2 = it.old || (it.old = { fields: {}, points: [] }); (o2.fields = o2.fields || {}).procedure = st.procedure; }
+          p.cv = null; saveProjects(); closeSheet(); toast(isNew ? 'Item added' : 'Saved'); if (isNew && st.code) queueOld(p);
+          if (isNew) { p.ci = certList(p).indexOf(it); saveProjects(); window.scrollTo(0, 0); } render(); }; } }; }); }
 function unitSheet(p, gi) { var gr = coverGroups(p)[gi]; if (!gr) return; var m = gr.machine, g = genDefaults(p);
   var F = function (k, l, v, ph) { return '<label class="uf"><span>' + l + '</span><input class="inp" data-uf="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></label>'; };
   var ff = function (it) { return ((it.old || {}).fields) || {}; };
@@ -2276,8 +2319,8 @@ function covTop(p, it) { var gs = coverGroups(p), gr = gs.filter(function (g2) {
   return '<div class="pgsep first">Cover' + (gr.items.length > 1 ? ' – shared by ' + gr.items.length + ' certificates' : '') + '</div>' + coverPaper(p, gr, g0, it); }
 function covTopBind(p, it) { var gs = coverGroups(p), gi = -1; gs.forEach(function (g2, k) { if (g2.items.indexOf(it) >= 0) gi = k; }); if (gi < 0) return;
   $$('[data-cvu]').forEach(function (b) { b.onclick = function () { coverTable(p, gi); }; });
-  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { var x = certList(p)[+b.dataset.cvi]; coverTable(p, gi, x && x.id); }; });
-  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { coverTable(p, gi, 'add'); }; }
+  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { itemSheet(p, gi, certList(p)[+b.dataset.cvi]); }; });
+  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { itemSheet(p, gi, null); }; }
 function coverPaper(p, gr, g0, cur) { var g = genDefaults(p), its = gr.items, L = certList(p), F = function (it) { return ((it.old || {}).fields) || {}; };
   var T = function (head, rows, cls) { return '<table class="wlg' + (cls ? ' ' + cls : '') + '"><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table>'; };
   var td = function (v) { return '<td>' + esc(v == null || v === '' ? 'N/A' : v) + '</td>'; };
