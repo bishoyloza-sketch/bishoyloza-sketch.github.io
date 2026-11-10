@@ -375,3 +375,8 @@ tr.oldr input,.oldin{height:30px;width:86px;padding:0 6px;font-size:13px;border:
 .fpvb table.pvt{width:100%;border-collapse:collapse;font-size:13px}
 .fpvb table.pvt td{border-bottom:1px solid #E6EAF0;padding:5px 4px}
 .cf .btn.sm{white-space:normal;height:auto;min-height:40px;line-height:1.2;padding-top:6px;padding-bottom:6px;text-overflow:clip}
+.fob{display:inline-flex;gap:3px;white-space:nowrap}
+.fob button{border:1px solid #C9D3E0;background:#fff;border-radius:8px;width:28px;height:26px;font-size:13px;line-height:1;cursor:pointer;color:#1F4E8C;padding:0}
+.fob button.fx{color:#C0392B}
+td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
+.cf.tbb{margin:8px 0 4px}
