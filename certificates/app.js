@@ -576,7 +576,7 @@ function wItems(p) {
     '<button data-a="month" class="hl">' + I.visit + '<b>Suggested</b><small>' + (sb ? (sb.n ? sb.n + ' batches · ' + MON[sb.m] + ' ' + sb.y : 'Nothing in ' + MON[sb.m] + ' ' + sb.y) : spOn() ? 'Checking last year…' : 'Same month last year') + '</small></button>' +
     '<button data-a="desc"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><b>Search</b><small>Description, code or cert. no. · any year or month</small></button>' +
     '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Opens the camera</small></button></div>' +
-    '<div class="cf" style="margin-top:8px"><button class="btn ghost sm" data-a="excel">Excel template</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
+    '<div class="cf" style="margin-top:8px"><button class="btn sm" data-a="paste">Paste many codes / cert. nos.</button><button class="btn ghost sm" data-a="excel">Excel template</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
     '<div class="sec"><h2>Codes</h2><small>' + p.items.length + (need ? ' · ' + need + ' need data' : '') + '</small></div>' +
     (p.items.length > 8 ? '<div class="search sm" style="margin-bottom:10px">' + I.search + '<input id="iq" placeholder="Find a code or description" value="' + esc(p.itQ || '') + '" autocomplete="off"></div>' : '') +
     (p.machines.map(function (m) { var its = p.items.filter(function (i) { return i.machineId === m.id && iHit(i, m); }); if (IQ && !its.length) return ''; var open = IQ || (p.itOpen || {})[m.id] != null ? (IQ || p.itOpen[m.id]) : p.items.length <= 12;
@@ -584,7 +584,7 @@ function wItems(p) {
     (loose.filter(function (i) { return iHit(i); }).length ? '<div class="list">' + loose.filter(function (i) { return iHit(i); }).map(irow).join('') + '</div>' : (!p.machines.length && !IQ ? '<div class="empty"><b>No codes yet</b>Use Suggested, Search or Photo above.</div>' : '')) +
     (need ? '<div class="small" style="margin-top:10px">Items with “Photo only” or “Missing data” can be completed later – before the readings.</div>' : '');
   $$('[data-ph]').forEach(function (im) { IDB.get(im.dataset.ph).then(function (d) { if (d) im.src = d; }); });
-  $$('[data-a]').forEach(function (b) { b.onclick = function () { var k = b.dataset.a; if (k === 'month' || k === 'code' || k === 'cert' || k === 'desc') { if (!spOn()) return toast('SharePoint is not connected', true); return lySearch(p, k); } ({ photo: photoChoice, excel: excelSheet, add: addChoice })[k](p); }; });
+  $$('[data-a]').forEach(function (b) { b.onclick = function () { var k = b.dataset.a; if (k === 'month' || k === 'code' || k === 'cert' || k === 'desc') { if (!spOn()) return toast('SharePoint is not connected', true); return lySearch(p, k); } ({ photo: photoChoice, excel: excelSheet, add: addChoice, paste: pasteSheet })[k](p); }; });
   $$('[data-it]').forEach(function (b) { b.onclick = function () { itemSheet(p, b.dataset.it); }; });
   $$('[data-ie]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); itemSheet(p, b.dataset.ie); }; });
   $$('[data-ix]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); delItem(p, b.dataset.ix, render); }; });
@@ -724,6 +724,26 @@ function nameplates(p, files) {
 
 /* Excel: fixed template (proposal – we can change the columns together) */
 var XL_COLS = ['Type (Unit / Machine item)', 'Machine', 'Machine code', 'Code', 'Description', 'Manufacturer', 'Model', 'Serial no.', 'Range from', 'Range to', 'Unit', 'Cal. range from', 'Cal. range to', 'Resolution', 'Resolution unit', 'Department'];
+/* ---- many codes or certificate numbers at once: paste them (or any Excel) → every one gets last year's certificate in the background ---- */
+var CERTNO_RX = /^\d{1,4}\s*\/?\s*[A-Z]{0,5}\s*-\s*\d{1,5}[A-Z]?\s*-\s*20\d\d$/i;
+function pasteTokens(t) { var seen = {}, out = []; String(t || '').split(/[\n\r\t,;]+|\s{2,}/).forEach(function (x) { x = x.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\s*-\s*/g, '-').replace(/\s*\/\s*/g, '/'); if (!x || x.length > 40 || /^(code|codes|cert|certificate|no\.?|كود)$/i.test(x)) return; var k = x.toUpperCase(); if (seen[k]) return; seen[k] = 1; out.push({ v: x, cert: CERTNO_RX.test(x) }); }); return out; }
+function pasteSheet(p) { var st = { text: '', list: [] };
+  var have = {}; p.items.forEach(function (i) { if (i.code) have[i.code.toUpperCase()] = 1; if (i.prevCert) have[i.prevCert.toUpperCase()] = 1; });
+  openSheet(function () { var L = st.list, nNew = L.filter(function (x) { return !have[x.v.toUpperCase()]; }).length, nc = L.filter(function (x) { return x.cert; }).length;
+    return { title: 'Paste many codes', body: '<div class="note">Paste the codes or last year\'s certificate numbers – one per line, or copied from Excel / WhatsApp. Each one gets its certificate from last year by itself, with all its data and readings.</div>' +
+      '<textarea class="pin" id="pT" rows="8" style="width:100%;font-size:15px;line-height:1.5" placeholder="P1-269/P1&#10;M1-238&#10;10/EP-2147-2026&#10;…">' + esc(st.text) + '</textarea>' +
+      '<div class="cf" style="margin-top:6px"><button class="btn ghost sm" id="pX">From an Excel file</button>' + (st.text ? '<button class="btn ghost sm clr" id="pC">Clear</button>' : '') + '</div>' +
+      (L.length ? '<div class="sec"><h2>' + L.length + ' found</h2><small>' + (nc ? nc + ' certificate no. · ' : '') + (L.length - nc) + ' codes' + (L.length - nNew ? ' · ' + (L.length - nNew) + ' already in the project' : '') + '</small></div><div class="chips">' +
+        L.map(function (x) { var old = have[x.v.toUpperCase()]; return '<span class="chip' + (old ? ' off' : '') + '" title="' + (x.cert ? 'Certificate no.' : 'Code') + '">' + (x.cert ? '№ ' : '') + esc(x.v) + (old ? ' ✓' : '') + '</span>'; }).join('') + '</div>' : ''),
+      foot: '<button class="btn ghost" id="pN">Cancel</button><button class="btn" id="pOk"' + (nNew ? '' : ' disabled') + '>Add ' + (nNew || '') + ' and get the certificates</button>',
+      mount: function () { var ta = $('#pT'), tm; ta.oninput = function () { clearTimeout(tm); tm = setTimeout(function () { st.text = ta.value; st.list = pasteTokens(st.text); var pos = ta.selectionStart; renderSheet(); var t2 = $('#pT'); if (t2) { t2.focus(); t2.setSelectionRange(pos, pos); } }, 350); };
+        $('#pN').onclick = closeSheet; var c = $('#pC'); if (c) c.onclick = function () { st.text = ''; st.list = []; renderSheet(); };
+        $('#pX').onclick = function () { pickFiles('.xlsx,.csv,.txt').then(function (fs) { if (!fs.length) return; var f = fs[0];
+          (/\.xlsx$/i.test(f.name) ? f.arrayBuffer().then(readXlsx).then(function (bk) { var rows = bk[Object.keys(bk)[0]] || [], hdr = (rows[0] || []).map(function (x) { return String(x || ''); }), ci = hdr.findIndex(function (h) { return /code|cert|serial|كود/i.test(h); });
+              return rows.slice(ci >= 0 ? 1 : 0).map(function (r) { return ci >= 0 ? r[ci] : (r || []).filter(function (x) { return x != null && String(x).trim(); })[0]; }).filter(Boolean).join('\n'); }) : f.text())
+            .then(function (t) { st.text = (st.text ? st.text + '\n' : '') + t; st.list = pasteTokens(st.text); renderSheet(); }).catch(function (e) { toast(e.message, true); }); }); };
+        $('#pOk').onclick = function () { var n = 0; st.list.forEach(function (x) { if (have[x.v.toUpperCase()]) return; have[x.v.toUpperCase()] = 1; p.items.push(newItem(x.cert ? { prevCert: x.v, src: 'paste', dept: p.depts[0] || '' } : { code: x.v, src: 'paste', dept: p.depts[0] || '' })); n++; });
+          saveProjects(); closeSheet(); queueOld(p); toast(n + ' added – getting last year\'s certificates…'); render(); }; } }; }); }
 function excelSheet(p) {
   openSheet(function () { return { title: 'Items from Excel', body:
     '<div class="note">1. Download the template. 2. One row per instrument. For a machine, write its name in <b>Machine</b> on every instrument under it. 3. Upload it here.</div>' +

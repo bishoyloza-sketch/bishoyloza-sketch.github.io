@@ -383,3 +383,5 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 .sheet-f{flex-wrap:wrap}
 .sheet-f .btn{white-space:normal;line-height:1.15;height:auto;min-height:46px;padding-top:6px;padding-bottom:6px;text-overflow:clip}
 @media (max-width:560px){.sheet-f .btn{font-size:14px;flex:1 1 40%}}
+.chip.off{opacity:.55}
+.sec h2{white-space:nowrap}
