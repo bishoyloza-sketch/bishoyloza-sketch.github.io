@@ -660,3 +660,11 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
  .paper.wl .kvt.wd td{min-width:0}
  .wlg{font-size:10px}.wlg th,.wlg td{padding:3px 2px;word-break:break-word}
 }
+/* v88: undo button, cover-only rail */
+#undoFab{position:fixed;left:16px;bottom:96px;z-index:60;display:none;align-items:center;gap:6px;padding:10px 16px;border-radius:999px;border:0;background:var(--navy,#13294B);color:#fff;font:600 14px/1 Barlow,system-ui,sans-serif;box-shadow:0 6px 18px rgba(19,41,75,.28);cursor:pointer}
+#undoFab.on{display:inline-flex}#undoFab:hover{filter:brightness(1.15)}
+.rl.rlcov .rn{font-size:14px}
+.wladd2{margin-left:14px}
+.icard{position:relative}.icard .udel{position:absolute;top:8px;right:8px;border:1px solid #F2C9C9;background:#FFF5F5;color:#B42318;border-radius:8px;padding:4px 10px;font:600 12.5px Barlow,system-ui,sans-serif;cursor:pointer}
+.icard .umv{position:absolute;top:8px;right:84px;display:flex;gap:4px}.icard .umv button{border:1px solid #D5DCE6;background:#fff;border-radius:8px;width:28px;height:26px;cursor:pointer}
+.sugwrap{position:relative}.sugwrap .sugh{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:#8A96A6;pointer-events:none;background:#EEF2F7;border-radius:5px;padding:1px 6px}
