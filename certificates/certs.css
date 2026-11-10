@@ -609,3 +609,47 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 #pm>.prail .rl.crt{margin-left:0;width:100%}
 .ltbl tr.gfirst td{border-top:2px solid #D5DFEB}
 @media (max-width:999px){.rlgh{display:none}}
+/* ===== smoother Word-like page (v86) ===== */
+.paper.wl{padding:34px 6% 36px;border-radius:4px;box-shadow:0 1px 3px rgba(19,41,75,.06),0 8px 28px rgba(19,41,75,.08);border-color:#E3E8EE}
+.wlt{margin-top:0}
+.paper.wl h5{border-bottom:0;margin:20px 0 6px;font-size:12px;letter-spacing:.6px}
+.paper.wl .kvt,.paper.wl .rt,.wlg{border-collapse:separate!important;border-spacing:0;border:1px solid #D3DAE3!important;border-radius:6px;overflow:hidden;width:100%}
+.paper.wl .kvt th,.paper.wl .kvt td,.paper.wl .rt th,.paper.wl .rt td,.wlg th,.wlg td{border:0!important;border-bottom:1px solid #E6EAF0!important;border-right:1px solid #EDF0F4!important}
+.paper.wl .kvt tr:last-child>*,.paper.wl .rt tr:nth-last-child(2)>*,.wlg tr:last-child>*{border-bottom:0!important}
+.paper.wl .kvt tr>*:last-child,.paper.wl .rt tr>*:last-child,.wlg tr>*:last-child{border-right:0!important}
+.paper.wl .kvt th{background:#F6F8FA;color:#3D4C60;font-weight:600;font-size:12px;padding:0 10px!important;height:34px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paper.wl .kvt td{padding:0 10px!important;height:34px;font-size:13px;white-space:nowrap}
+.paper.wl .kvt td .pin,.paper.wl .kvt td select{font-size:13px;height:28px!important;line-height:28px;padding:0!important}
+.paper.wl .kvt .split{gap:2px}.paper.wl .kvt .split i{color:#9AA6B5;padding:0 2px}
+.paper.wl .kvt.wd th{width:16%!important}.paper.wl .kvt.wd td{width:34%!important}
+.paper.wl .rt.wr{table-layout:fixed}
+.paper.wl .rt th{background:#F6F8FA!important;color:#3D4C60!important;font:600 11.5px/1.25 Calibri,Carlito,Arial,sans-serif!important;height:46px;padding:4px 3px!important;vertical-align:middle}
+.paper.wl .rt th i{font-style:normal;color:#7B8899;font-weight:500}
+.paper.wl .rt td{height:36px;padding:0 3px!important;font-size:13.5px;vertical-align:middle}
+.paper.wl .rt input{height:28px;width:100%;font-size:14px!important;text-align:center}
+.paper.wl .rt.wr td.pt{position:relative}.paper.wl .rt.wr td.pt input{width:100%}
+.paper.wl .rt .ptx{position:absolute;right:2px;top:2px;opacity:0;transition:opacity .15s}.paper.wl .rt tr:hover .ptx{opacity:1}
+.paper.wl .rt tr.wn td{height:auto;border:0!important;padding:0 6px!important;font-size:11.5px}
+.paper.wl .rt tr.wn td:empty{display:none}
+.wlg th{background:#F6F8FA;color:#3D4C60;font-weight:600;font-size:11.5px;height:34px;padding:0 6px}
+.wlg td{height:34px;padding:0 6px;font-size:12.5px}
+.wlg td.wnone{color:#8A96A6;font-style:italic}
+.wlchg{margin-top:6px;font-size:12.5px}.wlchg summary{cursor:pointer;color:#1F6FB5;font-weight:600;list-style:none;display:inline-block;padding:3px 0}.wlchg summary::-webkit-details-marker{display:none}
+.wlinfo td,.wlinfo th{font-size:13px;padding:2px 6px}
+/* unit sheet + add item tiles */
+.ucard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.uhd{font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#6B7B90;margin-bottom:8px}
+.ugrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+.uf{display:flex;flex-direction:column;gap:3px}.uf span{font-size:12px;font-weight:600;color:#45556B}
+.uf .inp{height:40px}
+.ktiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.ktile{border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:12px 10px;text-align:left;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:3px}
+.ktile b{font-size:14px;color:var(--navy)}.ktile small{font-size:11.5px;color:var(--muted)}
+.ktile:hover{border-color:#9FB6D3}.ktile.on{border-color:#1F6FB5;background:#EEF5FC;box-shadow:0 0 0 2px #1F6FB5 inset}
+@media (max-width:700px){.paper.wl{padding:20px 4% 24px}.ugrid{grid-template-columns:1fr}.paper.wl .kvt td,.paper.wl .kvt th{height:auto;min-height:34px;padding:6px 8px!important;white-space:normal}}
+.paper.wl .kvt.wd th{width:20%!important}.paper.wl .kvt.wd td{width:30%!important}
+.paper.wl input.pin,.paper.wl select.pin{margin:0!important}
+.paper.wl .rt input.pin{display:block;height:28px}
+.paper.wl .rt.bt th{height:40px}.paper.wl .rt.bt th .fob{display:inline-flex;margin-top:2px}
+.paper.wl .rt.bt .fo,.paper.wl .rt.bt .fx{width:24px;height:24px;font-size:12px}
+.paper.wl .rt.bt th:first-child,.paper.wl .rt.bt tr>th{text-align:center}
