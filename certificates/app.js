@@ -166,39 +166,7 @@ function demoState() { return { companies: [DEMO.company], users: DEMO.people, d
 function req(action, payload) { if (DEMO) return Promise.resolve(action === 'state' ? demoState() : action === 'people' ? DEMO.people : action === 'login' ? { user: DEMO.people[0] } : {}); return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
   S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; return d; }); }
-/* ---- undo (any change) + recycle bin (anything deleted is kept 60 days) ---- */
-var UNDO = { st: [], last: null, ids: null, t: 0, busy: false };
-function projIds(pr) { var m = {}; (pr || []).forEach(function (p) { m[p.id] = (p.items || []).map(function (i) { return i.id; }); }); return m; }
-function binGet() { var b = LS.get('bin', []), lim = Date.now() - 60 * 864e5; return b.filter(function (x) { return x.at > lim; }); }
-function binCatch(prevStr) { var cur = projIds(S.projects), was = UNDO.ids || {}, gone = false;
-  Object.keys(was).forEach(function (pid) { if (!cur[pid]) gone = true; else if (was[pid].some(function (iid) { return cur[pid].indexOf(iid) < 0; })) gone = true; }); if (!gone) return;
-  var prev; try { prev = JSON.parse(prevStr); } catch (e) { return; } var bin = binGet(), now = Date.now();
-  prev.forEach(function (p) { if (!cur[p.id]) { bin.unshift({ id: uid(), at: now, type: 'project', title: projTitle(p), n: (p.items || []).length, data: p }); return; }
-    (p.items || []).forEach(function (it, k) { if (cur[p.id].indexOf(it.id) >= 0) return; var m = (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0];
-      bin.unshift({ id: uid(), at: now, type: 'item', title: (it.code || it.description || 'Item') + (it.description && it.code ? ' · ' + it.description : ''), pid: p.id, ptitle: projTitle(p), idx: k, machine: m || null, data: it }); }); });
-  LS.set('bin', bin.slice(0, 150)); }
-function saveProjects() { var cur; try { cur = JSON.stringify(S.projects); } catch (e) { cur = null; }
-  if (cur != null && UNDO.last != null && cur !== UNDO.last && !UNDO.busy) { var now = Date.now();
-    if (!UNDO.st.length || now - UNDO.t > 1500) { UNDO.st.push(UNDO.last); if (UNDO.st.length > 40) UNDO.st.shift(); } UNDO.t = now; binCatch(UNDO.last); }
-  if (cur != null) { UNDO.last = cur; UNDO.ids = projIds(S.projects); }
-  try { localStorage.setItem(LSP + 'projects', cur != null ? cur : JSON.stringify(S.projects)); } catch (e) { toast('Phone storage is full', true); } undoFab(); }
-function undoInit() { if (UNDO.last == null) { try { UNDO.last = JSON.stringify(S.projects); UNDO.ids = projIds(S.projects); } catch (e) {} } }
-function undoFab() { var b = document.getElementById('undoFab'); if (!b) { b = document.createElement('button'); b.id = 'undoFab'; b.type = 'button'; b.title = 'Undo (Ctrl+Z)'; b.innerHTML = '↶ Undo'; b.onclick = doUndo; document.body.appendChild(b); }
-  b.className = UNDO.st.length && S.session ? 'on' : ''; }
-function doUndo() { if (!UNDO.st.length) return toast('Nothing to undo'); var prev = UNDO.st.pop(); UNDO.busy = true;
-  try { S.projects = JSON.parse(prev); } catch (e) { UNDO.busy = false; return; } UNDO.last = null; sheetFn = null; renderSheet(); var dl = $('#dlg-root'); if (dl) dl.innerHTML = '';
-  saveProjects(); UNDO.busy = false; UNDO.t = 0; render(); toast('Undone' + (UNDO.st.length ? ' · ' + UNDO.st.length + ' more' : '')); }
-document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) { var t = e.target, tg = t && t.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || (t && t.isContentEditable)) return; e.preventDefault(); doUndo(); } });
-function binRestore(x) { var bin = binGet().filter(function (y) { return y.id !== x.id; });
-  if (x.type === 'project') { if (!S.projects.some(function (p) { return p.id === x.data.id; })) S.projects.push(x.data); }
-  else { var p = S.projects.filter(function (q) { return q.id === x.pid; })[0]; if (!p) return toast('Its project “' + x.ptitle + '” is deleted – restore the project first', true);
-    if (!p.items.some(function (i) { return i.id === x.data.id; })) { if (x.machine && !(p.machines || []).some(function (m) { return m.id === x.machine.id; })) (p.machines = p.machines || []).push(x.machine); p.items.splice(Math.min(x.idx, p.items.length), 0, x.data); } }
-  LS.set('bin', bin); saveProjects(); toast(x.title + ' restored'); }
-function binSheet() { openSheet(function () { var b = binGet(), ago = function (t) { var m = Math.round((Date.now() - t) / 6e4); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };
-    return { title: 'Recycle bin', body: b.length ? '<div class="small" style="margin-bottom:8px">Everything deleted stays here for 60 days.</div><div class="list">' + b.map(function (x, i) { return '<div class="row"><span class="t"><b>' + esc(x.title) + '</b><small>' + (x.type === 'project' ? 'Project · ' + x.n + ' items' : 'Item · ' + esc(x.ptitle)) + ' · deleted ' + ago(x.at) + '</small></span><button class="btn sm" data-bn="' + i + '" style="flex:none">Restore</button></div>'; }).join('') + '</div>' : '<div class="empty"><b>The bin is empty</b>Deleted projects and items come here.</div>',
-      foot: '<button class="btn ghost" id="bnX">Close</button>' + (b.length ? '<button class="btn ghost" id="bnE" style="color:var(--danger)">Empty the bin</button>' : ''),
-      mount: function () { $('#bnX').onclick = closeSheet; var e = $('#bnE'); if (e) e.onclick = function () { dialog('Empty the recycle bin?', 'These can not come back after this.', 'Empty').then(function (y) { if (y) { LS.set('bin', []); renderSheet(); } }); };
-        $$('[data-bn]').forEach(function (k) { k.onclick = function () { binRestore(binGet()[+k.dataset.bn]); renderSheet(); }; }); } }; }); }
+function saveProjects() { LS.set('projects', S.projects); }
 var isAdmin = function () { return S.me && S.me.role === 'admin'; };
 
 /* ================= Microsoft / SharePoint ================= */
@@ -312,7 +280,7 @@ function render() {
   if (p.stage !== 'done') return renderWizard(p);
   return renderOverview(p);
 }
-function boot() { undoInit(); render(); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
+function boot() { render(); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
 
 /* ================= home ================= */
 function msCard() {
@@ -343,7 +311,7 @@ function renderHome() {
     S.projects.push(p); saveProjects(); S.cur = p.id; try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); };
   $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
   $$('[data-pd]').forEach(function (b) { b.onclick = function () { var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0];
-    dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' items. You can bring it back from the Recycle bin.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
+    dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' items. This cannot be undone.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
   var dg = $('#dueGo'); if (dg) dg.onclick = dueScan;
   $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn;
 }
@@ -1061,9 +1029,6 @@ function knowAdd(kind, sop, lim, w) { if (!kind) return; var k = knowGet(); w = 
 function knowBest(map) { var b = '', n = 0; Object.keys(map || {}).forEach(function (x) { if (map[x] > n) { n = map[x]; b = x; } }); return b; }
 function learnCert(f) { if (!f) return; if (f.form) { var kk = knowGet(), kd0 = kindOf(f.description, ''); if (kd0) { kk.form = kk.form || {}; kk.form[kd0] = kk.form[kd0] || {}; kk.form[kd0][formClean(f.form)] = (kk.form[kd0][formClean(f.form)] || 0) + 1; LS.set('know', kk); } } var rg = rngNums(f.range || '') || rngNums(f.calRange || '') || {}, ru = (String(f.resolution || '').match(/[\d.]+\s*(.+)$/) || [])[1]; knowAdd(kindOf(f.description, rg.u || ru), f.procedure, f.limits); }
 function knowApply(p, it) { var o = it.old; if (!o || o.status === 'searching') return false; var f = o.fields || (o.fields = {}), k = itKind(it), kn = knowGet(), ch = false; if (!k) return false;
-  if (!it.fix87) { it.fix87 = 1; var bad = KUNIT[k]; /* v86 mixed the unit table into the SOP table: undo what it wrote */
-    if (bad && it.sopAuto === k && String(f.procedure || '').trim() === bad[0]) { f.procedure = ''; it.sopAuto = ''; ch = true; }
-    if (bad && it.limFrom === 'kind' && it.limKind === k && it.lim) { var bl = parseLim(bad[1], it.unit); if (bl && JSON.stringify(bl) === JSON.stringify(it.lim)) { it.lim = null; it.limFrom = ''; f.limits = ''; ch = true; } } }
   var co = ((kn.co || {})[(p.company || {}).id]) || { sop: {}, lim: {} }, def = KDEF[k] || ['', ''];
   if (!String(f.procedure || '').trim()) { var sp = knowBest(co.sop[k]) || def[0] || knowBest(kn.sop[k]); if (sp) { f.procedure = sp; it.sopAuto = k; ch = true; } }
   if ((!it.lim || !isNum(it.lim.val)) && !String(f.limits || '').trim()) { var lb = knowBest(co.lim[k]) || def[1] || knowBest(kn.lim[k]), l = lb && parseLim(lb, it.unit); if (l && !(l.type === 'abs' && l.unit && it.unit && UCAT[l.unit] && UCAT[unitKey(it.unit)] && UCAT[l.unit][0] !== UCAT[unitKey(it.unit)][0])) { it.lim = l; it.limFrom = 'kind'; it.limKind = k; f.limits = limText(it); ch = true; } }
@@ -1787,11 +1752,8 @@ function itemSpan(it) { var f = (it.old && it.old.fields) || {}, n = oldNums(f);
   return { u: u, lo: lo, hi: hi }; }
 function refOptions(p, it) { var r0 = refOptions0(p, it); if (r0.length) return r0; var s = itemSpan(it), u = UCAT[s.u] || UCAT[unitKey(it.unit || '')]; if (!u) return []; var inf = p.info || {}, cat = u[0].toLowerCase(), syn = { weight: ['weight', 'mass', 'balance'], temperature: ['temperature', 'thermo'], pressure: ['pressure', 'manometer', 'gauge'], timer: ['timer', 'time', 'stopwatch'], 'air velocity': ['velocity', 'anemometer', 'air'], light: ['light', 'lux'], rpm: ['rpm', 'tachometer', 'speed'] }[cat] || [cat];
   /* no reference has a range on record for this kind → suggest by kind only */
-  var noRg = s.lo == null || s.hi == null; /* range not written yet (a new item): any standard of the same kind, widest range first */
-  return labDevices().map(function (d) { var t = ((d.category || '') + ' ' + (d.description || '')).toLowerCase(), r = devRange(d), sameU = r && UCAT[r.unit] && UCAT[r.unit][1] === u[1];
-      if (r && !(noRg && sameU)) return null; if (!r && !syn.some(function (w) { return t.indexOf(w) >= 0; })) return null;
-      return { d: d, ex: refExpired(d, inf) ? 1 : 0, span: r ? toBase(r.hi, r.unit) - toBase(r.lo, r.unit) : 0, fine: 0, kindOnly: true }; }).filter(Boolean)
-    .sort(function (a, b) { return (a.ex - b.ex) || (b.span - a.span); }); }
+  return labDevices().filter(function (d) { var t = ((d.category || '') + ' ' + (d.description || '')).toLowerCase(); return !devRange(d) && syn.some(function (w) { return t.indexOf(w) >= 0; }); })
+    .map(function (d) { return { d: d, ex: refExpired(d, inf) ? 1 : 0, span: 0, fine: 0, kindOnly: true }; }).sort(function (a, b) { return a.ex - b.ex; }); }
 function refOptions0(p, it) { var s = itemSpan(it), inf = p.info || {}; if (!UCAT[s.u] || s.lo == null || s.hi == null) return [];
   return labDevices().map(function (d) { var r = devRange(d); if (!r || !UCAT[r.unit] || UCAT[r.unit][1] !== UCAT[s.u][1]) return null;
     var dl = toBase(r.lo, r.unit), dh = toBase(r.hi, r.unit), il = toBase(s.lo, s.u), ih = toBase(s.hi, s.u); if (dl > il + 1e-9 || dh < ih - 1e-9) return null;
@@ -1908,12 +1870,12 @@ function renderHome() {
     '<div class="hometiles"><button class="ht' + (HOME.tab === 'pending' ? ' on' : '') + '" data-ht="pending"><b>' + mine.length + '</b><span>Pending projects</span></button>' +
     '<button class="ht sug' + (HOME.tab === 'sug' ? ' on' : '') + '" data-ht="sug"><b>' + (nSug == null ? '…' : nSug) + '</b><span>Suggested this month</span></button>' +
     '<button class="ht new" id="newP"><b>+</b><span>New project</span></button></div>' + body +
-    '<div class="cf" style="margin-top:26px"><button class="btn ghost" id="binB">🗑 Recycle bin' + (binGet().length ? ' (' + binGet().length + ')' : '') + '</button><button class="btn ghost" id="out">Sign out</button></div></main></div>';
-  $('#newP').onclick = function () { newProject(); }; $('#binB').onclick = binSheet; undoFab();
+    '<div class="cf" style="margin-top:26px"><button class="btn ghost" id="out">Sign out</button></div></main></div>';
+  $('#newP').onclick = function () { newProject(); };
   $$('[data-ht]').forEach(function (b) { b.onclick = function () { HOME.tab = b.dataset.ht; render(); }; });
   $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; var pp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (pp) openProjectPage(pp); try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
   $$('[data-pd]').forEach(function (b) { b.onclick = function () { var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0];
-    dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' codes. You can bring it back from the Recycle bin.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
+    dialog('Delete this project?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' codes. This cannot be undone.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Project deleted'); }); }; });
   $$('[data-sg]').forEach(function (b) { b.onclick = function () { var a = b.dataset.sg.split('|').map(Number), mo = SUG.months[a[0]], x = mo.list[a[1]], co = ((S.data && S.data.companies) || []).filter(function (c) { return c.id === x.coId; })[0];
     if (!co) return toast('This company is not in the list – add it in Akhnaton Devices', true); newProject(co, { y: mo.y, m: mo.m }); }; });
   var sg = $('#sugGo'); if (sg) sg.onclick = sugScan;
@@ -2046,7 +2008,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
           '<h5>Similar devices from last year</h5>' + (it.simBusy ? '<div class="okline"><span class="spin dark"></span> Looking for similar devices…</div>' : (it.simList || []).length ? '<div class="list">' + it.simList.map(function (x, i) { return '<button class="row" data-sim="' + i + '"><span class="t"><b>' + esc(x.name) + '</b><small>' + esc([x.folder, x.snip].filter(Boolean).join(' · ').slice(0, 140)) + '</small></span><span class="pill">Use</span></button>'; }).join('') + '</div>' : '<div class="small">' + (it.description ? 'None found.' : 'Write the description (Edit item) to find similar devices.') + '</div>') +
           '<div class="cf"><button class="btn ghost" id="eItem">Edit item</button></div>') + '</div>';
     $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (p.ci === L.length - 1 ? 'All certificates' : 'Skip ›') + '</button>';
-    var bind0 = function () { railBind(p, L); covTopBind(p, it); var x; if ((x = $('#cp'))) x.onclick = function () { to0(grpStep(p, L, -1)); }; if ((x = $('#cn'))) x.onclick = function () { to0(grpStep(p, L, 1)); }; $('#cj').onchange = function () { to0(+$('#cj').value); };
+    var bind0 = function () { railBind(p, L); covTopBind(p, it); var x; if ((x = $('#cp'))) x.onclick = function () { to0(p.ci - 1); }; if ((x = $('#cn'))) x.onclick = function () { to0(p.ci + 1); }; $('#cj').onchange = function () { to0(+$('#cj').value); };
       $('#cbk').onclick = function () { if (p.ci) to0(p.ci - 1); else toHub(p); }; $('#cnx').onclick = function () { if (p.ci === L.length - 1) toHub(p); else to0(p.ci + 1); };
       if ((x = $('#oAgain'))) x.onclick = function () { it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
       if ((x = $('#oCert'))) x.onclick = function () { var v = window.prompt('Old certificate number (e.g. 10/EP-3107-2025)', it.prevCert || ''); if (!v) return; it.prevCert = v.trim(); it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
@@ -2076,7 +2038,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   var SOPSEL = function (v) { var l = sopList(); v = String(v || '').trim(); if (v && l.indexOf(v) < 0) l.unshift(v); return '<select class="pin" data-ef="procedure"><option value="">— choose —</option>' + l.map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '<option value="__other">Other… (type it)</option></select>'; };
   var DLVT = function () { return /Out/.test(DLV()) ? 'Out of Tolerance' : 'In Tolerance'; };
   var DLV = function () { var o0 = 0; (it.old.points || []).forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { var r = evalPt(it, i, dr); if (r && r.res === 'OUT') o0++; }); }); return o0 ? '<b style="color:var(--danger)">Out of Tolerance</b>' : 'In Tolerance'; };
-  var E = function (k, v, bold) { return '<input class="pin' + (bold ? ' b' : '') + '" data-ef="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="—">'; };
+  var E = function (k, v, bold) { return /^(model|serial)$/.test(k) ? '<input class="pin' + (bold ? ' b' : '') + '" data-ef="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="—">' : '<textarea rows="1" class="pin ta' + (bold ? ' b' : '') + '" data-ef="' + k + '" placeholder="—">' + esc(v == null ? '' : v) + '</textarea>'; };
   if (!o.cleaned) { Object.keys(f).forEach(function (k) { if (typeof f[k] === 'string') f[k] = cleanVal(f[k]); }); o.cleaned = 1; saveProjects(); }
   if (!o.split) { var rg = rngNums(f.range || ''); if (!isNum(it.rMin) && rg && isNum(rg.lo) && isNum(rg.hi)) { it.rMin = rg.lo; it.rMax = rg.hi; if (!it.unit && rg.u) it.unit = rg.u; }
     var cr = rngNums(f.calRange || ''); if (!isNum(it.cMin) && cr && isNum(cr.lo) && isNum(cr.hi) && !(rg && cr.lo === rg.lo && cr.hi === rg.hi)) { it.cMin = cr.lo; it.cMax = cr.hi; }
@@ -2129,7 +2091,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   var tmu = $('#tmUndo'); if (tmu) tmu.onclick = function () { try { var b = JSON.parse(it.tmplBak); it.old = b.old; ['lim', 'res', 'resUnit', 'rMin', 'rMax', 'unit', 'cMin', 'cMax', 'limFrom', 'resFrom'].forEach(function (k) { it[k] = b[k]; }); } catch (e) {} it.tmpl = null; it.tmplBak = null; saveProjects(); toast('Back to how it was'); tCertEd(p); };
   var tmo = $('#tmOther'); if (tmo) tmo.onclick = function () { tmplSheet(p, it); };
   $$('[data-dfm]').forEach(function (b) { b.onclick = function () { genDefaults(p).dfmt = b.dataset.dfm; coKeep(p); saveProjects(); toast(b.dataset.dfm === 'day' ? 'Dates by day for all certificates, e.g. ' + calShow(p, it) : 'Dates by month for all certificates, e.g. ' + calShow(p, it)); tCertEd(p); }; });
-  $('#cp').onclick = function () { to(grpStep(p, L, -1)); }; $('#cn').onclick = function () { to(grpStep(p, L, 1)); }; $('#cj').onchange = function () { to(+$('#cj').value); };
+  $('#cp').onclick = function () { to(p.ci - 1); }; $('#cn').onclick = function () { to(p.ci + 1); }; $('#cj').onchange = function () { to(+$('#cj').value); };
   $('#cbk').onclick = function () { if (p.ci) to(p.ci - 1); else toHub(p); }; $('#toHub').onclick = function () { toHub(p); };
   $('#cnx').onclick = function () { if (!certDone(it) && !confirm0) { confirm0 = 1; return dialog('Some readings are empty', 'Go on anyway? You can come back to this certificate.', 'Go on').then(function (y) { confirm0 = 0; if (y) nx(); }); } nx(); };
   var confirm0 = 0, nx = function () { certPreview(p, it, function () { var k = -1; for (var i = 0; i < L.length; i++) { var j = (p.ci + 1 + i) % L.length; if (!L[j].saved) { k = j; break; } }
@@ -2137,6 +2099,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   $$('[data-rf]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rf, k = it.refs.indexOf(id); it.refUser = true; if (k >= 0) it.refs.splice(k, 1); else { it.refs.push(id); var x = byId[id]; if (x && refExpired(x, inf)) toast('This reference\'s certificate is expired!', true); } it.refAuto = false; syncRefs(p); tCertEd(p); }; });
   $('#rOther').onclick = function () { pickRef(p, it, function () { syncRefs(p); tCertEd(p); }); };
   $('#eItem').onclick = function () { itemSheet(p, it.id); };
+  var grow = function (t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }; $$('textarea.ta').forEach(function (t) { grow(t); t.addEventListener('input', function () { grow(t); }); }); setTimeout(function () { $$('textarea.ta').forEach(grow); }, 50);
   $$('[data-ef]').forEach(function (inp) { inp.onchange = function () { setField(p, it, inp.dataset.ef, inp.value.trim(), function () { tCertEd(p); }); }; inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }; });
   $('#addPt').onclick = function () { o.points.push({ point: '', ref: '', reading: '', limit: '' }); it.saved = 0; saveProjects(); tCertEd(p); setTimeout(function () { var ins = $$('.ptin'); if (ins.length) ins[ins.length - 1].focus(); }, 60); };
   $$('[data-pv]').forEach(function (e) { e.onchange = function () { var i = +e.dataset.pv; o.points[i].point = e.value.trim(); delete o.crPts; it.saved = 0; saveProjects(); tCertEd(p); }; });
@@ -2243,16 +2206,11 @@ function oldBind(p, it, rr) { var o = it.old;
 /* the cover stays on top while you flip through its certificates */
 /* PowerPoint-like: every page of the job on the left (cover, then its certificates), the chosen page on the right */
 function railSeq(p, L) { var seq = []; coverGroups(p).forEach(function (gr, gi) { gr.items.forEach(function (x) { var i = L.indexOf(x); if (i >= 0) seq.push({ t: 'i', ci: i, gi: gi }); }); }); return seq; }
-function railGi(p, L, sel) { var gs = coverGroups(p); if (sel.gi != null) return sel.gi; var x = L[sel.ci], k = -1; gs.forEach(function (g2, j) { if (k < 0 && g2.items.indexOf(x) >= 0) k = j; }); return k; }
-function railHtml(p, L, sel) { var gs = coverGroups(p), gen = {}, gsel = railGi(p, L, sel); genGroups(p).forEach(function (g2) { g2.items.forEach(function (x) { gen[x.id] = g2; }); });
-  /* only the certificates of the cover you opened – 1, 2, 3 … each opens its own certificate */
-  return '<nav class="prail"><div class="rlhead"><button id="rlAll" class="rlbk">‹ Whole project</button><span>' + (gs.length > 1 && gsel >= 0 ? 'cover ' + (gsel + 1) + ' of ' + gs.length : savedN(p) + ' / ' + L.length + ' saved') + '</span></div><div class="rllist">' + gs.map(function (gr, gi) { if (gsel >= 0 && gi !== gsel) return ''; var m = gr.machine, g0 = gen[gr.items[0].id], dn = gr.items.filter(function (x) { return x.saved; }).length, title = m ? m.name : (gr.items[0].description || 'Units');
+function railHtml(p, L, sel) { var gs = coverGroups(p), gen = {}; genGroups(p).forEach(function (g2) { g2.items.forEach(function (x) { gen[x.id] = g2; }); });
+  return '<nav class="prail"><div class="rlhead"><button id="rlAll" class="rlbk">‹ Whole project</button><span>' + savedN(p) + ' / ' + L.length + ' saved</span></div><div class="rllist">' + gs.map(function (gr, gi) { var m = gr.machine, g0 = gen[gr.items[0].id], dn = gr.items.filter(function (x) { return x.saved; }).length, title = m ? m.name : (gr.items[0].description || 'Units');
       return '<div class="rlgrp"><div class="rlgh"><b>' + esc(title) + '</b><span>' + dn + '/' + gr.items.length + '</span></div>' +
-        '<button class="rl crt rlcov' + (sel.gi === gi ? ' on' : '') + '" data-rc="' + gi + '"><span class="rn">▤</span><span class="rlt"><b>Cover</b><small>' + esc(g0 ? g0.from + (g0.to !== g0.from ? ' → ' + g0.to : '') : '') + '</small></span></button>' +
-        gr.items.map(function (x, k) { var i = L.indexOf(x); if (i < 0) return ''; var stt = x.saved ? 'ok' : cState(x) === 'none' ? 'bad' : cState(x) === 'progress' ? 'mid' : ''; return '<button class="rl crt ' + stt + (sel.gi == null && sel.ci === i ? ' on' : '') + '" data-ri="' + i + '"><span class="rn">' + (k + 1) + '</span><span class="rlt"><b>' + esc(x.code || '—') + '</b><small>' + esc(x.certNo || x.description || '') + '</small></span><i class="dot"></i></button>'; }).join('') + '</div>'; }).join('') + '</div></nav>'; }
-function grpOf(p, it) { return coverGroups(p).filter(function (g2) { return g2.items.indexOf(it) >= 0; })[0]; }
-function grpStep(p, L, d) { var it = L[p.ci], gr = grpOf(p, it); if (!gr) return Math.min(Math.max(p.ci + d, 0), L.length - 1); var x = gr.items[gr.items.indexOf(it) + d]; return x && L.indexOf(x) >= 0 ? L.indexOf(x) : p.ci; }
-function certNoBar(p, it) { var L = certList(p), gr = grpOf(p, it), k = gr ? gr.items.indexOf(it) : p.ci, n = gr ? gr.items.length : L.length; return '<div class="cvno"><button class="cvnav" id="cp"' + (k > 0 ? '' : ' disabled') + ' title="Previous in this cover">‹</button><span>CERTIFICATE NO.</span><b>' + esc(it.certNo || '—') + '</b><small>' + esc((it.code || '') + (it.description ? ' · ' + it.description : '')) + '</small><button class="cvnav" id="cn"' + (k < n - 1 ? '' : ' disabled') + ' title="Next in this cover">›</button></div>'; }
+        gr.items.map(function (x, k) { var i = L.indexOf(x); if (i < 0) return ''; var stt = x.saved ? 'ok' : cState(x) === 'none' ? 'bad' : cState(x) === 'progress' ? 'mid' : ''; return '<button class="rl crt ' + stt + (sel.ci === i ? ' on' : '') + '" data-ri="' + i + '"><span class="rn">' + (gi + 1) + '.' + (k + 1) + '</span><span class="rlt"><b>' + esc(x.code || '—') + '</b><small>' + esc(x.certNo || x.description || '') + '</small></span><i class="dot"></i></button>'; }).join('') + '</div>'; }).join('') + '</div></nav>'; }
+function certNoBar(p, it) { var L = certList(p); return '<div class="cvno"><button class="cvnav" id="cp"' + (p.ci ? '' : ' disabled') + ' title="Previous">‹</button><span>CERTIFICATE NO.</span><b>' + esc(it.certNo || '—') + '</b><small>' + esc((it.code || '') + (it.description ? ' · ' + it.description : '')) + '</small><button class="cvnav" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + ' title="Next">›</button></div>'; }
 function railGo(p, x) { if (!x) return; if (x.t === 'c') { p.cv = x.gi; } else { p.cv = null; p.ci = x.ci; } saveProjects(); tCertEd(p); window.scrollTo(0, 0); }
 function railBind(p, L) { try { var on0 = document.querySelector('.prail .rl.on'), ls0 = document.querySelector('.prail .rllist'); if (on0 && ls0) { if (innerWidth < 1000) ls0.scrollLeft += on0.getBoundingClientRect().left - ls0.getBoundingClientRect().left - 10; else on0.scrollIntoView({ block: 'nearest' }); } } catch (e) {} var a = $('#rlAll'); if (a) a.onclick = function () { p.cv = null; p.hubFocus = null; toHub(p); };
   $$('[data-rc]').forEach(function (b) { b.onclick = function () { railGo(p, { t: 'c', gi: +b.dataset.rc }); }; });
@@ -2269,27 +2227,57 @@ function tCover(p, L) { var gs = coverGroups(p), gi = Math.min(p.cv, gs.length -
   $('#cf').innerHTML = '<button class="btn ghost" id="cvP"' + (k > 0 ? '' : ' disabled') + '>‹ Previous</button><button class="btn blue" id="cvN"' + (seq[k + 1] ? '' : ' disabled') + '>' + (seq[k + 1] && seq[k + 1].t === 'i' ? 'Next: ' + esc(L[seq[k + 1].ci].code || 'certificate') + ' ›' : 'Next ›') + '</button>';
   $('#cvP').onclick = function () { railGo(p, seq[k - 1]); }; $('#cvN').onclick = function () { railGo(p, seq[k + 1]); };
   var ce = $('#cvEd'); if (ce) ce.onclick = function (e) { e.preventDefault(); coverSheet(p, gi); }; railBind(p, L);
-  $$('[data-cvu]').forEach(function (b) { b.onclick = function () { unitSheet(p, gi); }; });
-  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { railGo(p, { t: 'i', ci: +b.dataset.cvi }); }; });
-  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { subItemSheet(p, gr.items[gr.items.length - 1]); }; var ie = $('#cvIed'); if (ie) ie.onclick = function () { itemsSheet(p, gi); }; }
+  $$('[data-cvu]').forEach(function (b) { b.onclick = function () { coverTable(p, gi); }; });
+  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { var x = certList(p)[+b.dataset.cvi]; coverTable(p, gi, x && x.id); }; });
+  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { coverTable(p, gi, 'add'); }; }
 var STD_OPEN = false;
 function stdTable(p, it) { var ds = refsUsed(p, [it]).filter(function (d) { return (it.refs || []).indexOf(d.id) >= 0; });
   return '<table class="wlg wstd"><tr><th>No.</th><th>Manufacturer</th><th>Description</th><th>Model</th><th>Serial No.</th><th>Range</th><th>Cal. Due Date</th></tr>' + (ds.length ? ds.map(function (d, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(d.manufacturer || '') + '</td><td>' + esc(d.description || '') + '</td><td>' + esc(d.model || '') + '</td><td>' + esc(d.serial || '') + '</td><td>' + esc(d.range || '') + '</td><td>' + esc(dueText(d)) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="wnone">No standard chosen yet – choose it below</td></tr>') + '</table>'; }
+function kind8(desc) { var s = String(desc || '').toLowerCase(); return /diff/.test(s) ? 'Differential Pressure' : /humid|\brh\b/.test(s) ? 'Humidity' : /temp|thermo|°c/.test(s) ? 'Temperature' : /press|gauge|manomet|vacuum/.test(s) ? 'Pressure' : /rpm|speed|rotat|tacho|mixer|centrifug/.test(s) ? 'RPM' : /timer|time|stopwatch/.test(s) ? 'Timer' : /veloc|air ?flow|anemomet|laminar/.test(s) ? 'Air Velocity' : /weigh|balance|scale|mass/.test(s) ? 'Weight' : ''; }
+function coverTable(p, gi, focus) { var gr = coverGroups(p)[gi]; if (!gr) return; var m = gr.machine, g = genDefaults(p), its = gr.items, st = { nw: focus === 'add' ? [{ description: '', code: '', manufacturer: '' }] : [] };
+  var ff = function (it) { return ((it.old || {}).fields) || {}; };
+  var C = function (k, v, ph, cls) { return '<td' + (cls ? ' class="' + cls + '"' : '') + '><input data-ct="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></td>'; };
+  var R = function (v) { return '<td class="ro">' + esc(v || '—') + '</td>'; };
+  openSheet(function () { var ki = 0;
+    var unit = m ? '<tr><td class="no">1</td>' + C('m|manufacturer', m.manufacturer, its[0].manufacturer || ff(its[0]).manufacturer || 'N/A') + C('m|name', m.name, 'Description') + C('m|model', m.model, 'N/A') + C('m|serial', m.serial, 'N/A') + C('m|code', m.code, 'Code') + C('m|loc', m.loc, g.loc || 'N/A') + '</tr>'
+      : '<tr><td class="no">1</td>' + C(its[0].id + '|manufacturer', its[0].manufacturer || ff(its[0]).manufacturer, 'N/A') + C(its[0].id + '|description', its[0].description || ff(its[0]).description) + C(its[0].id + '|model', its[0].model || ff(its[0]).model, 'N/A') + C(its[0].id + '|serial', its[0].serial || ff(its[0]).serial, 'N/A') + C(its[0].id + '|code', its[0].code) + C('g|loc', g.loc, 'N/A') + '</tr>';
+    var rows = its.map(function (it, k) { var f = ff(it); ki = k + 1; return '<tr' + (focus === it.id ? ' class="cur"' : '') + '><td class="no">' + (k + 1) + '</td>' + C(it.id + '|description', it.description || f.description) + C(it.id + '|code', it.code) + C(it.id + '|manufacturer', it.manufacturer || f.manufacturer, 'N/A') + C(it.id + '|model', it.model || f.model, 'N/A') + C(it.id + '|serial', it.serial || f.serial, 'N/A') + R(calRangeText(it) || f.calRange) + R(limitsText(it)) + '<td></td></tr>'; }).join('') +
+      st.nw.map(function (n, k) { var kd = kind8(n.description), KD = KUNIT[kd]; return '<tr class="nw"><td class="no">' + (ki + k + 1) + '</td><td><input data-nw="' + k + '|description" list="ctKinds" value="' + esc(n.description) + '" placeholder="e.g. Temperature"></td><td><input data-nw="' + k + '|code" value="' + esc(n.code) + '" placeholder="' + esc(((m && m.code) || '') + '/…') + '"></td><td><input data-nw="' + k + '|manufacturer" value="' + esc(n.manufacturer) + '" placeholder="N/A"></td><td class="ro" colspan="2">' + (KD ? esc(kd) + ' · ' + esc(KD[0]) + ' · res. ' + esc(KD[1]) : '<span class="mut">unit and resolution come from the description</span>') + '</td><td class="ro" colspan="2">new – last year\'s certificate is loaded by its code</td><td><button class="ctx" data-nx="' + k + '" title="Remove">×</button></td></tr>'; }).join('');
+    return { wide: 1, title: 'Cover ' + (gi + 1) + ' – Unit under Test and its items',
+      body: '<datalist id="ctKinds">' + Object.keys(KUNIT).map(function (k) { return '<option value="' + esc(k) + '">'; }).join('') + '</datalist><div class="ctw">' +
+        '<h5>Unit under Test</h5><table class="ctb"><tr><th>No.</th><th>Manufacturer</th><th>Description</th><th>Model</th><th>S/N</th><th>Code</th><th>Location</th></tr>' + unit + '</table>' +
+        '<h5>Item to be calibrated</h5><table class="ctb"><tr><th>No.</th><th>Description</th><th>Code</th><th>Manufacturer</th><th>Model</th><th>S/N</th><th>Cal. Range</th><th>Accepted Limit</th><th></th></tr>' + rows +
+        '<tr class="addrow"><td colspan="9"><button class="wladd" id="ctAdd">+ Add item</button></td></tr></table>' +
+        '<div class="small" style="margin-top:8px">Type in any cell – it is saved as you type. Cal. range and limits are changed inside each certificate. <a href="#" id="uMore">More cover options</a></div></div>',
+      foot: '<button class="btn" id="ctOk">' + (st.nw.length ? 'Add ' + st.nw.length + ' item' + (st.nw.length > 1 ? 's' : '') + ' and close' : 'Done') + '</button>',
+      mount: function () {
+        $$('[data-ct]').forEach(function (e) { e.oninput = function () { var a = e.dataset.ct.split('|'), v = e.value.trim(); if (a[0] === 'm') m[a[1]] = v; else if (a[0] === 'g') g[a[1]] = v; else { var it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (it) it[a[1]] = v; } saveProjects(); }; });
+        $$('[data-nw]').forEach(function (e) { e.oninput = function () { var a = e.dataset.nw.split('|'); st.nw[+a[0]][a[1]] = e.value; if (a[1] === 'description') { var td = e.closest('tr').children[4], kd = kind8(e.value), KD = KUNIT[kd]; td.innerHTML = KD ? esc(kd) + ' · ' + esc(KD[0]) + ' · res. ' + esc(KD[1]) : '<span class="mut">unit and resolution come from the description</span>'; } }; });
+        $$('[data-nx]').forEach(function (b) { b.onclick = function () { st.nw.splice(+b.dataset.nx, 1); renderSheet(); }; });
+        $('#ctAdd').onclick = function () { st.nw.push({ description: '', code: '', manufacturer: '' }); renderSheet(); setTimeout(function () { var x = $$('[data-nw$="|description"]'); if (x.length) x[x.length - 1].focus(); }, 30); };
+        var f0 = $('tr.cur input') || (focus === 'add' && $('[data-nw$="|description"]')); if (f0) setTimeout(function () { f0.focus(); }, 30);
+        $('#uMore').onclick = function (e) { e.preventDefault(); coverSheet(p, gi); };
+        $('#ctOk').onclick = function () { var add = st.nw.filter(function (n) { return n.description.trim() || n.code.trim(); }); if (!add.length) { closeSheet(); render(); return; }
+          if (!m) { m = { id: uid(), name: its[0].description || ff(its[0]).description || 'Machine', code: (its[0].code || '').replace(/[\/\-][^\/\-]*$/, ''), dept: its[0].dept || (p.depts || [])[0] || '' }; p.machines = p.machines || []; p.machines.push(m); its.forEach(function (x) { x.machineId = m.id; }); }
+          var after = its[its.length - 1], first = null;
+          add.forEach(function (n) { var desc = n.description.trim() || kind8(n.code) || 'Item', kd = kind8(desc), KD = KUNIT[kd], ni = newItem({ machineId: m.id, code: n.code.trim(), description: desc, manufacturer: n.manufacturer.trim() || after.manufacturer || '', dept: after.dept || '', src: 'sub-item' });
+            if (KD) { ni.unit = KD[0]; ni.res = KD[1]; ni.resUnit = KD[0]; ni.resFrom = 'kind'; } var idx = p.items.indexOf(after); p.items.splice(idx + 1, 0, ni); after = ni; if (!ni.code) startManual(ni); first = first || ni; });
+          p.cv = null; saveProjects(); closeSheet(); toast(add.length + ' item' + (add.length > 1 ? 's' : '') + ' added'); queueOld(p); var L = certList(p); p.ci = L.indexOf(first); saveProjects(); render(); window.scrollTo(0, 0); }; } }; }); }
 function unitSheet(p, gi) { var gr = coverGroups(p)[gi]; if (!gr) return; var m = gr.machine, g = genDefaults(p);
   var F = function (k, l, v, ph) { return '<label class="uf"><span>' + l + '</span><input class="inp" data-uf="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></label>'; };
   var ff = function (it) { return ((it.old || {}).fields) || {}; };
   openSheet(function () { return { title: 'Unit under Test', body: (m ? '<div class="ucard"><div class="uhd">The machine on this cover</div><div class="ugrid">' + F('m|name', 'Description', m.name) + F('m|code', 'Code', m.code) + F('m|manufacturer', 'Manufacturer', m.manufacturer, gr.items[0].manufacturer || ff(gr.items[0]).manufacturer || 'N/A') + F('m|model', 'Model', m.model, 'N/A') + F('m|serial', 'S/N', m.serial, 'N/A') + F('m|loc', 'Location', m.loc, g.loc || 'N/A') + '</div></div>'
       : gr.items.map(function (it, k) { var f = ff(it); return '<div class="ucard"><div class="uhd">Unit ' + (k + 1) + '</div><div class="ugrid">' + F(it.id + '|description', 'Description', it.description || f.description) + F(it.id + '|code', 'Code', it.code) + F(it.id + '|manufacturer', 'Manufacturer', it.manufacturer || f.manufacturer, 'N/A') + F(it.id + '|model', 'Model', it.model || f.model, 'N/A') + F(it.id + '|serial', 'S/N', it.serial || f.serial, 'N/A') + '</div></div>'; }).join('') + '<div class="ucard"><div class="ugrid">' + F('g|loc', 'Location', g.loc, 'e.g. QC Lab.') + '</div></div>') +
-      '<div class="small" style="margin-top:6px">Changes show on the cover right away. <a href="#" id="uItems">Edit / remove the items</a> · <a href="#" id="uMore">More cover options (merge, bring last year\'s items)</a></div>',
+      '<div class="small" style="margin-top:6px">Changes show on the cover right away. <a href="#" id="uMore">More cover options (merge, bring last year\'s items)</a></div>',
     foot: '<button class="btn" id="uOk">Done</button>',
     mount: function () { $$('[data-uf]').forEach(function (e) { e.oninput = function () { var a = e.dataset.uf.split('|'), v = e.value.trim(); if (a[0] === 'm') m[a[1]] = v; else if (a[0] === 'g') g[a[1]] = v; else { var it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (it) it[a[1]] = v; } saveProjects(); }; });
-      $('#uOk').onclick = closeSheet; $('#uItems').onclick = function (e) { e.preventDefault(); itemsSheet(p, gi); }; $('#uMore').onclick = function (e) { e.preventDefault(); coverSheet(p, gi); }; } }; }); }
+      $('#uOk').onclick = closeSheet; $('#uMore').onclick = function (e) { e.preventDefault(); coverSheet(p, gi); }; } }; }); }
 function covTop(p, it) { var gs = coverGroups(p), gr = gs.filter(function (g2) { return g2.items.indexOf(it) >= 0; })[0]; if (!gr) return ''; var g0 = genGroups(p).filter(function (g2) { return g2.items.indexOf(gr.items[0]) >= 0; })[0];
   return '<div class="pgsep first">Cover' + (gr.items.length > 1 ? ' – shared by ' + gr.items.length + ' certificates' : '') + '</div>' + coverPaper(p, gr, g0, it); }
 function covTopBind(p, it) { var gs = coverGroups(p), gi = -1; gs.forEach(function (g2, k) { if (g2.items.indexOf(it) >= 0) gi = k; }); if (gi < 0) return;
-  $$('[data-cvu]').forEach(function (b) { b.onclick = function () { unitSheet(p, gi); }; });
-  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { var i = +b.dataset.cvi; if (certList(p)[i] === it) { var pg = $('.pgsep:not(.first)'); if (pg) pg.scrollIntoView({ behavior: 'smooth' }); return; } p.ci = i; p.cv = null; saveProjects(); tCertEd(p); window.scrollTo(0, 0); }; });
-  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { subItemSheet(p, gs[gi].items[gs[gi].items.length - 1]); }; var ie = $('#cvIed'); if (ie) ie.onclick = function () { itemsSheet(p, gi); }; }
+  $$('[data-cvu]').forEach(function (b) { b.onclick = function () { coverTable(p, gi); }; });
+  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { var x = certList(p)[+b.dataset.cvi]; coverTable(p, gi, x && x.id); }; });
+  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { coverTable(p, gi, 'add'); }; }
 function coverPaper(p, gr, g0, cur) { var g = genDefaults(p), its = gr.items, L = certList(p), F = function (it) { return ((it.old || {}).fields) || {}; };
   var T = function (head, rows, cls) { return '<table class="wlg' + (cls ? ' ' + cls : '') + '"><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table>'; };
   var td = function (v) { return '<td>' + esc(v == null || v === '' ? 'N/A' : v) + '</td>'; };
@@ -2297,8 +2285,8 @@ function coverPaper(p, gr, g0, cur) { var g = genDefaults(p), its = gr.items, L 
   var no = g0 ? (its.length > 1 ? 'From ' + g0.from + ' to ' + g0.to : g0.from) : '—';
   var unit = gr.machine ? ['<tr class="clk" data-cvu="1" title="Edit the cover">' + td(1) + td(gr.machine.manufacturer || its[0].manufacturer || F(its[0]).manufacturer) + td(gr.machine.name) + td(gr.machine.model) + td(gr.machine.serial) + td(gr.machine.code) + td(gr.machine.loc || g.loc) + '</tr>']
     : its.map(function (it, i) { var f = F(it); return '<tr class="clk" data-cvu="1" title="Edit the cover">' + td(i + 1) + td(it.manufacturer || f.manufacturer) + td(it.description || f.description) + td(it.model || f.model) + td(it.serial || f.serial) + td(it.code) + td(g.loc) + '</tr>'; });
-  var items = its.map(function (it, i) { var f = F(it), pt = ((it.old || {}).points || [])[0] || {}; return '<tr class="clk' + (cur === it ? ' cur' : '') + '" data-cvi="' + L.indexOf(it) + '" title="Open this certificate">' + td(i + 1) + td(it.manufacturer || f.manufacturer) + td(it.description || f.description) + td(it.code) + td(calRangeText(it) || f.calRange || f.range) + td(limitsText(it) || pt.limit) + '</tr>'; });
-  items.push('<tr class="addrow"><td colspan="6"><div style="display:flex;gap:6px;justify-content:center"><button class="wladd" id="cvAdd" style="width:auto">+ Add an item</button><button class="wladd" id="cvIed" style="width:auto">✎ Edit / remove items</button></div></td></tr>');
+  var items = its.map(function (it, i) { var f = F(it), pt = ((it.old || {}).points || [])[0] || {}; return '<tr class="clk' + (cur === it ? ' cur' : '') + '" data-cvi="' + L.indexOf(it) + '" title="Edit the items">' + td(i + 1) + td(it.manufacturer || f.manufacturer) + td(it.description || f.description) + td(it.code) + td(calRangeText(it) || f.calRange || f.range) + td(limitsText(it) || pt.limit) + '</tr>'; });
+  items.push('<tr class="addrow"><td colspan="6"><button class="wladd" id="cvAdd">+ Add an item to this cover</button></td></tr>');
   var refs = refsUsed(p, its).map(function (d, i) { return '<tr>' + td(i + 1) + td(d.manufacturer) + td(d.description) + td(d.model) + td(d.serial) + td(d.range) + td(dueText(d)) + '</tr>'; });
   return '<div class="paper wl">' + '<div class="wlt">Calibration Certificate</div><div class="wlno">CERTIFICATE NO.: ' + esc(no) + '</div><table class="wlinfo">' + info + '</table>' +
     '<h5>Unit under Test</h5>' + T(['No.', 'Manufacturer', 'Description', 'Model', 'S/N', 'Code', 'Location'], unit) +
@@ -3133,35 +3121,9 @@ function pdfPreview(title, html, fname, mode) {
 
 
 /* ---------- manual certificate, sub-items under a machine ---------- */
-function kindSetup(p, it) { try { knowApply(p, it); autoRef(p, it); syncRefs(p); } catch (e) {} }
 function startManual(it) { it.old = { status: 'manual', fields: { description: it.description || '', manufacturer: it.manufacturer || '', model: it.model || '', serial: it.serial || '' }, points: [{ point: '', ref: '', reading: '', limit: '' }], dirs: 1, split: 1, cleaned: 1, crPts: 1, resDone: 1, limDone: 1, at: Date.now() }; }
 function machName(p, it) { var m = (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0]; return m ? m.name + (m.code ? ' · ' + m.code : '') : ''; }
 var KUNIT = { 'RPM': ['RPM', '1'], 'Timer': ['sec', '1'], 'Temperature': ['°C', '0.1'], 'Pressure': ['bar', '0.01'], 'Humidity': ['%RH', '0.1'], 'Differential Pressure': ['Pa', '1'], 'Air Velocity': ['m/s', '0.01'], 'Weight': ['g', '0.01'] };
-/* Tab fills the code start (e.g. 2006/) the way Word finishes a word */
-function codeSug(p, it) { var gr = grpOf(p, it) || { items: [it] }, cs = gr.items.map(function (x) { return String(x.code || '').trim(); }).filter(Boolean), m = (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0], pre = '';
-  if (cs.length > 1) { pre = cs.reduce(function (a, b) { var i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return a.slice(0, i); }); var k = Math.max(pre.lastIndexOf('/'), pre.lastIndexOf('-')); if (k >= 0) pre = pre.slice(0, k + 1); else if (m && m.code && pre.indexOf(m.code) === 0) pre = m.code + '/'; else pre = ''; }
-  if (!pre && cs.length === 1) { var j = Math.max(cs[0].lastIndexOf('/'), cs[0].lastIndexOf('-')); if (j > 0) pre = cs[0].slice(0, j + 1); }
-  if (!pre && m && m.code) pre = m.code + '/'; return pre; }
-function sugBind(el, sg) { if (!el) return; var get = typeof sg === 'function' ? sg : function () { return sg; }; el.sugRefresh = function () { var x = get(); if (x) el.setAttribute('placeholder', x + '…   (Tab)'); }; el.sugRefresh(); el.setAttribute('autocomplete', 'off');
-  el.addEventListener('keydown', function (e) { var sug = get(); if (!sug || e.key !== 'Tab' || e.shiftKey) return; var v = el.value; if (v && (v.length >= sug.length || sug.indexOf(v) !== 0)) return;
-    e.preventDefault(); el.value = sug; try { el.setSelectionRange(sug.length, sug.length); } catch (x) {} el.dispatchEvent(new Event('input', { bubbles: true })); }); }
-/* the items of one cover: edit, reorder, remove – like the Unit under Test sheet */
-function itemsSheet(p, gi) { var gr = coverGroups(p)[gi]; if (!gr) return closeSheet(); var L = certList(p);
-  var F = function (it, k, l, v, ph) { return '<label class="uf"><span>' + l + '</span><input class="inp" data-if="' + it.id + '|' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></label>'; };
-  openSheet(function () { gr = coverGroups(p)[gi] || { items: [] }; var ff = function (it) { return ((it.old || {}).fields) || {}; };
-    return { title: 'Items to be calibrated', body: (gr.items.length ? gr.items.map(function (it, k) { var f = ff(it); return '<div class="ucard icard"><div class="uhd">Item ' + (k + 1) + '</div>' +
-        '<div class="umv"><button data-imv="' + it.id + '|-1" title="Up"' + (k ? '' : ' disabled') + '>↑</button><button data-imv="' + it.id + '|1" title="Down"' + (k < gr.items.length - 1 ? '' : ' disabled') + '>↓</button></div><button class="udel" data-idel="' + it.id + '">Remove</button>' +
-        '<div class="ugrid">' + F(it, 'description', 'Description', it.description || f.description) + F(it, 'code', 'Code', it.code) + F(it, 'manufacturer', 'Manufacturer', it.manufacturer || f.manufacturer, 'N/A') + F(it, 'model', 'Model', it.model || f.model, 'N/A') + F(it, 'serial', 'S/N', it.serial || f.serial, 'N/A') + '</div>' +
-        '<div class="small" style="margin-top:6px"><a href="#" data-iop="' + it.id + '">Open its certificate ›</a></div></div>'; }).join('') : '<div class="empty"><b>No items left in this cover</b></div>') +
-        '<div class="small" style="margin-top:6px">Removed items go to the Recycle bin (Home) – or press ↶ Undo.</div>',
-      foot: '<button class="btn ghost" id="iAdd">+ Add an item</button><button class="btn" id="iOk">Done</button>',
-      mount: function () { $$('[data-if]').forEach(function (e) { var a = e.dataset.if.split('|'), it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (!it) return;
-          if (a[1] === 'code') sugBind(e, codeSug(p, it));
-          e.oninput = function () { var v = e.value.trim(); it[a[1]] = v; if (it.old && it.old.fields && a[1] !== 'code') it.old.fields[a[1]] = v; it.saved = 0; saveProjects(); }; });
-        $$('[data-idel]').forEach(function (b) { b.onclick = function () { var it = p.items.filter(function (x) { return x.id === b.dataset.idel; })[0]; if (!it) return; p.items = p.items.filter(function (x) { return x !== it; }); var g2 = coverGroups(p)[gi], L2 = certList(p); p.ci = g2 && g2.items[0] ? Math.max(L2.indexOf(g2.items[0]), 0) : 0; saveProjects(); toast((it.code || it.description || 'Item') + ' removed – ↶ Undo to bring it back'); if (!(coverGroups(p)[gi] || {}).items) { closeSheet(); return; } renderSheet(); }; });
-        $$('[data-imv]').forEach(function (b) { b.onclick = function () { var a = b.dataset.imv.split('|'), it = p.items.filter(function (x) { return x.id === a[0]; })[0], k = gr.items.indexOf(it), o = gr.items[k + (+a[1])]; if (!it || !o) return; var i1 = p.items.indexOf(it), i2 = p.items.indexOf(o); p.items[i1] = o; p.items[i2] = it; saveProjects(); renderSheet(); }; });
-        $$('[data-iop]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); var it = p.items.filter(function (x) { return x.id === b.dataset.iop; })[0]; sheetFn = null; renderSheet(); p.cv = null; p.ci = certList(p).indexOf(it); saveProjects(); tCertEd(p); window.scrollTo(0, 0); }; });
-        $('#iOk').onclick = closeSheet; $('#iAdd').onclick = function () { if (gr.items[0]) subItemSheet(p, gr.items[gr.items.length - 1]); }; } }; }); }
 function subItemSheet(p, it) { var KINDS = ['RPM', 'Timer', 'Temperature', 'Pressure', 'Humidity', 'Differential Pressure', 'Air Velocity', 'Weight'];
   var m = (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0], st = { mName: m ? m.name : (it.description || ''), mCode: m ? m.code : (it.code || '').replace(/[\/\-][^\/\-]*$/, ''), kind: '', other: '', code: '' };
   openSheet(function () { return { title: 'Add an item', body: (m ? '<div class="note">Machine: <b>' + esc(m.name) + '</b>' + (m.code ? ' · ' + esc(m.code) : '') + '</div>'
@@ -3172,14 +3134,12 @@ function subItemSheet(p, it) { var KINDS = ['RPM', 'Timer', 'Temperature', 'Pres
       '<div class="small" style="margin-top:8px">If it had a certificate last year it is loaded by its code; if not, you enter it manually.</div>',
     foot: '<button class="btn ghost" id="smX">Close</button><button class="btn" id="smGo"' + (st.kind ? '' : ' disabled') + '>Add</button>',
     mount: function () { var keep = function () { var a1 = $('#smN'), a2 = $('#smC'), a3 = $('#smO'), a4 = $('#smK'); if (a1) st.mName = a1.value.trim(); if (a2) st.mCode = a2.value.trim(); if (a3) st.other = a3.value.trim(); if (a4) st.code = a4.value.trim(); };
-      $$('[data-kd]').forEach(function (b) { b.onclick = function () { keep(); st.kind = b.dataset.kd; renderSheet(); var k4 = $('#smK'); if (k4) { k4.focus(); try { k4.setSelectionRange(k4.value.length, k4.value.length); } catch (x) {} } }; }); $('#smX').onclick = closeSheet;
-      var smk = $('#smK'); sugBind(smk, function () { return m ? codeSug(p, it) : (st.mCode ? st.mCode.replace(/[\/\-]$/, '') + '/' : codeSug(p, it)); }); var smc = $('#smC'); if (smc) smc.oninput = function () { st.mCode = smc.value.trim(); if (smk && smk.sugRefresh) smk.sugRefresh(); };
-      var kk = $('#smK'); if (kk) kk.onkeydown = function (e) { if (e.key === 'Enter' && st.kind) { e.preventDefault(); $('#smGo').click(); } };
+      $$('[data-kd]').forEach(function (b) { b.onclick = function () { keep(); st.kind = b.dataset.kd; renderSheet(); }; }); $('#smX').onclick = closeSheet;
       $('#smGo').onclick = function () { keep(); var desc = st.kind === '_' ? st.other : st.kind; if (!desc) return toast('Write what it is', true);
-        if (!m) { if (!st.mName) return toast('Write the machine name', true); m = { id: uid(), name: st.mName, code: st.mCode, dept: it.dept || (p.depts || [])[0] || '' }; p.machines = p.machines || []; p.machines.push(m); (grpOf(p, it) || { items: [it] }).items.forEach(function (x) { x.machineId = m.id; }); }
+        if (!m) { if (!st.mName) return toast('Write the machine name', true); m = { id: uid(), name: st.mName, code: st.mCode, dept: it.dept || (p.depts || [])[0] || '' }; p.machines = p.machines || []; p.machines.push(m); it.machineId = m.id; }
         var ni = newItem({ machineId: m.id, code: st.code, description: desc, manufacturer: it.manufacturer || '', dept: it.dept || '', src: 'sub-item' });
         var KD = KUNIT[st.kind]; if (KD) { ni.unit = KD[0]; ni.res = KD[1]; ni.resUnit = KD[0]; ni.resFrom = 'kind'; }
-        var gq = grpOf(p, it), lastIt = gq ? gq.items[gq.items.length - 1] : it, idx = p.items.indexOf(lastIt); p.items.splice(idx + 1, 0, ni); if (!st.code) { startManual(ni); kindSetup(p, ni); } p.cv = null; saveProjects(); closeSheet(); toast(desc + ' added to ' + m.name); if (st.code) queueOld(p);
+        var idx = p.items.indexOf(it); p.items.splice(idx + 1, 0, ni); if (!st.code) startManual(ni); p.cv = null; saveProjects(); closeSheet(); toast(desc + ' added to ' + m.name); if (st.code) queueOld(p);
         var L = certList(p); p.ci = L.indexOf(ni); saveProjects(); render(); window.scrollTo(0, 0); }; } }; }); }
 
 /* ================= start ================= */
