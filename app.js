@@ -182,7 +182,7 @@
   }
   function devTitle(d) { return d.description; }
   function partsOf(d) { return S.data.devices.filter(function (x) { return x.parentId === d.id && x.active !== false; }); }
-  function devSub(d) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (d.sub ? d.sub + ' · ' : par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + (d.site ? '📍 ' + d.site + ' · ' : '') + [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
+  function devSub(d, inSet) { var n = partsOf(d).length, par = d.parentId && IDX.dev[d.parentId]; return (d.sub && !inSet ? d.sub + ' · ' : par ? '↳ part of ' + par.description + ' …' + par.serialTail + ' · ' : '') + (d.site ? '📍 ' + d.site + ' · ' : '') + [d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ') + ' · S/N ' + d.serial + (n ? ' · + ' + n + ' part' + (n === 1 ? '' : 's') : ''); }
   function coName(id) { return id && !IDX.co[id] ? 'Removed company' : (IDX.co[id] || {}).name || '—'; }
   function names(list) { return (list || []).map(function (h) { return h.name; }).join(', '); }
   function can(what) {
@@ -496,16 +496,44 @@
       '</div></div>';
   }
 
-  function devRow(d, grouped) {
+  function devRow(d, grouped, inSet) {
     var s = stOf(d), c = cert(d), place = '';
     if (isReq(d)) { var rq = reqOf(d); place = 'Waiting approval' + (rq ? ' · ' + rq.byName + ' → ' + coName(rq.companyId) : ''); }
     else if (d.pending) place = 'Transfer waiting';
     else if (d.status === 'At Client') place = grouped ? 'With ' + names(d.holders) : coName(d.companyId) + ' · ' + names(d.holders);
     else if (d.status === 'In Office') place = 'In office';
     else place = s.short + (d.note ? ' · ' + d.note : '') + (d.holders && d.holders.length ? ' · ' + names(d.holders) : '');
-    return '<button class="row" data-dev="' + d.id + '">' + tag(d) + '<span class="t"><b>' + esc(devTitle(d)) + '</b><small>' + esc(devSub(d)) + '</small>' +
+    return '<button class="row" data-dev="' + d.id + '">' + tag(d) + '<span class="t"><b>' + esc(devTitle(d)) + '</b><small>' + esc(devSub(d, inSet)) + '</small>' +
       '<small style="color:' + s.c + ';font-weight:600">' + esc(place) + '</small></span>' +
       (d.status === 'At Client' && d.expectedReturn && daysUntil(d.expectedReturn) < 0 ? '<span class="warn">Overdue</span>' : c.kind === 'expired' ? '<span class="warn" title="' + esc(c.text) + '">Cal. expired</span>' : c.kind === 'soon' ? '<span class="warn" style="color:var(--service)">Due ' + c.days + 'd</span>' : '') + '</button>';
+  }
+
+  /* ---------- Sets: devices with the same sub category fold into one row; tap to open / close ---------- */
+  var OPEN_SETS = {};
+  function setGroups(list, rowFn, o) {
+    o = o || {};
+    var bySub = {}, done = {}, out = '';
+    list.forEach(function (d) { if (d.sub) (bySub[d.sub] = bySub[d.sub] || []).push(d); });
+    list.forEach(function (d) {
+      var m = d.sub && bySub[d.sub];
+      if (!m || m.length < 2) { out += rowFn(d, false); return; }
+      if (done[d.sub]) return; done[d.sub] = 1;
+      var key = (o.scope || 'list') + '|' + d.sub, open = !!o.forceOpen || !!OPEN_SETS[key];
+      var inN = m.filter(function (x) { return x.status === 'In Office' && !x.pending; }).length, away = m.length - inN;
+      var warn = m.some(function (x) { var c = cert(x); return c.kind === 'expired' || (x.status === 'At Client' && x.expectedReturn && daysUntil(x.expectedReturn) < 0); });
+      var info = o.info ? o.info(m) : (inN + ' in office' + (away ? ' · ' + away + ' out' : ''));
+      out += '<div class="set' + (open ? ' open' : '') + '"><div class="sethd"><button class="setbtn" data-tset="' + esc(key) + '" aria-expanded="' + open + '">' +
+        '<span class="setico">' + m.length + '</span><span class="t"><b>' + esc(d.sub) + '</b><small>' + m.length + ' items · ' + esc(info) + '</small></span>' +
+        (warn ? '<span class="warn">!</span>' : '') + '<span class="chev" aria-hidden="true">›</span></button>' + (o.extra ? o.extra(m, d.sub) : '') + '</div>' +
+        '<div class="setbody">' + m.map(function (x) { return rowFn(x, true); }).join('') + '</div></div>';
+    });
+    return out;
+  }
+  function wireSets(root) {
+    $$('[data-tset]', root).forEach(function (b) { b.onclick = function () {
+      var k = b.dataset.tset, box = b.closest('.set'), open = !box.classList.contains('open');
+      OPEN_SETS[k] = open; box.classList.toggle('open', open); b.setAttribute('aria-expanded', open);
+    }; });
   }
 
   /* ---------- Devices ---------- */
@@ -696,16 +724,16 @@
         var m = meta[k], ppl = Object.keys(m.people);
         h += '<div class="sec place"><h2>' + esc(m.title) + ' <span class="cnt">' + groups[k].length + '</span></h2>' +
           (k !== 'office' && (ppl.length || m.since) ? '<small>' + esc(ppl.join(', ')) + (ppl.length && m.since ? ' · ' : '') + (m.since ? 'since ' + esc(when(m.since)) : '') + '</small>' : '') + '</div>' +
-          '<div class="list">' + groups[k].map(function (d) { return devRow(d, true); }).join('') + '</div>';
+          '<div class="list">' + setGroups(groups[k], function (d, inSet) { return devRow(d, true, inSet); }, { scope: 'p:' + k, forceOpen: !!q }) + '</div>';
       });
     } else {
       list.sort(function (a, b) { return a.category.localeCompare(b.category) || bySerial(a, b); });
-      var cat = null, out = '';
-      list.forEach(function (d) {
-        if (d.category !== cat) { if (cat !== null) out += '</div>'; cat = d.category; out += '<div class="sec"><h2>' + esc(cat) + '</h2></div><div class="list">'; }
-        out += devRow(d);
+      var cats = [], byCat = {};
+      list.forEach(function (d) { if (!byCat[d.category]) { byCat[d.category] = []; cats.push(d.category); } byCat[d.category].push(d); });
+      cats.forEach(function (cat) {
+        h += '<div class="sec"><h2>' + esc(cat) + ' <span class="cnt">' + byCat[cat].length + '</span></h2></div><div class="list">' +
+          setGroups(byCat[cat], function (d, inSet) { return devRow(d, false, inSet); }, { scope: 't:' + cat, forceOpen: !!q }) + '</div>';
       });
-      h += out + '</div>';
     }
     return h + '<div style="height:24px"></div></main>';
   }
@@ -1099,6 +1127,7 @@
   function wire() {
     $$('[data-refresh]').forEach(function (b) { b.onclick = function () { b.disabled = true; refresh().then(function () { toast('Up to date'); }); }; });
     $$('[data-dev]').forEach(function (b) { b.onclick = function () { openDevice(b.dataset.dev); }; });
+    wireSets(document);
     $$('[data-goto-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.gotoFilter; S.q = ''; location.hash = '#devices'; }; });
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
     $$('[data-listpdf]').forEach(function (b) { b.onclick = listPdf; });
@@ -1399,20 +1428,18 @@
         };
       } else {
         container.innerHTML = head + (!q ? '<button class="backcat" data-back="1">‹ Categories <span>' + esc(grp === '__all' ? 'All devices' : grp) + '</span></button>' : '') +
-        (list.length ? '<div class="list">' + list.map(function (d, i, arr) {
+        (list.length ? '<div class="list">' + setGroups(list, function (d, inSet) {
           var on = selected.indexOf(d.id) >= 0, c = cert(d);
-          var setHead = '';
-          if (d.sub && (i === 0 || arr[i - 1].sub !== d.sub)) {
-            var mates = arr.filter(function (x) { return x.sub === d.sub; }), allOn = mates.every(function (x) { return selected.indexOf(x.id) >= 0; });
-            setHead = '<div class="sethead"><span>' + esc(d.sub) + ' <small>· ' + mates.length + '</small></span>' + (mates.length > 1 ? '<button class="btn sm ghost" data-set="' + esc(d.sub) + '">' + (allOn ? 'Unselect set' : 'Select whole set') + '</button>' : '') + '</div>';
-          }
-          return setHead + '<button class="row' + (on ? ' sel' : '') + (d.sub ? ' part' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d)) + '</small>' +
+          return '<button class="row' + (on ? ' sel' : '') + '" data-d="' + d.id + '"><span class="check">' + (on ? ICON.tick : '') + '</span>' + tag(d) + '<span class="t"><b>' + esc(d.description) + '</b><small>' + esc(devSub(d, inSet)) + '</small>' +
             (c.kind === 'expired' ? '<small style="color:var(--danger);font-weight:600">Calibration expired ' + fmtDate(d.calDue) + '</small>' : '') + '</span></button>';
-        }).join('') + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
+        }, { scope: 'pick', forceOpen: !!q,
+          info: function (m) { var n = m.filter(function (x) { return selected.indexOf(x.id) >= 0; }).length; return n ? n + ' picked' : 'tap to see the parts'; },
+          extra: function (m, sub) { var allOn = m.every(function (x) { return selected.indexOf(x.id) >= 0; }); return '<button class="btn sm ' + (allOn ? 'ghost' : 'blue') + ' setall" data-set="' + esc(sub) + '">' + (allOn ? 'Unselect all' : 'Select all') + '</button>'; } }) + '</div>' : '<div class="empty"><b>No device here matches.</b>Only devices that are free for this step are listed.</div>');
       }
       $$('[data-grp]', container).forEach(function (b) { b.onclick = function () { grp = b.dataset.grp; draw(); container.scrollTop = 0; onChange && onChange(); }; });
       $$('[data-back]', container).forEach(function (b) { b.onclick = function () { api.back(); }; });
       var inp = $('#dq', container); inp.oninput = function () { var was = !!q; q = inp.value; var p = inp.selectionStart; draw(); var n = $('#dq', container); n.focus(); try { n.setSelectionRange(p, p); } catch (e) {} if (was !== !!q) onChange && onChange(); };
+      wireSets(container);
       $$('[data-set]', container).forEach(function (b) { b.onclick = function () {
         var sub = b.dataset.set, mates = list.filter(function (x) { return x.sub === sub; }).map(function (x) { return x.id; });
         var allOn = mates.every(function (id) { return selected.indexOf(id) >= 0; });

@@ -325,3 +325,21 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .jobnums span.ok{background:var(--office-soft);border-color:transparent;color:var(--office);font-weight:700}
 .sethead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 4px 4px;font-weight:700;color:var(--navy);font-size:14px}
 .sethead small{color:var(--muted);font-weight:500}
+/* ---- folding sets ---- */
+.set{border-bottom:1px solid var(--line)}
+.set:last-child{border-bottom:0}
+.sethd{display:flex;align-items:center;gap:6px;padding-right:10px}
+.setbtn{flex:1;min-width:0;display:flex;gap:12px;align-items:center;padding:12px 14px;border:0;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.setbtn:active{background:var(--bg)}
+.setbtn .t{flex:1;min-width:0}
+.setbtn .t b{display:block;font-weight:700;font-size:15.5px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setbtn .t small{display:block;color:var(--muted);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setico{flex:none;min-width:58px;height:34px;border-radius:7px;background:var(--blue-soft);color:var(--blue);font-weight:800;font-size:15px;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--blue)}
+.chev{flex:none;width:26px;height:26px;border-radius:50%;background:var(--bg);color:var(--navy);display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;line-height:1;transition:transform .2s}
+.set.open .chev{transform:rotate(90deg);background:var(--blue-soft);color:var(--blue)}
+.set.open>.sethd{background:var(--blue-soft)}
+.setbody{display:none;background:var(--bg);border-top:1px solid var(--line)}
+.set.open .setbody{display:block}
+.setbody .row{padding-left:26px;border-left:4px solid var(--blue-soft)}
+.setbody .row:last-child{border-bottom:0}
+.sethd .setall{flex:none}
