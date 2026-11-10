@@ -383,3 +383,8 @@ button.ks.out{border-color:var(--client);background:var(--client-soft)}
 .kitnums button.ot{border:0;background:var(--client-soft);color:var(--client);font:inherit;font-weight:700;border-radius:999px;padding:1px 9px;cursor:pointer}
 .kc-n .ot[data-kwhere]{cursor:pointer;border-radius:10px;background:var(--client-soft)}
 .jclosed{color:var(--muted);background:var(--bg);border-radius:6px;padding:0 6px}
+.jfbar{display:flex;gap:8px;margin:2px 0 8px}
+.jfbox{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:0}
+.jfbox .f{margin:0}
+.jfbox select{width:100%}
+@media (max-width:420px){.jfbox{grid-template-columns:1fr}}

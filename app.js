@@ -820,12 +820,28 @@
   function jobText(j) { return [j.id, j.title || '', j.ref || '', jobBasis(j), coName(j.companyId), j.byName || ''].concat(jobReceipts(j).map(rcptText)).join(' '); }
   function qHit(text, q) { if (!q) return true; text = String(text).toLowerCase(); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return text.indexOf(w) >= 0; }); }
   function jobTeam(j) { var p = {}; jobReceipts(j).forEach(function (c) { (c.engineers || []).forEach(function (e) { p[e.name] = 1; }); }); return Object.keys(p); }
+  /* Advanced filters: company, engineer who went, who opened the job, a device */
+  function jfl() { return S.jfl || (S.jfl = { co: '', eng: '', by: '', dev: '' }); }
+  function rcptPass(c) { var F = jfl(); return (!F.co || c.companyId === F.co) && (!F.eng || (c.engineers || []).some(function (e) { return e.id === F.eng; })) && (!F.dev || (c.deviceIds || []).indexOf(F.dev) >= 0); }
+  function jobPass(j) { var F = jfl(); if (F.co && j.companyId !== F.co) return false; if (F.by && j.byId !== F.by) return false; return (!F.eng && !F.dev) || jobReceipts(j).some(rcptPass); }
+  function jflCount() { var F = jfl(); return ['co', 'eng', 'by', 'dev'].filter(function (k) { return F[k]; }).length; }
+  function jobFilterBox(ds) {
+    var F = jfl(), J = jobsList(), R = S.data.checkouts || [], uniq = function (a) { var o = {}, out = []; a.forEach(function (x) { if (x && x[0] && !o[x[0]]) { o[x[0]] = 1; out.push(x); } }); return out.sort(function (a, b) { return a[1].localeCompare(b[1]); }); };
+    var cos = uniq(J.map(function (j) { return [j.companyId, coName(j.companyId)]; }).concat(R.map(function (c) { return [c.companyId, coName(c.companyId)]; })));
+    var engs = uniq([].concat.apply([], R.map(function (c) { return (c.engineers || []).map(function (e) { return [e.id, e.name]; }); })));
+    var bys = uniq(J.map(function (j) { return [j.byId, j.byName || '']; }));
+    var devs = uniq([].concat.apply([], R.map(function (c) { return (c.deviceIds || []).map(function (id) { var d = IDX.dev[id]; return [id, d ? d.description + (d.range ? ' ' + d.range : '') + ' …' + d.serialTail : id]; }); })));
+    function sel(k, label, opts) { return '<label class="f"><span>' + label + '</span><select class="inp" data-jfk="' + k + '"><option value="">All</option>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (F[k] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>'; }
+    var n = jflCount(), open = S.jflOpen || n > 0;
+    return '<div class="jfbar"><button class="btn sm ' + (n ? 'blue' : 'ghost') + '" data-jftoggle>⚲ Filters' + (n ? ' · ' + n : '') + '</button>' + (n ? '<button class="btn sm ghost" data-jfclear>Clear filters</button>' : '') + '</div>' +
+      (open ? '<div class="box jfbox">' + sel('co', 'Company', cos) + sel('eng', 'Engineer who went', engs) + (ds ? '' : sel('by', 'Job opened by', bys)) + sel('dev', 'Device', devs) + '</div>' : '');
+  }
   function viewJobs() {
     var f = S.jf || 'all', rep = can('report'), jq = S.jq || '';
     var tabs = [['all', 'All'], ['open', 'Open'], ['closed', 'Closed']].concat(rep ? [['ds', 'Data sheets']] : []);
     var h = header('Jobs') + '</header><main>' +
       '<div class="search">' + ICON.search + '<input id="jq" type="search" placeholder="Search: company, engineer, job no., device or serial" value="' + esc(jq) + '" autocomplete="off" aria-label="Search jobs"></div>' +
-      '<div class="filters" role="tablist">' + tabs.map(function (t) { return '<button class="fbtn' + (f === t[0] ? ' on' : '') + '" data-jf="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+      '<div class="filters" role="tablist">' + tabs.map(function (t) { return '<button class="fbtn' + (f === t[0] ? ' on' : '') + '" data-jf="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + jobFilterBox(f === 'ds');
     if (rep && f !== 'ds') {
       var allJ = jobsList(), openN = allJ.filter(function (x) { return x.status !== 'Closed'; }).length, m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
       var closedM = allJ.filter(function (x) { return x.status === 'Closed' && x.closedTs && new Date(x.closedTs) >= m0; }).length;
@@ -834,10 +850,12 @@
     }
     if (can('job') && f !== 'ds' && !jq) h += '<button class="btn blue wide" data-newjob style="margin:4px 0 6px">＋ Open a new job</button>';
     if (f === 'ds') return h + dsReport() + '<div style="height:24px"></div></main>';
-    var list = jobsList().filter(function (j) { return (f === 'all' || (f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed')) && qHit(jobText(j), jq); })
+    var list = jobsList().filter(function (j) { return (f === 'all' || (f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed')) && qHit(jobText(j), jq) && jobPass(j); })
       .sort(function (a, b) { return (a.status === 'Closed') - (b.status === 'Closed') || (b.ts || '').localeCompare(a.ts || ''); });
-    if (jq) h += '<div class="sortbar"><span>' + list.length + ' job' + (list.length === 1 ? '' : 's') + ' match “' + esc(jq) + '”</span></div>';
-    if (!list.length && jq) h += '<div class="empty"><b>No job matches “' + esc(jq) + '”.</b>Try a company, an engineer\'s name, a job or receipt number, or the last digits of a serial.</div>';
+    var F = jfl(), fdev = F.dev && IDX.dev[F.dev];
+    if (jq || jflCount()) h += '<div class="sortbar"><span>' + list.length + ' job' + (list.length === 1 ? '' : 's') + ' found' + (jq ? ' for “' + esc(jq) + '”' : '') + '</span></div>';
+    if (fdev && list.length) { var cs = {}; list.forEach(function (j) { cs[coName(j.companyId)] = 1; }); h += '<div class="note"><b>' + esc(fdev.description) + ' …' + esc(fdev.serialTail) + '</b> went to: ' + esc(Object.keys(cs).join(', ')) + '</div>'; }
+    if (!list.length && (jq || jflCount())) h += '<div class="empty"><b>No job matches these filters.</b>Try a company, an engineer\'s name, a job or receipt number, or the last digits of a serial.</div>';
     else if (!list.length) h += '<div class="empty"><b>' + (f === 'closed' ? 'No closed jobs yet.' : 'No open jobs.') + '</b>' + (f === 'closed' ? '' : can('job') ? 'Open a job for each client visit, then add requests inside it.' : 'The site supervisor opens a job for each client visit.') + '</div>';
     list.forEach(function (j) {
       var k = jobStats(j);
@@ -859,7 +877,7 @@
     });
   }
   function dsReport() {
-    var jq = S.jq || '', rows = dsRows().filter(function (r) { return qHit(rcptText(r.c) + ' ' + (r.job ? r.job.id + ' ' + (r.job.title || '') + ' ' + jobBasis(r.job) : ''), jq); }), miss = rows.filter(function (r) { return !dsBack(r.c); }), ok = rows.filter(function (r) { return dsBack(r.c); });
+    var jq = S.jq || '', rows = dsRows().filter(function (r) { return rcptPass(r.c) && qHit(rcptText(r.c) + ' ' + (r.job ? r.job.id + ' ' + (r.job.title || '') + ' ' + jobBasis(r.job) : ''), jq); }), miss = rows.filter(function (r) { return !dsBack(r.c); }), ok = rows.filter(function (r) { return dsBack(r.c); });
     var outMiss = miss.filter(function (r) { return r.out.n; }).length;
     var h = '<div class="placesum"><div class="ks out"><b>' + miss.length + '</b><span>data sheets missing</span></div><div class="ks"><b>' + ok.length + '</b><span>back in office</span></div><div class="ks"><b>' + outMiss + '</b><span>still outside</span></div></div>' +
       '<div class="sortbar" style="margin-top:12px"><span>Data sheet report</span><button class="printbtn" data-dspdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-dsxls>' + ICON.pdf + 'Excel</button></div>';
@@ -1233,6 +1251,9 @@
     $$('[data-dgrp]').forEach(function (b) { b.onclick = function () { S.devGrp = b.dataset.dgrp; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-dgrpback]').forEach(function (b) { b.onclick = function () { S.devGrp = null; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; S.devGrp = null; LS.set('sort2', S.sort); S._keepScroll = false; render(); }; });
+    $$('[data-jfk]').forEach(function (el) { el.onchange = function () { jfl()[el.dataset.jfk] = el.value; S._keepScroll = true; render(); }; });
+    $$('[data-jftoggle]').forEach(function (b) { b.onclick = function () { S.jflOpen = !(S.jflOpen || jflCount() > 0); if (!S.jflOpen) { S.jfl = null; } S._keepScroll = true; render(); }; });
+    $$('[data-jfclear]').forEach(function (b) { b.onclick = function () { S.jfl = null; S.jflOpen = true; S._keepScroll = true; render(); }; });
     var jqi = $('#jq');
     if (jqi) jqi.oninput = function () { S.jq = jqi.value; var pos = jqi.selectionStart; S._keepScroll = true; render(); var n = $('#jq'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} };
     var q = $('#q');
