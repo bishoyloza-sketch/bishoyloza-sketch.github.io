@@ -366,3 +366,11 @@ tr.oldr .ol{display:inline-block;font-size:11px;font-weight:700;text-transform:u
 tr.oldr label{display:inline-flex;align-items:center;gap:4px;margin:2px 8px 2px 0;font-size:12px}
 tr.oldr input,.oldin{height:30px;width:86px;padding:0 6px;font-size:13px;border:1px dashed #A9B6C7;border-radius:8px;background:#fff;color:#45556B}
 .oldin{display:block;margin-top:4px;width:100%}
+.lnk.oldt.useold{background:#13294B;color:#fff;border-color:#13294B}
+.facts{display:flex;gap:4px;flex:none;flex-wrap:wrap;justify-content:flex-end;max-width:52%}
+.facts .ia{font-size:12px;padding:5px 9px}
+.dlg.fpv>div{max-width:760px;width:calc(100vw - 24px)}
+.fpvb{max-height:62vh;overflow:auto;margin:10px 0;padding:10px 12px;border:1px solid #DDE3EA;border-radius:12px;background:#FAFBFC;font-size:13px;line-height:1.45}
+.fpvb p{margin:0 0 6px}
+.fpvb table.pvt{width:100%;border-collapse:collapse;font-size:13px}
+.fpvb table.pvt td{border-bottom:1px solid #E6EAF0;padding:5px 4px}
