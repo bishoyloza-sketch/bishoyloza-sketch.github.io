@@ -912,8 +912,11 @@
       return '<label class="f"><span>' + label + '</span><div class="jsin"><input class="inp" id="jf_' + k + '" data-jfk="' + k + '" list="jl_' + k + '" value="' + esc(F[k]) + '" placeholder="' + ph + '" autocomplete="off">' +
         (F[k] ? '<button class="jsx" data-jfx="' + k + '" aria-label="Clear">✕</button>' : '') + '</div><datalist id="jl_' + k + '">' + lists[k].map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist></label>';
     }
-    var n = jflCount();
-    return '<div class="box jsearch"><div class="jsh"><b>Search ' + (ds ? 'data sheets' : 'jobs') + '</b>' + (n ? '<button class="btn sm ghost" data-jfclear>Clear all</button>' : '') + '</div>' +
+    var n = jflCount(), open = !!S.jsOpen;
+    var bar = '<div class="jstog"><button class="jsbtn' + (open || n ? ' on' : '') + '" data-jsopen>' + ICON.search + '<span>' + (open ? 'Close search' : 'Search') + '</span>' + (n && !open ? '<em>' + n + '</em>' : '') + '</button>' +
+      (n && !open ? '<button class="btn sm ghost" data-jfclear>Clear</button>' : '') + '</div>';
+    if (!open) return bar;
+    return bar + '<div class="box jsearch"><div class="jsh"><b>Search ' + (ds ? 'data sheets' : 'jobs') + '</b>' + (n ? '<button class="btn sm ghost" data-jfclear>Clear all</button>' : '') + '</div>' +
       '<div class="search" style="margin:0 0 10px">' + ICON.search + '<input id="jsq" type="search" placeholder="Any word: job no., PO, receipt, serial…" value="' + esc(S.jq || '') + '" autocomplete="off" aria-label="Search"></div>' +
       '<div class="jfgrid">' + fld('co', 'Company', 'Type a company') + fld('eng', 'Engineer who went', 'Type a name') + (ds ? '' : fld('by', 'Job opened by', 'Type a name')) + fld('dev', 'Device', 'Name or serial') +
       '<label class="f"><span>From</span><input class="inp" type="date" id="jf_from" data-jfk="from" value="' + esc(F.from) + '"></label>' +
@@ -924,7 +927,8 @@
     var f = S.jf || 'all', rep = can('report'), jq = S.jq || '';
     var tabs = [['all', 'All'], ['open', 'Open'], ['closed', 'Closed']].concat(rep ? [['ds', 'Data sheets']] : []);
     var h = header('Jobs') + '</header><main>' +
-      '<div class="filters" role="tablist">' + tabs.map(function (t) { return '<button class="fbtn' + (f === t[0] ? ' on' : '') + '" data-jf="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + jobSearchPanel(f === 'ds');
+      jobSearchPanel(f === 'ds') +
+      '<div class="filters" role="tablist">' + tabs.map(function (t) { return '<button class="fbtn' + (f === t[0] ? ' on' : '') + '" data-jf="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
     if (rep && f !== 'ds') {
       var allJ = jobsList(), openN = allJ.filter(function (x) { return x.status !== 'Closed'; }).length, m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
       var closedM = allJ.filter(function (x) { return x.status === 'Closed' && x.closedTs && new Date(x.closedTs) >= m0; }).length;
@@ -1372,6 +1376,7 @@
       if (v === 'm') from.setDate(1); else if (v === 'y') { from.setMonth(0); from.setDate(1); } else from.setDate(d.getDate() - (+v - 1));
       F.from = isoDay(from); F.to = isoDay(d); S._keepScroll = true; render(); }; });
     void refocus;
+    $$('[data-jsopen]').forEach(function (b) { b.onclick = function () { S.jsOpen = !S.jsOpen; S._keepScroll = true; render(); if (S.jsOpen) { var n = document.getElementById('jsq'); if (n) n.focus(); } }; });
     $$('[data-jfclear]').forEach(function (b) { b.onclick = function () { S.jfl = null; S.jq = ''; S._keepScroll = true; render(); }; });
     var jqi = $('#jsq');
     if (jqi) jqi.oninput = function () { S.jq = jqi.value; softJobs(); };
