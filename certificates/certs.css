@@ -358,3 +358,11 @@ textarea.gtx{width:100%;min-height:54px;padding:8px;font:inherit;font-size:13.5p
 .rt.bt input{width:88px;min-width:88px}
 .rt.gt input{width:150px;min-width:110px}
 .rt.bt td.bterr{white-space:nowrap;min-width:60px}
+/* last year's values – editable */
+.lnk.oldt{border:1px solid #C9D3E0;background:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;color:#1F4E8C;margin-left:6px;cursor:pointer;vertical-align:middle}
+tr.oldr td,tr.oldr th{background:#F4F6F9;padding:4px 6px}
+tr.oldr td{font-size:12px;color:#5A6B80}
+tr.oldr .ol{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:#7A889B;margin-right:6px}
+tr.oldr label{display:inline-flex;align-items:center;gap:4px;margin:2px 8px 2px 0;font-size:12px}
+tr.oldr input,.oldin{height:30px;width:86px;padding:0 6px;font-size:13px;border:1px dashed #A9B6C7;border-radius:8px;background:#fff;color:#45556B}
+.oldin{display:block;margin-top:4px;width:100%}
