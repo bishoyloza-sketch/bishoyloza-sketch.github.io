@@ -432,3 +432,8 @@ button.ks.out{border-color:var(--client);background:var(--client-soft)}
 .awayl{display:none;padding:0 10px 10px}
 .awayf.open .awayl{display:block}
 a.tel{color:var(--blue);font-weight:700;text-decoration:none;white-space:nowrap}
+/* brand + model beside the code, small, not under it */
+.tagw{flex-direction:row;align-items:center;gap:5px;max-width:132px}
+.tagw .tb{font-size:9.5px;line-height:1.1;text-align:left;max-width:66px;letter-spacing:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tagw.sm{max-width:120px}.tagw.sm .tb{font-size:8.5px;max-width:60px}
+.dcard .tagw{max-width:none}.dcard .tagw .tb{max-width:110px;font-size:10px}
