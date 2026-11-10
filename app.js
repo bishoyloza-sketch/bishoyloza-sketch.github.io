@@ -47,7 +47,7 @@
   /* ================= state ================= */
   var S = {
     me: null, session: LS.get('session', null), data: null, lastSync: 0, online: true,
-    view: 'home', filter: 'all', q: '', sort: LS.get('sort2', 'type'), devGrp: null, people: LS.get('people', null)
+    view: 'home', filter: 'all', q: '', sort: LS.get('sort2', 'type'), devGrp: null, dv: LS.get('dv', 'tiles'), people: LS.get('people', null)
   };
   function req(action, payload) {
     return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} });
@@ -424,7 +424,7 @@
     else if (ps === 'denied') h += '<div class="pushbar off"><div><b>Notifications are blocked</b><small>Allow them for this app in your phone settings to get alerts.</small></div></div>';
     var L = kitData('Data Loggers');
     h += '<button class="kitcard" data-gokits="Data Loggers"><div class="kc-h"><b>Data loggers</b><span>Who has them ›</span></div>' +
-      '<div class="kc-n"><div><b>' + (L.total == null ? '—' : L.total) + '</b><small>total</small></div><div class="ot"><b>' + L.out + '</b><small>outside</small></div><div class="in"><b>' + (L.inLab == null ? '—' : L.inLab) + '</b><small>in the lab</small></div></div>' +
+      '<div class="kc-n"><div><b>' + (L.total == null ? '—' : L.total) + '</b><small>total</small></div><div class="ot" data-kwhere="Data Loggers" role="button"><b>' + L.out + '</b><small>outside ›</small></div><div class="in"><b>' + (L.inLab == null ? '—' : L.inLab) + '</b><small>in the lab</small></div></div>' +
       (L.types.length ? '<div class="kc-t">' + L.types.map(function (t) { return '<span' + (t.out ? ' class="o"' : '') + '>' + esc(t.st.name.replace(/ ?(Temp\/RH )?data logger/i, '')) + ' <b>' + t.out + '</b>/' + (t.total == null ? '—' : t.total) + '</span>'; }).join('') + '</div>' : '') + '</button>';
     var od = overdueList();
     if (od.length) {
@@ -515,6 +515,13 @@
       (d.status === 'At Client' && d.expectedReturn && daysUntil(d.expectedReturn) < 0 ? '<span class="warn">Overdue</span>' : c.kind === 'expired' ? '<span class="warn" title="' + esc(c.text) + '">Cal. expired</span>' : c.kind === 'soon' ? '<span class="warn" style="color:var(--service)">Due ' + c.days + 'd</span>' : '') + '</button>';
   }
 
+  function devCard(d) {
+    var s = stOf(d), c = cert(d), od = d.status === 'At Client' && d.expectedReturn && daysUntil(d.expectedReturn) < 0;
+    var place = isReq(d) ? 'Waiting approval' : d.pending ? 'Transfer waiting' : d.status === 'In Office' ? 'In office' : d.status === 'At Client' ? coName(d.companyId) : s.short;
+    return '<button class="dcard" data-dev="' + d.id + '" style="--st:' + s.c + '">' + tag(d) + '<b>' + devName(d) + '</b>' +
+      '<small>' + esc([d.manufacturer, d.model && d.model !== 'N/A' ? d.model : ''].filter(Boolean).join(' ')) + '</small>' +
+      '<span class="dst">' + esc(place) + '</span>' + (od ? '<span class="warn">Overdue</span>' : c.kind === 'expired' ? '<span class="warn">Cal. expired</span>' : '') + '</button>';
+  }
   /* ---------- Sets: devices with the same sub category fold into one row; tap to open / close ---------- */
   var OPEN_SETS = {};
   function setGroups(list, rowFn, o) {
@@ -571,13 +578,13 @@
     var g = kitGroup(), K = kitData(g);
     var h = header('Loggers & kits') + '</header><main>' +
       '<div class="filters" role="tablist">' + KIT_TABS.map(function (t) { return '<button class="fbtn' + (g === t[0] ? ' on' : '') + '" data-kgrp="' + esc(t[0]) + '">' + esc(t[1]) + '</button>'; }).join('') + '</div>' +
-      '<div class="placesum"><div class="ks"><b>' + (K.inLab == null ? '—' : K.inLab) + '</b><span>in the lab</span></div><div class="ks out"><b>' + K.out + '</b><span>outside</span></div><div class="ks"><b>' + (K.total == null ? '—' : K.total) + '</b><span>total</span></div></div>' +
+      '<div class="placesum"><div class="ks"><b>' + (K.inLab == null ? '—' : K.inLab) + '</b><span>in the lab</span></div><button class="ks out" data-kwhere="' + esc(g) + '"><b>' + K.out + '</b><span>outside ›</span></button><div class="ks"><b>' + (K.total == null ? '—' : K.total) + '</b><span>total</span></div></div>' +
       '<div class="sortbar" style="margin-top:12px"><span>' + esc(g) + '</span><button class="printbtn" data-kpdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-kxls>' + ICON.pdf + 'Excel</button></div>' +
       '<div class="sec"><h2>In the lab / outside</h2></div><div class="list">' +
       (K.types.length ? K.types.map(function (t) {
         var pct = t.total ? Math.round(t.out / t.total * 100) : 0;
         return '<div class="row kitrow"><span class="t"><b>' + esc(t.st.name) + '</b>' + (t.st.contents ? '<small dir="auto">' + esc(t.st.contents) + '</small>' : '') +
-          '<span class="kitnums"><em class="in">' + (t.free == null ? '—' : t.free) + ' in</em><em class="ot">' + t.out + ' out</em><em>' + (t.total == null ? 'total not set' : t.total + ' total') + '</em></span>' +
+          '<span class="kitnums"><em class="in">' + (t.free == null ? '—' : t.free) + ' in</em>' + (t.out ? '<button class="ot" data-kwst="' + esc(t.st.id) + '" data-g="' + esc(g) + '">' + t.out + ' out ›</button>' : '<em class="ot">0 out</em>') + '<em>' + (t.total == null ? 'total not set' : t.total + ' total') + '</em></span>' +
           (t.total ? '<span class="kbar"><i style="width:' + Math.min(100, pct) + '%"></i></span>' : '') + '</span></div>';
       }).join('') : '<div class="row"><span class="t"><small>No types yet — the admin adds them from Me › Loggers, sensors &amp; kits.</small></span></div>') + '</div>' +
       '<div class="sec"><h2>Who has them</h2><small>' + K.out + ' outside</small></div>';
@@ -596,6 +603,31 @@
         (can('keep') ? '<div class="site-f"><button class="btn sm" data-checkin="' + esc(st.coId) + '">Check in</button></div>' : '') + '</div>';
     });
     return h + '<div style="height:24px"></div></main>';
+  }
+  /* Tap "outside" anywhere: where exactly, by company, and with whom */
+  function kitWhere(g, stockId) {
+    var st = stockId ? stockList().filter(function (x) { return x.id === stockId; })[0] : null;
+    var hs = holdings().filter(function (h) { return +h.qty > 0 && (stockId ? h.stockId === stockId : h.group === g); });
+    var byCo = {}, order = [], sum = function (l) { return l.reduce(function (n, h) { return n + (+h.qty); }, 0); };
+    hs.forEach(function (h) { if (!byCo[h.companyId]) { byCo[h.companyId] = []; order.push(h.companyId); } byCo[h.companyId].push(h); });
+    order.sort(function (a, b) { return sum(byCo[b]) - sum(byCo[a]); });
+    var total = sum(hs);
+    openSheet(function (body, setFoot, setTitle) {
+      setTitle('Outside now', (st ? st.name : g) + ' · ' + total);
+      body.innerHTML = !order.length ? '<div class="empty"><b>Nothing outside.</b>Everything is in the lab.</div>' :
+        '<div class="note">' + total + ' outside at ' + order.length + ' compan' + (order.length === 1 ? 'y' : 'ies') + '.</div>' +
+        order.map(function (co) {
+          var list = byCo[co];
+          return '<div class="site" style="--c:var(--client)"><div class="site-h"><div><h3>' + esc(coName(co)) + '</h3></div><span class="cnt">' + sum(list) + ' out</span></div>' +
+            '<div class="list" style="margin-top:8px">' + list.map(function (h) {
+              return '<div class="row"><span class="qn big">' + h.qty + '×</span><span class="t"><b dir="auto">' + esc(h.name) + '</b><small>With ' + esc(names(h.holders)) + '</small>' +
+                '<small>Since ' + esc(when(h.since)) + (h.checkoutId ? ' · receipt ' + esc(h.checkoutId) : '') + '</small></span>' +
+                (h.checkoutId ? '<button class="btn sm ghost" data-pdf="' + esc(h.checkoutId) + '" aria-label="Receipt PDF">' + ICON.pdf + '</button>' : '') + '</div>';
+            }).join('') + '</div></div>';
+        }).join('');
+      $$('[data-pdf]', body).forEach(function (b) { b.onclick = function () { receiptPdf(b.dataset.pdf); }; });
+      setFoot('');
+    });
   }
   function kitsXls() {
     var now = new Date(); toast('Preparing Excel…');
@@ -735,26 +767,31 @@
       });
     } else {
       var DG = devGroups(), grpOf = function (d) { var c = setCat(d), g = DG.filter(function (x) { return x[1].indexOf(c) >= 0; })[0]; return g ? g[0] : 'Other devices'; };
-      if (!q && !S.devGrp) {
+      var dv = S.dv || 'tiles';
+      h += '<div class="viewbar" role="radiogroup" aria-label="View">' + [['tiles', '▦', 'Tiles'], ['grid', '⊞', 'Grid'], ['list', '☰', 'Details']].map(function (v) {
+        return '<button data-dv="' + v[0] + '" class="' + (dv === v[0] ? 'on' : '') + '" role="radio" aria-checked="' + (dv === v[0]) + '"><i>' + v[1] + '</i>' + v[2] + '</button>'; }).join('') + '</div>';
+      if (dv === 'tiles' && !q && !S.devGrp) {
         /* category tiles first, like the check-out screen */
         h += '<div class="cats devcats">' + DG.map(function (g) {
           var all = list.filter(function (d) { return grpOf(d) === g[0]; });
           if (!all.length) return '';
           var inN = all.filter(function (d) { return d.status === 'In Office' && !d.pending; }).length, out = all.length - inN;
           var warn = all.filter(function (d) { return cert(d).kind === 'expired'; }).length;
-          return '<button data-dgrp="' + esc(g[0]) + '"><b>' + esc(g[0]) + '</b><small>' + all.length + ' device' + (all.length === 1 ? '' : 's') + '</small>' +
+          return '<button data-dgrp="' + esc(g[0]) + '"><span class="tcnt">' + all.length + '</span><b>' + esc(g[0]) + '</b>' +
             '<span class="cmini"><em class="in">' + inN + ' in</em>' + (out ? '<em class="out">' + out + ' out</em>' : '') + (warn ? '<em class="bad">' + warn + ' expired</em>' : '') + '</span></button>';
         }).join('') + '</div>';
         return h + '<div style="height:24px"></div></main>';
       }
-      if (!q) { list = list.filter(function (d) { return grpOf(d) === S.devGrp; }); h += '<button class="backcat" data-dgrpback>‹ Categories <span>' + esc(S.devGrp) + '</span></button>'; }
+      if (dv === 'tiles' && !q) { list = list.filter(function (d) { return grpOf(d) === S.devGrp; }); h += '<button class="backcat" data-dgrpback>‹ Categories <span>' + esc(S.devGrp) + '</span></button>'; }
       if (!list.length) h += '<div class="empty"><b>No devices here with this filter.</b></div>';
+      var cards = dv !== 'list';
       var cats = [], byCat = {};
       list.sort(function (a, b) { return setCat(a).localeCompare(setCat(b)) || bySerial(a, b); });
       list.forEach(function (d) { var k = setCat(d); if (!byCat[k]) { byCat[k] = []; cats.push(k); } byCat[k].push(d); });
       cats.forEach(function (cat) {
-        h += '<div class="sec"><h2>' + esc(cat) + ' <span class="cnt">' + byCat[cat].length + '</span></h2></div><div class="list">' +
-          setGroups(byCat[cat], function (d, inSet) { return devRow(d, false, inSet); }, { scope: 't:' + cat, forceOpen: !!q }) + '</div>';
+        h += '<div class="sec cat"><h2>' + esc(cat) + ' <span class="cnt">' + byCat[cat].length + '</span></h2></div>' +
+          (cards ? '<div class="dgrid">' + setGroups(byCat[cat], function (d) { return devCard(d); }, { scope: 'g:' + cat, forceOpen: !!q }) + '</div>'
+                 : '<div class="list">' + setGroups(byCat[cat], function (d, inSet) { return devRow(d, false, inSet); }, { scope: 't:' + cat, forceOpen: !!q }) + '</div>');
       });
     }
     return h + '<div style="height:24px"></div></main>';
@@ -1034,14 +1071,14 @@
   }
   /* Admin only: erase trial data — each kind on its own, for a chosen period */
   var ERASE_OPTS = [
-    ['moves', 'Activity log (every move)', 'The audit trail of check-outs, returns, transfers and consumables used.'],
-    ['receipts', 'Receipts', 'Finished check-out receipts. Receipts with devices still out, or still waiting, are kept.'],
-    ['transfers', 'Transfers', 'Finished transfers between companies.'],
-    ['jobs', 'Jobs', 'Jobs with no receipts left in them.'],
-    ['datasheets', 'Data sheet marks', 'Sets the Yes / No mark of receipts back to empty.'],
-    ['places', 'Where devices are now', 'Every device back In office, loggers and kits back in the lab, waiting requests cancelled. Ignores the period.'],
-    ['devices', 'Devices added in the app', 'Only devices added from the app in this period (not the main list). Rarely needed.'],
-    ['companies', 'Companies added in the app', 'Only companies added in this period that are not used in any job or receipt.']
+    ['moves', 'Audit trail', 'The movement history of every device: check-outs, returns, transfers and consumables used.', 'Records'],
+    ['receipts', 'Check-out receipts', 'Closed receipts only. Receipts with devices still outside, or waiting for approval, are kept.', 'Records'],
+    ['transfers', 'Transfer records', 'Completed transfers of devices from one client site to another.', 'Records'],
+    ['jobs', 'Jobs', 'Jobs that have no receipts left. Jobs that still have receipts are kept.', 'Records'],
+    ['datasheets', 'Data sheet status', 'Clears the Yes / No “data sheet received” mark on receipts. The receipts themselves stay.', 'Records'],
+    ['places', 'Reset device locations', 'Every device back to In office, every logger and kit back in the lab, waiting requests cancelled. Applies to all devices, whatever the period.', 'Reset & clean-up'],
+    ['devices', 'Devices added from the app', 'Removes devices someone added from the app in this period. The official device list is not touched.', 'Reset & clean-up'],
+    ['companies', 'Unused companies', 'Removes companies added in this period that have no job or receipt.', 'Reset & clean-up']
   ];
   function eraseHistory() {
     var days = 1, what = {};
@@ -1051,8 +1088,10 @@
         body.innerHTML = '<div class="note warnbox">Choose exactly what to erase. Nothing is chosen until you tick it. Erasing cannot be undone.</div>' +
           '<div class="box"><h4>Period</h4><div class="seg">' + [[1, 'Last 24 hours'], [3, 'Last 3 days'], [7, 'Last 7 days'], [30, 'Last 30 days'], [0, 'Everything']].map(function (o) { return '<button data-days="' + o[0] + '" class="' + (days === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div>' +
           '<label class="f" style="margin:12px 0 0"><span>Or the last … days</span><input class="inp" id="edays" inputmode="numeric" value="' + (days || '') + '" placeholder="e.g. 5"></label></div>' +
-          '<div class="sec"><h2>What to erase</h2><small>' + Object.keys(what).filter(function (k) { return what[k]; }).length + ' chosen</small></div><div class="list">' +
-          ERASE_OPTS.map(function (o) { var on = !!what[o[0]]; return '<button class="row' + (on ? ' sel' : '') + '" data-ew="' + o[0] + '"><span class="check">' + (on ? ICON.tick : '') + '</span><span class="t"><b>' + o[1] + '</b><small>' + o[2] + '</small></span></button>'; }).join('') + '</div>';
+          ['Records', 'Reset & clean-up'].map(function (sec, si) {
+            return '<div class="sec"><h2>' + (si ? 'Reset &amp; clean-up' : 'History records') + '</h2>' + (si ? '' : '<small>' + Object.keys(what).filter(function (k) { return what[k]; }).length + ' chosen</small>') + '</div><div class="list">' +
+              ERASE_OPTS.filter(function (o) { return o[3] === sec; }).map(function (o) { var on = !!what[o[0]]; return '<button class="row' + (on ? ' sel' : '') + '" data-ew="' + o[0] + '"><span class="check">' + (on ? ICON.tick : '') + '</span><span class="t"><b>' + o[1] + '</b><small>' + o[2] + '</small></span></button>'; }).join('') + '</div>';
+          }).join('');
         $$('[data-days]', body).forEach(function (b) { b.onclick = function () { days = +b.dataset.days; draw(); }; });
         $('#edays', body).oninput = function (e) { days = parseInt(e.target.value, 10) || 0; $$('[data-days]', body).forEach(function (x) { x.classList.toggle('on', +x.dataset.days === days); }); foot(); };
         $$('[data-ew]', body).forEach(function (b) { b.onclick = function () { what[b.dataset.ew] = !what[b.dataset.ew]; S._keepScroll = true; var y = body.scrollTop; draw(); body.scrollTop = y; }; });
@@ -1069,7 +1108,7 @@
             req('eraseHistory', { days: days, what: what }).then(function (r) { return refresh(true).then(function () { return r; }); })
               .then(function (r) {
                 closeAll();
-                var parts = [['moves', 'moves'], ['receipts', 'receipts'], ['transfers', 'transfers'], ['jobs', 'jobs'], ['datasheets', 'data sheet marks'], ['places', 'devices / items reset'], ['devices', 'devices'], ['companies', 'companies']]
+                var parts = [['moves', 'audit-trail entries'], ['receipts', 'receipts'], ['transfers', 'transfers'], ['jobs', 'jobs'], ['datasheets', 'data sheet marks cleared'], ['places', 'devices / items reset'], ['devices', 'devices removed'], ['companies', 'companies removed']]
                   .filter(function (x) { return what[x[0]]; }).map(function (x) { return (r[x[0]] || 0) + ' ' + x[1]; });
                 toast('Erased: ' + parts.join(', '));
               })
@@ -1154,6 +1193,8 @@
     $$('[data-filter]').forEach(function (b) { b.onclick = function () { S.filter = b.dataset.filter; S._keepScroll = false; render(); }; });
     $$('[data-listpdf]').forEach(function (b) { b.onclick = listPdf; });
     $$('[data-listxls]').forEach(function (b) { b.onclick = listXls; });
+    $$('[data-kwhere]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); kitWhere(b.dataset.kwhere); }; });
+    $$('[data-kwst]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); kitWhere(b.dataset.g, b.dataset.kwst); }; });
     $$('[data-gokits]').forEach(function (b) { b.onclick = function () { S.kgrp = b.dataset.gokits; location.hash = '#kits'; }; });
     $$('[data-goco]').forEach(function (b) { b.onclick = function () { S.filter = 'client'; S.q = ''; S.sort = 'place'; location.hash = '#devices'; }; });
     $$('[data-job]').forEach(function (b) { b.onclick = function () { openJob(b.dataset.job); }; });
@@ -1176,6 +1217,7 @@
         else { fallbackCopy(url); done(); }
       };
     });
+    $$('[data-dv]').forEach(function (b) { b.onclick = function () { S.dv = b.dataset.dv; S.devGrp = null; LS.set('dv', S.dv); S._keepScroll = false; render(); }; });
     $$('[data-dgrp]').forEach(function (b) { b.onclick = function () { S.devGrp = b.dataset.dgrp; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-dgrpback]').forEach(function (b) { b.onclick = function () { S.devGrp = null; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; S.devGrp = null; LS.set('sort2', S.sort); S._keepScroll = false; render(); }; });

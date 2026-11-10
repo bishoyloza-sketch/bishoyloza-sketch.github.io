@@ -356,3 +356,29 @@ textarea.inp{height:88px;padding:10px 12px;resize:vertical}
 .hero h3 .rng{font-size:14px}
 .sortbar{flex-wrap:wrap;row-gap:8px}
 .sortbar .sortseg{margin-left:auto}
+/* ---- device views: tiles / grid / details ---- */
+.viewbar{display:flex;gap:6px;margin:4px 0 8px}
+.viewbar button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:9px 6px;font:inherit;font-size:14px;font-weight:600;color:var(--muted)}
+.viewbar button i{font-style:normal;font-size:17px;line-height:1}
+.viewbar button.on{border-color:var(--navy);background:var(--navy);color:#fff}
+.sec.cat{margin:26px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+.sec.cat h2{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:700;color:var(--navy)}
+.sec.cat .cnt{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 8px;border-radius:999px;background:var(--navy);color:#fff;font-size:14px;font-weight:700}
+.devcats button{padding-top:16px}
+.devcats button b{padding-right:34px;font-size:17px}
+.tcnt{position:absolute;top:12px;right:12px;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 7px;border-radius:999px;background:var(--navy);color:#fff;font-size:14px;font-weight:700}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dcard{display:flex;flex-direction:column;align-items:flex-start;gap:5px;text-align:left;background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--st);border-radius:14px;padding:12px;min-height:128px;font:inherit;color:inherit;min-width:0}
+.dcard:active{background:var(--bg)}
+.dcard b{font-size:15px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.dcard b .rng{margin:4px 0 0;display:table}
+.dcard small{color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
+.dcard .dst{margin-top:auto;font-size:12.5px;font-weight:700;color:var(--st)}
+.dcard .warn{font-size:12px}
+.dgrid .set{grid-column:1/-1;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.dgrid .set.open .setbody{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+.dgrid .setbody .dcard{min-height:110px}
+button.ks{text-align:left;font:inherit;cursor:pointer}
+button.ks.out{border-color:var(--client);background:var(--client-soft)}
+.kitnums button.ot{border:0;background:var(--client-soft);color:var(--client);font:inherit;font-weight:700;border-radius:999px;padding:1px 9px;cursor:pointer}
+.kc-n .ot[data-kwhere]{cursor:pointer;border-radius:10px;background:var(--client-soft)}
