@@ -347,3 +347,14 @@ body{overflow-wrap:break-word;word-break:normal;hyphens:none;-webkit-hyphens:non
 .pvwrap iframe.pv{position:absolute;left:0;top:0;transform-origin:0 0;border:0;border-radius:0;margin:0;min-height:0;background:#DFE4EA}
 .pvhint{font-size:12.5px;color:var(--muted);text-align:center}
 @media (min-width:900px){.pvwrap{max-width:860px;margin-left:auto;margin-right:auto}}
+/* balance + other-format tables */
+.rt.bt td,.rt.gt td{padding:3px}
+.rt.bt input,.rt.gt input{min-width:74px;width:100%;height:34px;padding:0 6px;font-size:14px}
+.rt.gt th{background:#EEF2F7;font-weight:600;font-size:12.5px;text-align:left;padding:6px 8px;white-space:normal}
+.rt.bt td.bterr{text-align:center;color:#45556B;font-variant-numeric:tabular-nums}
+h6.gh{margin:12px 0 4px;font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;color:#13294B}
+textarea.gtx{width:100%;min-height:54px;padding:8px;font:inherit;font-size:13.5px;line-height:1.45;border-radius:10px;resize:vertical}
+.rt.bt,.rt.gt{width:max-content;min-width:100%}
+.rt.bt input{width:88px;min-width:88px}
+.rt.gt input{width:150px;min-width:110px}
+.rt.bt td.bterr{white-space:nowrap;min-width:60px}

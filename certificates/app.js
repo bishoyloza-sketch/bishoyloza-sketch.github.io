@@ -142,9 +142,10 @@ function clOcr(dataUrl) { return CL.ready.then(function () { if (!CL.sample || !
 function clExtract(sec, hint) { return CL.ready.then(function () { if (!CL.sample) throw new Error('Reading certificates needs the app inside claude.ai');
   var text = sec.map(function (pg) { return pg.join(' '); }).join('\n\n---PAGE---\n\n').slice(0, 24000);
   return CL.sample.json('Below is text (spacing is messy) from ONE calibration certificate of Akhnaton calibration lab. ' + hint + '\nExtract it as JSON. Copy every value EXACTLY as written – never compute, round, correct or invent a number. Only repair spacing inside one number/token ("5 0"→"50", "- 0.02"→"-0.02", "0.0 1"→"0.01", "48 - 925 - 2026"→"48-925-2026"); keep trailing zeros. Missing → "".\n' +
-    'If the results have ascending/descending or Up/Down columns put the second set in reading2/deviation2 and set dirs to 2, else dirs 1. ref = the standard/reference value (if there is no separate column use the nominal point). limit = the acceptance limit of that row as written ("" if only a global limit). Ignore repeatability / eccentricity tables.\n' +
-    'Return JSON only: {"fields":{"certNo":"","manufacturer":"","description":"","code":"","model":"","serial":"","range":"","calRange":"","resolution":"","limits":"","calDate":"","dataSheetRef":"","procedure":""},"dirs":1,"points":[{"point":"","ref":"","reading":"","deviation":"","reading2":"","deviation2":"","limit":""}]}\n\nTEXT:\n"""\n' + text + '\n"""', { modelTier: 'default' })
-    .then(function (j) { j = j || {}; return { fields: j.fields || {}, points: j.points || [], dirs: j.dirs === 2 ? 2 : 1 }; }); }); }
+    'If the results have ascending/descending or Up/Down columns put the second set in reading2/deviation2 and set dirs to 2, else dirs 1. ref = the standard/reference value (if there is no separate column use the nominal point). limit = the acceptance limit of that row as written ("" if only a global limit). If it is a weight balance, also copy the Repeatability test (each load with all its readings) into "rep" and the Eccentricity test (load, every position reading, error from the center) into "ecc"; otherwise leave them empty.\n' +
+    'Return JSON only: {"fields":{"certNo":"","manufacturer":"","description":"","code":"","model":"","serial":"","range":"","calRange":"","resolution":"","limits":"","calDate":"","dataSheetRef":"","procedure":""},"dirs":1,"points":[{"point":"","ref":"","reading":"","deviation":"","reading2":"","deviation2":"","limit":""}],"unit":"","rep":[{"load":"","r":[""]}],"ecc":{"load":"","pos":[""],"r":[""],"err":[""]}}\n\nTEXT:\n"""\n' + text + '\n"""', { modelTier: 'default' })
+    .then(function (j) { j = j || {}; var rp = (j.rep || []).filter(function (r) { return r && r.load && (r.r || []).filter(Boolean).length; }), ec = j.ecc && (j.ecc.r || []).filter(Boolean).length ? j.ecc : null, bl = rp.length || ec ? { unit: j.unit || '', rep: rp, ecc: ec } : null;
+      return { fields: j.fields || {}, points: j.points || [], dirs: j.dirs === 2 ? 2 : 1, bal: bl }; }); }); }
 
 /* ================= server (same as Akhnaton Devices) ================= */
 var Api = { call: function (req) {
@@ -900,6 +901,71 @@ function parseResults(lines) { /* rows of numbers after the results header → p
     if (dirs === 1 && v.length >= 4) { pt.ref = v[1]; pt.reading = v[2]; pt.deviation = v[3]; } /* point | standard | UUT | deviation */
     pts.push(pt); }
   return { points: pts, dirs: dirs }; }
+/* ---- weight balances: repeatability + eccentricity tables (page 2 of the certificate) ---- */
+function parseBal(text) { var t = String(text || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').replace(/(\d)\.\s+(\d)/g, '$1.$2'), out = null, num = function (x) { return parseFloat(x); };
+  var endAt = function (from, rx) { var m = t.slice(from).search(rx); return m < 0 ? t.length : from + m; };
+  var ri = t.search(/repeatab/i);
+  if (ri >= 0) { var seg = t.slice(ri, endAt(ri + 12, /eccentric|item\s*no\.?|not be duplicated|remarks|uncertaint|calibration standard/i)), u = (seg.match(/\(\s*(mg|g|kg)\s*\)/i) || [])[1] || '';
+    var ns = (seg.replace(/^.*?(?:reading|load)[^)]*\)\s*/i, ' ').match(/-?\d+(?:\.\d+)?/g) || []), rows = [], i = 0;
+    while (i < ns.length) { var L = num(ns[i]), r = [], j = i + 1; while (j < ns.length && L > 0 && Math.abs(num(ns[j]) - L) <= Math.max(0.05 * L, 0.0005)) { r.push(ns[j]); j++; } if (r.length >= 2) { rows.push({ load: ns[i], r: r }); i = j; } else i++; }
+    if (rows.length) out = { rep: rows, unit: u }; }
+  var ei = t.search(/eccentric/i);
+  if (ei >= 0) { var sg = t.slice(ei, endAt(ei + 12, /item\s*no\.?|remarks|not be duplicated|uncertaint|calibration standard|manufacturer/i)), grab = function (rx) { var m = sg.match(rx); return m ? (m[1].match(/-?\d+(?:\.\d+)?/g) || []) : []; };
+    var loads = grab(/load\s*(?:\([^)]*\))?\s*([-\d.\s]+?)\s*reading/i), rds = grab(/reading\s*(?:\([^)]*\))?\s*([-\d.\s]+?)\s*error/i), errs = grab(/error[^)]*\)\s*([-\d.\s]+)/i), ps = grab(/position\s*no\.?\s*([\d\s]+?)\s*load/i);
+    if (rds.length >= 3) { out = out || {}; out.ecc = { load: loads[0] || '', r: rds, err: errs.slice(0, rds.length), pos: ps.length === rds.length ? ps : rds.map(function (x, k) { return String(k + 1); }) }; if (!out.unit) out.unit = (sg.match(/\(\s*(mg|g|kg)\s*\)/i) || [])[1] || ''; } }
+  return out; }
+function balOk(b) { if (!b) return false; var ok = true; (b.rep || []).forEach(function (r) { r.r.forEach(function (v) { if (Math.abs(parseFloat(v) - parseFloat(r.load)) > Math.max(0.05 * parseFloat(r.load), 0.001)) ok = false; }); }); if (b.ecc) b.ecc.r.forEach(function (v) { if (b.ecc.load && Math.abs(parseFloat(v) - parseFloat(b.ecc.load)) > Math.max(0.05 * parseFloat(b.ecc.load), 0.001)) ok = false; }); return ok && !!((b.rep || []).length || b.ecc); }
+function isBal(it) { return itKind(it) === 'Weight' && !/single\s*weight|weights?\s*set|mass\s*piece/i.test(it.description || ''); }
+function balEnsure(p, it, cb) { var o = it.old; if (!o || !o.file || !o.file.id || o.bal || o.balTried || !isBal(it) || !spOn()) return; o.balTried = Date.now(); saveProjects();
+  pdfPages(o.file.driveId, o.file.id).then(function (pages) { var sec = certSection(pages, it.code || (o.fields || {}).code || '') || pages, txt = sec.map(function (pg) { return pg.join(' '); }).join(' ');
+      var b = parseBal(txt); if (balOk(b)) return b; if (!CL.on || !CL.sample || !/repeatab|eccentric/i.test(txt)) return b && (b.rep || b.ecc) ? b : null;
+      return CL.sample.json('Text (spacing is messy) of ONE weight-balance calibration certificate. Extract ONLY the Repeatability test and the Eccentricity test exactly as written – never compute or invent; only repair spacing inside one number ("1000.0 1"→"1000.01", "0. 01"→"0.01"). Missing → [] or "".\nReturn JSON only: {"unit":"g","rep":[{"load":"","r":["",""]}],"ecc":{"load":"","pos":["1","2","3","4","5"],"r":[""],"err":[""]}}\n\nTEXT:\n----\n' + txt.slice(0, 16000) + '\n----', { modelTier: 'default' }).then(function (j) { return j && ((j.rep || []).length || (j.ecc && (j.ecc.r || []).length)) ? j : null; }); })
+    .then(function (b) { if (b) { o.bal = b; toast('Repeatability and eccentricity of last year were added for ' + (it.code || it.description)); } saveProjects(); cb && cb(); }).catch(function () { cb && cb(); }); }
+function balData(p, it) { var b = it.old && it.old.bal; if (!b) return null; var nb = it.nbal || {}, d = resDec(it), ph = [], rep = [], ecc = null, filled = function (a, n) { return !!a && a.length >= n && a.slice(0, n).every(function (v) { return isNum(v); }); };
+  (b.rep || []).forEach(function (r, i) { var nr = (nb.rep || [])[i], ok = filled(nr, r.r.length); if (!ok) ph.push({ point: 'Repeatability ' + r.load, why: 'no new reading' }); rep.push({ load: (nb.repLoad || [])[i] || r.load, r: ok ? nr.slice(0, r.r.length) : r.r }); });
+  if (b.ecc) { var e = b.ecc, ne = nb.ecc || {}, n = e.r.length, ok = filled(ne.r, n);
+    if (!ok) ph.push({ point: 'Eccentricity', why: 'no new reading' });
+    var r = ok ? ne.r.slice(0, n) : e.r, err = ok ? r.slice(1).map(function (v) { var x = numv(v) - numv(r[0]); if (d != null && Math.abs(x) < Math.pow(10, -d) / 2) x = 0; return x === 0 ? '0' : (d == null ? String(+x.toFixed(6)) : x.toFixed(d)); }) : ((e.err || []).length === n ? e.err.slice(1) : (e.err || []));
+    ecc = { load: ne.load || e.load, r: r, err: err, pos: e.pos && e.pos.length === n ? e.pos : r.map(function (x, k) { return String(k + 1); }) }; }
+  return { rep: rep, ecc: ecc, ph: ph, unit: b.unit || uOf(it) || 'g' }; }
+function balTables(bd) { var u = bd.unit, n = Math.max.apply(null, [1].concat(bd.rep.map(function (r) { return r.r.length; }))), out = {};
+  if (bd.rep.length) out.rep = [['Load (' + u + ')'].concat(Array.apply(null, Array(n)).map(function (x, k) { return 'Reading ' + (k + 1) + ' (' + u + ')'; }))].concat(bd.rep.map(function (r) { var a = [r.load].concat(r.r); while (a.length < n + 1) a.push(''); return a; }));
+  if (bd.ecc) { var e = bd.ecc; out.ecc = [['Position No.'].concat(e.pos), ['Load (' + u + ')'].concat(e.r.map(function () { return e.load; })), ['Reading (' + u + ')'].concat(e.r), ['Error from the center (' + u + ')'].concat(e.err.length === e.r.length ? e.err : ['—'].concat(e.err))]; }
+  return out; }
+/* ---- other certificate formats (compressed air, HVAC, LAF, particle count, filters…): copy last year's tables as they are, cleaned ---- */
+var GENRX = /compress|nitrogen|\bn2\b|laminar|\blaf\b|hvac|particle|d\.?o\.?p|hepa|filter integ|air\s*velocity|air\s*change|recovery|air\s*pattern|dew\s*point|oil\s*content|steam quality|pass\s*box|biosafety|clean\s*room|smoke/i;
+function genWanted(it) { var o = it.old || {}, f = o.fields || {}; return !!(o.file && o.file.id) && (GENRX.test((it.description || '') + ' ' + (f.description || '') + ' ' + (o.title || '')) || !(o.points || []).length); }
+function genEnsure(p, it, cb) { var o = it.old; if (!o || o.gen || o.genTried || !genWanted(it) || !spOn() || !CL.on || !CL.sample) return; o.genTried = Date.now(); saveProjects();
+  pdfPages(o.file.driveId, o.file.id).then(function (pages) { var sec = certSection(pages, it.code || (o.fields || {}).code || '') || pages, txt = sec.map(function (pg) { return pg.join(' '); }).join('\n---PAGE---\n');
+      return CL.sample.json('Text (spacing is messy) of ONE certificate of Akhnaton calibration lab (it can be compressed air, HVAC, laminar flow, particle count, filter test…). Copy its CONTENT so it can be printed again in the same layout.\n' +
+        'Rules: copy every word and number EXACTLY – never compute, round, correct or invent. Only repair broken spacing inside one word or number ("0. 4 8"→"0.48", "Zeitou n"→"Zeitoun", "48 - 652 - 202 6"→"48-652-2026", "- 4 8"→"-48"). Keep the order of the certificate.\n' +
+        'Skip: the page header (lab name, address, phone), DATE OF ISSUE, CUSTOMER, CUSTOMER ID, CERTIFICATE NO. line, the Calibrated By / Approved By / Date / Name / Signature block, the ** note and the standard footer sentences, page numbers, form numbers, stray digits from drawings.\n' +
+        'Blocks: "kv" = label/value lines (rows of [label, value] or [label, value, label, value]); "table" = a grid with a header row first (head true); "text" = a paragraph (purpose, method, acceptance criteria, remarks, attachments). h = the section heading above the block ("" if none). pageBreak true on the first block of every page after the first.\n' +
+        'Return JSON only: {"title":"the certificate title e.g. Compressed Air Measurement Certificate or Calibration Certificate","pages":1,"blocks":[{"h":"","kind":"kv","rows":[["",""]]},{"h":"","kind":"table","head":true,"rows":[["",""],["",""]]},{"h":"","kind":"text","text":""}]}\n\nTEXT:\n----\n' + txt.slice(0, 20000) + '\n----', { modelTier: 'default' }); })
+    .then(function (j) { if (j && (j.blocks || []).length) { o.gen = { title: String(j.title || '').trim(), pages: Math.max(1, +j.pages || 1), blocks: j.blocks.filter(function (b) { return b && (b.kind === 'text' ? String(b.text || '').trim() : (b.rows || []).length); }).map(function (b) { return { h: String(b.h || '').trim(), kind: b.kind === 'table' || b.kind === 'text' ? b.kind : 'kv', head: !!b.head, pb: !!b.pageBreak, text: b.text || '', rows: (b.rows || []).map(function (r) { return (r || []).map(function (c) { return c == null ? '' : String(c); }); }) }; }) };
+        o.gen.use = true; toast('Last year\'s tables were copied for ' + (it.code || it.description)); } saveProjects(); cb && cb(); }).catch(function (e) { saveProjects(); cb && cb(); }); }
+function genStd(b) { return b.kind === 'table' && /manufacturer|serial|batch|part\.?\s*no|model/i.test((b.rows[0] || []).join(' ')); }
+function genMeas(b, r, c) { var v = String((b.rows[r] || [])[c] || '').trim(); if (!v) return false;
+  if (b.kind === 'kv') return c % 2 === 1 && /result|reading|measur|deviation|penetration|efficien|test\s*date|average/i.test((b.rows[r] || [])[c - 1] || '');
+  if (b.kind !== 'table' || genStd(b) || (b.head && r === 0) || c === 0) return false; var hd = b.head ? String((b.rows[0] || [])[c] || '') : '';
+  if (/accept|criteria|limit|class|no\.?$|^id$|point\s*no|position/i.test(hd)) return false; return /^[-+<>≤≥]?\s*\d/.test(v) && !/^iso\b/i.test(v) || /result|reading|measur|deviation/i.test(hd); }
+function genVal(it, bi, r, c) { var b = it.old.gen.blocks[bi], k = bi + '|' + r + '|' + c, nv = (it.ngen || {})[k]; if (nv != null && nv !== '') return { v: nv, ph: false }; var ov = (b.rows[r] || [])[c] || ''; return { v: ov, ph: genMeas(b, r, c) && ov !== '' }; }
+function genText(it, bi) { var nv = (it.ngen || {})[bi + '|t']; return nv != null ? nv : it.old.gen.blocks[bi].text; }
+function genPh(it) { var L = []; if (!(it.old && it.old.gen && it.old.gen.use)) return L; it.old.gen.blocks.forEach(function (b, bi) { (b.rows || []).forEach(function (row, r) { row.forEach(function (x, c) { if (genVal(it, bi, r, c).ph) L.push({ point: (b.h || 'Table') + ' · ' + (b.kind === 'table' && b.head ? (b.rows[0][c] || '') + ' ' : '') + (row[0] || ''), why: 'no new reading' }); }); }); }); return L; }
+function genOn(it) { return !!(it.old && it.old.gen && it.old.gen.use); }
+function genWord(p, it, head) { var g = it.old.gen, body = '';
+  g.blocks.forEach(function (b, bi) { if (b.pb && bi) body += head(true, true); if (b.h) body += H(b.h);
+    if (b.kind === 'text') { String(genText(it, bi)).split(/\n+/).forEach(function (ln) { if (ln.trim()) body += W.p(W.r(ln.trim(), { sz: FS }), { jc: 'both', after: 40 }); }); return; }
+    var n = Math.max.apply(null, b.rows.map(function (r) { return r.length; })), cells = b.rows.map(function (row, r) { var a = []; for (var c = 0; c < n; c++) { var x = c < row.length ? genVal(it, bi, r, c).v : ''; var lab = b.kind === 'kv' ? c % 2 === 0 : (b.head && r === 0) || c === 0 && b.kind === 'table' && !b.head;
+      a.push(lab ? { t: x, b: true, shade: b.kind === 'table' && b.head && r === 0 ? 'E7ECF2' : undefined, jc: b.kind === 'kv' ? 'left' : undefined } : (b.kind === 'kv' ? { t: x, jc: 'left' } : x)); } return a; });
+    var w = b.kind === 'kv' && n === 4 ? KVW : b.kind === 'kv' && n === 2 ? [3400, 6800] : Array.apply(null, Array(n)).map(function () { return Math.floor(10200 / n); });
+    body += W.tbl(cells, w, { head: b.kind === 'table' && b.head, sz: FS, h: 280 }); });
+  return body; }
+function genHtml(p, it, newPage) { var g = it.old.gen, h = '';
+  g.blocks.forEach(function (b, bi) { if (b.pb && bi) h += newPage(); if (b.h) h += '<h4>' + esc(b.h) + '</h4>';
+    if (b.kind === 'text') { h += String(genText(it, bi)).split(/\n+/).filter(function (x) { return x.trim(); }).map(function (x) { return '<p class="nt">' + esc(x.trim()) + '</p>'; }).join(''); return; }
+    h += htmlTbl(b.rows.map(function (row, r) { return row.map(function (x, c) { var v = genVal(it, bi, r, c).v; return b.kind === 'kv' && c % 2 === 0 ? { t: v, b: 1 } : v; }); }), b.kind === 'table' && b.head); });
+  return h; }
 function certSection(pages, code) { var nc = norm(code), at = -1;
   for (var i = 0; i < pages.length; i++) { var j = norm(pages[i].join(' ')); if (j.indexOf(nc) >= 0 && /dataofitem/.test(j)) { at = i; break; } }
   if (at < 0) for (var k = 0; k < pages.length; k++) if (norm(pages[k].join(' ')).indexOf(nc) >= 0) { at = k; break; }
@@ -909,7 +975,7 @@ function certSection(pages, code) { var nc = norm(code), at = -1;
 var yearOf = function (f) { var m = pathOf(f).match(/Cert\s*(20\d\d)/i) || f.name.match(/-(20\d\d)/); return m ? +m[1] : 0; };
 function readSec(sec, hint) { return readSec0(sec, hint).then(function (r) { try { learnCert(r && r.fields); } catch (e) {} return r; }); }
 function readSec0(sec, hint) { if (CL.on) return clExtract(sec, hint);
-  var rs = parseResults([].concat.apply([], sec)); return Promise.resolve({ fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs }); }
+  var rs = parseResults([].concat.apply([], sec)), b = parseBal(sec.map(function (pg) { return pg.join(' '); }).join(' ')); return Promise.resolve({ fields: parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')), points: rs.points, dirs: rs.dirs, bal: b && (b.rep || b.ecc) ? b : null }); }
 /* ---- what the lab uses for each kind of item: SOP and accepted limits, learnt from every certificate read ---- */
 var KINDS = [['Differential pressure', /differential|\bdp\b|magnehelic|delta\s*p/i], ['Temperature', /temp|thermo|pt\s*100|rtd|probe|°c|incubator|oven|fridge|refrigerator|freezer/i], ['Pressure', /press|gauge|vacuum|manometer|transmitter|\bbar\b|psi/i],
   ['Timer', /timer|time|stop\s*watch|clock/i], ['RPM', /rpm|speed|tacho|centrifuge|stirrer|rotation/i], ['RH', /humid|hygro|%\s*rh/i], ['Weight', /balance|weigh|scale|mass/i], ['Air velocity', /velocity|anemometer|air\s*speed/i], ['Flow', /flow/i], ['Conductivity', /conductiv/i], ['Light', /lux|light|uv\b/i], ['Length', /length|caliper|micrometer|ruler/i], ['Force', /force|torque/i]];
@@ -969,7 +1035,7 @@ function findOldCert(p, it) {
     if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
     var tryN = function (k) { if (k >= Math.min(4, fs.length)) return { status: 'missing', note: 'Files found, but the code is not clearly inside them', files: fs.slice(0, 6).map(fileRef) };
       var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = (it.prevCert && certSection(pages, it.prevCert)) || (it.code && certSection(pages, it.code)); if (!sec) return tryN(k + 1);
-        return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (x) { return { status: 'found', file: fileRef(f), fields: x.fields, points: x.points, dirs: x.dirs, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); }); };
+        return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (x) { return { status: 'found', file: fileRef(f), fields: x.fields, points: x.points, dirs: x.dirs, bal: x.bal, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); }); };
     return tryN(0); }); }
 function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
 function findSimilar(p, it) { var q = [it.description, it.manufacturer, it.model].filter(Boolean).join(' ');
@@ -1021,10 +1087,10 @@ function oldSheet(p, id) { var it = p.items.filter(function (x) { return x.id ==
             pdfPages(s.driveId, s.id).then(function (pages) { var toks = String(it.description + ' ' + it.manufacturer).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = 0, bs = -1;
               pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (sc > bs) { bs = sc; best = i; } });
               var sec = [pages[best]]; for (var n = best + 1; n < pages.length && sec.length < 5 && /continue/i.test(pages[n].join(' ')); n++) sec.push(pages[n]);
-              return readSec(sec, 'Use the certificate whose description best matches "' + it.description + ' ' + it.manufacturer + '".').then(function (x) { it.old = { status: 'similar', file: s, fields: x.fields, points: x.points, dirs: x.dirs, at: Date.now() }; saveProjects(); renderSheet(); }); })
+              return readSec(sec, 'Use the certificate whose description best matches "' + it.description + ' ' + it.manufacturer + '".').then(function (x) { it.old = { status: 'similar', file: s, fields: x.fields, points: x.points, dirs: x.dirs, bal: x.bal, at: Date.now() }; saveProjects(); renderSheet(); }); })
               .catch(function (e) { toast(e.message, true); }); }); }; });
         $$('[data-use]').forEach(function (b) { b.onclick = function () { var x = o.files[+b.dataset.use]; pdfPages(x.driveId, x.id).then(function (pages) { var sec = certSection(pages, it.code); if (!sec) return toast('The code is not inside this file', true);
-          return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (r2) { it.old = { status: 'found', file: x, files: o.files, fields: r2.fields, points: r2.points, dirs: r2.dirs, at: Date.now() }; saveProjects(); renderSheet(); }); }).catch(function (e) { toast(e.message, true); }); }; }); } }; }); }
+          return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (r2) { it.old = { status: 'found', file: x, files: o.files, fields: r2.fields, points: r2.points, dirs: r2.dirs, bal: r2.bal, at: Date.now() }; saveProjects(); renderSheet(); }); }).catch(function (e) { toast(e.message, true); }); }; }); } }; }); }
 /* fill the item's missing range / resolution from the old certificate */
 function oldNums(f) { var rg = tidy(f.calRange || f.range).match(/(-?\d+(?:\.\d+)?)\s*(?::|to|~|-)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?$/i), mx = !rg && tidy(f.range).match(/max\.?\s*(-?\d+(?:\.\d+)?)\s*(\S+)?/i), rs = tidy(f.resolution).match(/(\d*\.?\d+)\s*(\S+)?/);
   return { rMin: rg ? rg[1] : (mx ? '0' : ''), rMax: rg ? rg[2] : (mx ? mx[1] : ''), unit: rg && rg[3] ? rg[3].trim() : (mx && mx[2] ? mx[2] : ''), res: rs ? rs[1] : '', resUnit: rs && rs[2] ? rs[2] : '' }; }
@@ -1199,7 +1265,7 @@ function coverGroups(p) { /* every item, in cover order: one cover per machine, 
   all.filter(function (i) { return !i.machineId || !(p.machines || []).some(function (m) { return m.id === i.machineId; }); }).forEach(function (it) { var k = norm((it.description || (it.old && it.old.fields && it.old.fields.description) || '') + '|' + (it.manufacturer || '')); if (!byKey[k]) { byKey[k] = { machine: null, items: [] }; groups.push(byKey[k]); } byKey[k].items.push(it); });
   return groups; }
 function genGroups(p) { /* one cover per machine; units of the same kind share one cover */
-  var ready = function (i) { return i.old && (i.old.points || []).length; };
+  var ready = function (i) { return i.old && ((i.old.points || []).length || genOn(i)); };
   var groups = coverGroups(p).map(function (gr) { return { machine: gr.machine, items: gr.items.filter(ready) }; }).filter(function (gr) { return gr.items.length; });
   var g = genDefaults(p), n = parseInt(g.start, 10);
   groups.forEach(function (gr) { gr.items.forEach(function (it) { it.certNo = isNaN(n) ? '' : certNo(g, n++); }); gr.from = gr.items[0].certNo; gr.to = gr.items[gr.items.length - 1].certNo; });
@@ -1215,13 +1281,15 @@ function ptRows(p, it) { /* new readings; if missing or OUT → last year's read
       row.ref = ok ? v.ref : q.ref;
       row.cells.push(ok ? v.reading : (dr === 2 ? q.reading2 : q.reading), ok ? (d == null ? String(r.dev) : r.dev.toFixed(d)) : (dr === 2 ? q.deviation2 : q.deviation)); });
     rows.push(row); });
+  var bd = balData(p, it); if (bd) ph = ph.concat(bd.ph);
+  if (genOn(it)) { rows = []; ph = genPh(it); }
   return { rows: rows, ph: ph }; }
 function genIssues(p) { var inf = p.info || {}, g = genDefaults(p), L = [];
   if (!inf.cal) L.push('Calibration date'); if (!inf.iss) L.push('Date of issue'); if (!inf.wo) L.push('Work order date'); if (!inf.tech) L.push('Calibrated by');
   var noRef = p.items.filter(function (it) { return !(it.refs || []).length; }).length; if (noRef) L.push(noRef + ' item(s) without a reference'); if (refResWarn(p)) L.push('Resolution of the references'); if (!String(g.start).trim()) L.push('First certificate number');
-  if (!g.addr) L.push('Customer address'); p.items.forEach(function (it) { if (!it.old || !(it.old.points || []).length) L.push((it.code || it.description) + ': no old certificate / readings'); });
+  if (!g.addr) L.push('Customer address'); p.items.forEach(function (it) { if (!it.old || !((it.old.points || []).length || genOn(it))) L.push((it.code || it.description) + ': no old certificate / readings'); });
   return L.concat(dateWarns(inf)).concat(refWarns(p)); }
-function phList(p) { var L = []; p.items.forEach(function (it) { if (!it.old || !(it.old.points || []).length) return; ptRows(p, it).ph.forEach(function (x) { L.push(Object.assign({ code: it.code, cert: it.certNo }, x)); }); }); return L; }
+function phList(p) { var L = []; p.items.forEach(function (it) { if (!it.old || !((it.old.points || []).length || genOn(it))) return; ptRows(p, it).ph.forEach(function (x) { L.push(Object.assign({ code: it.code, cert: it.certNo }, x)); }); }); return L; }
 function refsUsed(p, items) { var ds = labDevices(), ids = p.info.refs || []; if (items) { var u = {}; items.forEach(function (it) { (it.refs || []).forEach(function (id) { u[id] = 1; }); }); if (Object.keys(u).length) ids = Object.keys(u); } return ids.map(function (id) { return ds.filter(function (d) { return d.id === id; })[0]; }).filter(Boolean); }
 function envDevice() { return labDevices().filter(function (d) { return /hygro|thermo-?hygro|rh\b/i.test(d.description + ' ' + d.category); })[0]; }
 function dueText(d) { var s = String(d.calDue || '').slice(0, 10), x = s2d(s); return x ? fmtD(s) : s; }
@@ -1236,7 +1304,7 @@ function wFooter(form, pageOfN) { return W.p(W.r('This report shall not be dupli
   W.p([W.r(form + '      Page ', { sz: FS }), W.fld('PAGE', { sz: FS }), W.r(' of ' + pageOfN + ' Page(s)', { sz: FS })], { jc: 'right', after: 0 }); }
 function kvRow(a, b, c, d) { return [{ t: a, b: true, jc: 'left' }, { t: b, jc: 'left' }, { t: c, b: true, jc: 'left' }, { t: d, jc: 'left' }]; }
 var COVER_FORM = 'F-7.2.2  ISSUE (1) 15/05/2019', ROWS_PER_PAGE = 15;
-function pagesOf(it) { var n = (it.old.points || []).length; return Math.max(1, Math.ceil(n / ROWS_PER_PAGE)); }
+function pagesOf(it) { if (genOn(it)) return it.old.gen.pages || 1; var n = (it.old.points || []).length; return Math.max(1, Math.ceil(n / ROWS_PER_PAGE)) + (it.old.bal && it.old.bal.ecc ? 1 : 0); }
 function topBlock(p, no, cont) { var inf = p.info; return W.tbl([kvRow('DATE OF ISSUE:', fmtD(inf.iss), cont ? 'CONTINUE CERTIFICATE NO.:' : 'CERTIFICATE NO.:', no), kvRow('CUSTOMER:', (p.company.official || p.company.name), 'CUSTOMER ID:', p.company.code || '')], KVW, { sz: FS }); }
 function coverDoc(p, gr, total) { var inf = p.info, g = genDefaults(p), its = gr.items, body = '';
   body += W.tbl([kvRow('DATE OF ISSUE:', fmtD(inf.iss), 'CERTIFICATE NO.:', its.length > 1 ? 'From ' + gr.from + ' to ' + gr.to : gr.from), kvRow('CUSTOMER:', p.company.official || p.company.name, 'CUSTOMER ID:', p.company.code || ''), kvRow('ADDRESS:', g.addr, 'Tel / Fax:', [g.tel, g.fax].filter(Boolean).join(' / ')), kvRow('DATE RECEIVED:', fmtD(inf.rec), 'WORK ORDER No.:', woNo(inf))], KVW, { sz: FS });
@@ -1267,6 +1335,7 @@ function calRangeText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + i
 function certBody(p, it, first) { var inf = p.info, g = genDefaults(p), f = it.old.fields || {}, pr = ptRows(p, it), out = pr.ph.some(function (x) { return x.why === 'OUT'; }), body = '', dirs = it.old.dirs === 2;
   var head = function (pb, cont) { return W.p(W.r(' ', { sz: 4 }), { pb: pb, after: 0 }) + topBlock(p, it.certNo, cont); };
   body += head(!first, false);
+  if (genOn(it)) { body += genWord(p, it, head) + certSign(p, it, inf, g); return body; }
   body += H('Data of item to be calibrated');
   body += W.tbl(dataRows(p, it, out).map(function (r) { return kvRow(r[0], r[1], r[2], r[3]); }), KVW, { sz: FS });
   var hdr = [resHead(it, dirs).map(function (t) { return { t: t, b: true, shade: 'E7ECF2' }; })];
@@ -1274,17 +1343,24 @@ function certBody(p, it, first) { var inf = p.info, g = genDefaults(p), f = it.o
   for (var k = 0; k < pr.rows.length; k += ROWS_PER_PAGE) { if (k > 0) body += head(true, true);
     body += H((k ? '' : '1 - ') + 'Calibration Results');
     body += W.tbl(hdr.concat(pr.rows.slice(k, k + ROWS_PER_PAGE).map(function (r, ri) { var no = String(k + ri + 1); return dirs ? [no, r.point, r.ref, r.cells[0], r.cells[1], r.cells[2], r.cells[3], r.limit] : [no, r.point, r.ref, r.cells[0], r.cells[1], r.limit, 'Accepted']; })), wd, { head: true, sz: FS, h: 300 }); }
-  body += H('2 - Measurement Uncertainty');
+  var bd = balData(p, it), sn = 2;
+  if (bd) { var bt = balTables(bd), cw = function (a) { var w0 = 2600, rest = Math.floor((10200 - w0) / (a[0].length - 1)); return [w0].concat(a[0].slice(1).map(function () { return rest; })); };
+    if (bt.rep) { body += H(sn++ + ' - Repeatability Test'); body += W.tbl(bt.rep.map(function (r, i) { return r.map(function (c, j) { return i === 0 || j === 0 ? { t: c, b: true, shade: 'E7ECF2' } : c; }); }), cw(bt.rep), { head: true, sz: FS, h: 300 }); }
+    if (bt.ecc) { body += head(true, true); body += H(sn++ + ' - Eccentricity Test'); body += W.tbl(bt.ecc.map(function (r) { return r.map(function (c, j) { return j === 0 ? { t: c, b: true, shade: 'E7ECF2', jc: 'left' } : c; }); }), cw(bt.ecc), { sz: FS, h: 300 }); } }
+  body += H(sn++ + ' - Measurement Uncertainty');
   body += W.tbl([[{ t: 'Expanded Uncertainty (k = 2)', b: true, jc: 'left' }, { t: uncText(it) || '—', jc: 'left' }]], [3600, 6600], { sz: FS });
-  body += H('3 - Calibration Standard(s) Utilized');
+  body += H(sn++ + ' - Calibration Standard(s) Utilized');
   body += W.tbl([[{ t: 'No.', b: true, shade: 'E7ECF2' }, { t: 'Manufacturer', b: true, shade: 'E7ECF2' }, { t: 'Description', b: true, shade: 'E7ECF2' }, { t: 'Model', b: true, shade: 'E7ECF2' }, { t: 'Serial Number', b: true, shade: 'E7ECF2' }, { t: 'Range', b: true, shade: 'E7ECF2' }, { t: 'Calibration Due Date', b: true, shade: 'E7ECF2' }]].concat((refsUsed(p, [it]).length ? refsUsed(p, [it]) : [{}]).map(function (d, i) { return d.id ? [String(i + 1), d.manufacturer, d.description, d.model || '', d.serial || '', d.range || '', dueText(d)] : ['—', '', '', '', '', '', '']; })), [700, 1500, 2300, 1300, 1500, 1500, 1400], { head: true, sz: FS, h: 300 });
-  body += H('Remarks');
+  body += certSign(p, it, inf, g);
+  return body; }
+function certSign(p, it, inf, g) { var body = '';
+  if (!genOn(it)) body += H('Remarks');
   body += W.tbl([[{ t: 'Calibrated By:', b: true, jc: 'left' }, { t: '', jc: 'left' }, { t: 'Approved By:', b: true, jc: 'left' }, { t: '', jc: 'left' }], kvRow('Date:', fmtD(inf.iss), 'Position:', g.approverPos), kvRow('Position:', g.techPos, 'Name:', g.approver), kvRow('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Signature:', '_____________________'), kvRow('Signature:', '_____________________', '', '')], [1800, 3300, 1800, 3300], { sz: FS });
   body += W.p(W.r('** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.', { sz: FS }), { before: 80, jc: 'both' });
   body += W.p(W.r('This Certificate and Readings refers only to the particular item under calibration. The reported uncertainty is based on a standard uncertainty multiplied by a coverage factor k = 2, providing a level of confidence of approximately 95 %. The uncertainty evaluation has been carried out in accordance with ISO 17025 requirements.', { sz: FS }), { jc: 'both' });
   return body; }
 function certDoc(p, gr, total) { var body = gr.items.map(function (it, i) { return certBody(p, it, i === 0); }).join(''), f0 = (gr.items[0].old.fields || {}).procedure || 'SOP';
-  return W.doc(body, { header: wHeader(), footer: wFooter(f0 + '  Rev. (0) 15/05/2019', total), pgStart: 2 }); }
+  return W.doc(body, { header: wHeader(genOn(gr.items[0]) ? gr.items[0].old.gen.title : ''), footer: wFooter(f0 + '  Rev. (0) 15/05/2019', total), pgStart: 2 }); }
 function letterDoc(p, groups, lid) { var inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0;
   var cal = s2d(inf.cal), mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
   groups.forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '')) return; n++; var pr = g.prices[it.id] || ''; if (isNum(pr)) tot += numv(pr);
@@ -1320,6 +1396,11 @@ function printView(p) { var all = buildAll(p), g = genDefaults(p), inf = p.info,
       ftr(COVER_FORM, pg++, total) + '</section>');
     its.forEach(function (it) { var f = it.old.fields || {}, pr = ptRows(p, it), dirs = it.old.dirs === 2, out = pr.ph.some(function (x) { return x.why === 'OUT'; }), form = (f.procedure || 'SOP') + ' Rev. (0) 15/05/2019';
       var top = function (cont) { return htmlTbl([kv('DATE OF ISSUE:', fmtD(inf.iss), (cont ? 'CONTINUE ' : '') + 'CERTIFICATE NO.:', it.certNo), kv('CUSTOMER:', p.company.official || p.company.name, 'CUSTOMER ID:', p.company.code)]); };
+      if (genOn(it)) { var hdrG = it.old.gen.title ? hdr.replace('>Calibration Certificate<', '>' + esc(it.old.gen.title) + '<') : hdr, hg = '<section class="pg">' + hdrG + top(false);
+        hg += genHtml(p, it, function () { var x = ftr(form, pg++, total) + '</section><section class="pg">' + hdrG + top(true); return x; });
+        hg += htmlTbl([[{ t: 'Calibrated By:', b: 1 }, '', { t: 'Approved By:', b: 1 }, ''], kv('Date:', fmtD(inf.iss), 'Position:', g.approverPos), kv('Position:', g.techPos, 'Name:', g.approver), kv('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Signature:', '____________'), kv('Signature:', '____________', '', '')]) +
+          '<p class="nt">** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.</p><p class="nt">This Certificate and Readings refers only to the particular item under calibration.</p>';
+        pages.push(hg + ftr(form, pg++, total) + '</section>'); return; }
       for (var k = 0; k < pr.rows.length || k === 0; k += ROWS_PER_PAGE) {
         var h = '<section class="pg">' + hdr + top(k > 0);
         if (!k) h += '<h4>Data of item to be calibrated</h4>' + htmlTbl(dataRows(p, it, out).map(function (r) { return kv(r[0], r[1], r[2], r[3]); }));
@@ -1327,6 +1408,11 @@ function printView(p) { var all = buildAll(p), g = genDefaults(p), inf = p.info,
         if (k + ROWS_PER_PAGE >= pr.rows.length) h += '<h4>2 - Measurement Uncertainty</h4>' + htmlTbl([[{ t: 'Expanded Uncertainty (k = 2)', b: 1 }, uncText(it) || '—']]) +
           '<h4>3 - Calibration Standard(s) Utilized</h4>' + htmlTbl([['No.', 'Manufacturer', 'Description', 'Model', 'Serial Number', 'Range', 'Calibration Due Date']].concat(refsUsed(p, [it]).map(function (d, i) { return [i + 1, d.manufacturer, d.description, d.model, d.serial, d.range, dueText(d)]; })), true) + '<h4>Remarks</h4>' + htmlTbl([[{ t: 'Calibrated By:', b: 1 }, '', { t: 'Approved By:', b: 1 }, ''], kv('Date:', fmtD(inf.iss), 'Position:', g.approverPos), kv('Position:', g.techPos, 'Name:', g.approver), kv('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Signature:', '____________'), kv('Signature:', '____________', '', '')]) +
           '<p class="nt">** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.</p><p class="nt">This Certificate and Readings refers only to the particular item under calibration. The reported uncertainty is based on a standard uncertainty multiplied by a coverage factor k = 2, providing a level of confidence of approximately 95 %.</p>';
+        var bdp = k + ROWS_PER_PAGE >= pr.rows.length && balData(p, it);
+        if (bdp) { var btp = balTables(bdp), cut = h.indexOf('<h4>2 - Measurement Uncertainty</h4>'), rest = cut >= 0 ? h.slice(cut) : '', nn = 2; h = cut >= 0 ? h.slice(0, cut) : h;
+          if (btp.rep) h += '<h4>' + nn++ + ' - Repeatability Test</h4>' + htmlTbl(btp.rep, true);
+          if (btp.ecc) { pages.push(h + ftr(form, pg++, total) + '</section>'); h = '<section class="pg">' + hdr + top(true) + '<h4>' + nn++ + ' - Eccentricity Test</h4>' + htmlTbl(btp.ecc.map(function (r) { return [{ t: r[0], b: 1 }].concat(r.slice(1)); })); }
+          h += rest.replace('<h4>2 - Measurement Uncertainty</h4>', '<h4>' + nn++ + ' - Measurement Uncertainty</h4>').replace('<h4>3 - Calibration Standard(s) Utilized</h4>', '<h4>' + nn++ + ' - Calibration Standard(s) Utilized</h4>'); }
         pages.push(h + ftr(form, pg++, total) + '</section>'); } }); });
   var css = '@page{size:A4;margin:12mm}*{box-sizing:border-box}body{margin:0;font-family:Calibri,Carlito,Arial,sans-serif;font-size:9.5pt;color:#1B2430;background:#fff}.pg{page-break-after:always;break-after:page;min-height:270mm;position:relative;padding-bottom:16mm}.pg:last-child{page-break-after:auto}.ph{text-align:center;margin-bottom:8px}.ph .t{font-family:Cambria,Georgia,serif;font-size:15pt;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#13294B}.ph .s{font-size:9.5pt}h4{font-size:9.5pt;margin:9px 0 4px;color:#13294B;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #13294B;padding-bottom:1px}table.pt{width:100%;border-collapse:collapse;font-size:9.5pt;table-layout:fixed;page-break-inside:avoid}table.pt td,table.pt th{border:1px solid #A9B4C2;padding:4px 6px;text-align:center;vertical-align:middle;word-break:normal;overflow-wrap:anywhere;line-height:1.3}table.pt th{font-weight:bold;background:#E9EEF5;color:#13294B}table.pt.kv td{text-align:left}table.pt.kv td.b{background:#F4F6F9;color:#26344A;font-weight:600}table.pt tr:nth-child(even) td:not(.b){background:#FBFCFE}.b{font-weight:bold}@media screen{html,body{background:#DFE4EA}.pg{width:794px;min-height:1123px;margin:14px auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);padding:40px 42px 70px}.pf{left:42px!important;right:42px!important;bottom:24px!important}}.nt{font-size:9.5pt;text-align:justify;margin:4px 0}.pf{position:absolute;bottom:0;left:0;right:0;font-size:9.5pt;display:flex;justify-content:space-between;border-top:1px solid #999;padding-top:3px}';
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(p.company.name) + ' – certificates</title><style>' + css + '</style></head><body>' + pages.join('') + '</body></html>'; }
@@ -1646,7 +1732,7 @@ var PHASES = [{ t: 'Company', s: ['company', 'date', 'dept', 'type', 'order'] },
 function curStep(p) { var t = p.stage !== 'done' ? p.stage : (p.tab || 'certs'); if (t === 'read' || t === 'over') t = 'cert'; return t; }
 function phaseOf(s) { for (var i = 0; i < PHASES.length; i++) if (PHASES[i].s.indexOf(s) >= 0) return i; return 0; }
 function readyItems(p) { return (p.items || []).filter(function (it) { return it.old && (it.old.points || []).length; }); }
-function certDone(it) { var x = itemProg(it); return x.tot > 0 && x.fil === x.tot; }
+function certDone(it) { if (genOn(it)) return !genPh(it).length; var x = itemProg(it); return x.tot > 0 && x.fil === x.tot; }
 function phaseSum(p, i) {
   if (i === 0) return p.company ? p.company.name + (p.info && p.info.cal ? ' · ' + fmtD(p.info.cal) : '') : 'Choose the company';
   if (i === 1) return (p.items || []).length ? p.items.length + (p.items.length === 1 ? ' code' : ' codes') : 'No codes yet';
@@ -1834,7 +1920,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
   genGroups(p); p.ci = Math.min(Math.max(p.ci || 0, 0), L.length - 1);
   var it = L[p.ci], nav0 = '<div class="certtop"><button class="btn ghost sm" id="toHub" style="flex:none">‹ All certificates</button><span><b>' + savedN(p) + '</b> of ' + L.length + ' saved</span></div><div class="bp-bar thin"><i style="width:' + Math.round(savedN(p) / L.length * 100) + '%"></i></div><div class="certnav"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + '>‹</button><select class="inp" id="cj">' + L.map(function (x, i) { var rd = x.old && (x.old.points || []).length, pm = i ? L[i - 1].machineId || '' : '', mm = x.machineId || ''; return (mm !== pm ? (pm ? '</optgroup>' : '') + (mm ? '<optgroup label="' + esc(machName(p, x)) + '">' : '') : '') + (i === L.length - 1 && mm ? '' : '') + '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + (i + 1) + ' / ' + L.length + ' · ' + esc(x.code || x.description) + (x.saved ? '  ✓ saved' : rd ? '' : '  (no old cert)') + '</option>' + (i === L.length - 1 && mm ? '</optgroup>' : ''); }).join('') + '</select><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + '>›</button></div>';
   var to0 = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
-  if (!(it.old && (it.old.points || []).length)) { var os = (it.old || {}).status;
+  if (!(it.old && ((it.old.points || []).length || genOn(it) || (/found|similar/.test(it.old.status || '') && it.old.file && it.old.file.id && CL.on && genWanted(it))))) { var os = (it.old || {}).status;
     $('#pm').innerHTML = nav0 + '<div class="paper"><div class="ph-top"><div><b>' + esc(it.code || it.description) + '</b><small>' + esc(it.description || '') + '</small></div><span>No old certificate</span></div>' +
       (os === 'searching' ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking for last year\'s certificate…</b></div>'
         : '<div class="note warnbox">' + (os === 'found' ? 'Last year\'s certificate was found but its readings could not be read.' : 'Last year\'s certificate of this code was not found' + ((it.old && it.old.note) ? ' – ' + esc(it.old.note) : '') + '.') + '</div>' +
@@ -1905,6 +1991,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
         : '<span class="t"><b>Start from a similar certificate</b><small>' + (String(it.description || '').trim() ? 'none found automatically' : 'write the description first') + '</small></span><span class="iacts"><button class="ia" id="tmOther">Search</button></span>') + '</div>' : '') +
     '<h5>Results <small>grey = last year · type the new values</small></h5><div style="overflow-x:auto"><table class="rt"><tr><th>Point / limit' + (uOf(it) ? '<br><i>(' + esc(uOf(it)) + ')</i>' : '') + '</th><th>Ref' + (uOf(it) ? '<br><i>(' + esc(uOf(it)) + ')</i>' : '') + '</th><th>Reading' + (uOf(it) ? '<br><i>(' + esc(uOf(it)) + ')</i>' : '') + '</th><th>Dev' + (uOf(it) ? '<br><i>(' + esc(uOf(it)) + ')</i>' : '') + '</th><th></th></tr>' + rows + '</table></div>' +
     '<div class="cf" style="margin-top:10px"><button class="btn ghost sm" id="sameRef">Ref = last year\'s points</button><button class="btn ghost sm" id="addPt">+ Add point</button><button class="btn ghost sm" id="sameUut">UUT = last year\'s readings</button></div><div class="cf" style="margin-top:6px"><button class="btn ghost sm clr" id="clrRef">Clear Ref</button><button class="btn ghost sm clr" id="clrUut">Clear UUT</button><button class="btn ghost sm" id="eItem">Edit item</button></div>' +
+    balHtml(p, it) + genEdHtml(p, it) +
     '<h5>Signatures</h5><table class="kvt kv2">' + kv2('Calibrated by', SEL('tech', inf.tech), 'Position', E('techPos', g.techPos)) + kv2('Approved by', SEL('approver', g.approver), 'Position', E('approverPos', g.approverPos)) + '</table></div>';
   var last = p.ci === L.length - 1;
   $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (it.saved ? 'Saved ✓ · Preview' : 'Preview & save') + '</button>';
@@ -1945,9 +2032,48 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
       var a = tr.dataset.pt.split('|'), k = a[0] + (a[1] === '2' ? 'd' : ''); if (inp.dataset.k === 'reading' && it.rounded && it.rounded[k] != null) { delete it.rounded[k]; inp.classList.remove('rnd'); } (it.nv[k] = it.nv[k] || {})[inp.dataset.k] = inp.value.trim(); saveProjects(); var r = upd(tr); if (r.res === 'OUT' && inp.dataset.k === 'reading') toast('OUT – deviation ' + r.dev + ' is beyond ±' + r.lim, true); };
     inp.onblur = function () { var dd = decFor(inp), nv = padTo(inp.value, dd); if (nv !== inp.value) { inp.value = nv; inp.oninput(); } };
     inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); var i = inputs.indexOf(inp); if (inputs[i + 1]) inputs[i + 1].focus(); else $('#cnx').focus(); } }; }); });
+  balBind(p, it, function () { tCertEd(p); }); genBind(p, it, function () { tCertEd(p); }); genEnsure(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); }); balEnsure(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); });
   var firstEmpty = inputs.filter(function (x) { return !x.value; })[0]; if (firstEmpty && !CERT_NOFOCUS) setTimeout(function () { try { firstEmpty.focus({ preventScroll: true }); } catch (e) {} }, 50);
 }
 var CERT_NOFOCUS = /Android|iPhone|iPad/i.test(navigator.userAgent);
+function balHtml(p, it) { var b = it.old && it.old.bal; if (!isBal(it) && !b) return '';
+  if (!b) return '<h5>Repeatability &amp; Eccentricity</h5><div class="note">' + (it.old && it.old.balTried && Date.now() - it.old.balTried > 60000 || !spOn() || !(it.old && it.old.file && it.old.file.id) ? 'Not found in last year\'s certificate.' : '<span class="spin dark"></span> Reading them from last year\'s certificate…') + ' <button class="btn ghost sm" id="balAdd">Add the tables</button></div>';
+  var nb = it.nbal || {}, u = b.unit || uOf(it) || 'g', inp = function (attr, v, old) { return '<input class="pin num" inputmode="decimal" ' + attr + ' value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(old || '') + '">'; }, h = '';
+  if ((b.rep || []).length) { var n = Math.max.apply(null, b.rep.map(function (r) { return r.r.length; }));
+    h += '<h5>Repeatability test <small>grey = last year · ' + n + ' readings per load</small></h5><div style="overflow-x:auto"><table class="rt bt"><tr><th>Load<br><i>(' + esc(u) + ')</i></th>' + Array.apply(null, Array(n)).map(function (x, k) { return '<th>' + (k + 1) + '</th>'; }).join('') + '</tr>' +
+      b.rep.map(function (r, i) { var nr = (nb.rep || [])[i] || []; return '<tr><td class="pt">' + inp('data-bl="' + i + '"', (nb.repLoad || [])[i] || r.load, r.load) + '</td>' + r.r.map(function (ov, k) { return '<td>' + inp('data-br="' + i + '|' + k + '"', nr[k], ov) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>'; }
+  if (b.ecc) { var e = b.ecc, ne = nb.ecc || {}, bd = balData(p, it), ers = bd && bd.ecc ? (bd.ecc.err.length === e.r.length ? bd.ecc.err : ['—'].concat(bd.ecc.err)) : [];
+    h += '<h5>Eccentricity test <small>error = reading − center (position 1)</small></h5><div style="overflow-x:auto"><table class="rt bt"><tr><th>Position</th>' + e.r.map(function (x, k) { return '<th>' + esc((e.pos || [])[k] || k + 1) + '</th>'; }).join('') + '</tr>' +
+      '<tr><th>Load <i>(' + esc(u) + ')</i></th><td colspan="' + e.r.length + '">' + inp('data-bel="1"', ne.load || e.load, e.load) + '</td></tr>' +
+      '<tr><th>Reading <i>(' + esc(u) + ')</i></th>' + e.r.map(function (ov, k) { return '<td>' + inp('data-be="' + k + '"', (ne.r || [])[k], ov) + '</td>'; }).join('') + '</tr>' +
+      '<tr><th>Error <i>(' + esc(u) + ')</i></th>' + ers.map(function (x) { return '<td class="bterr">' + esc(x) + '</td>'; }).join('') + '</tr></table></div>' +
+      ((bd && bd.ph.length) ? '<div class="tiny">Empty boxes print last year\'s values (listed as placeholders) until you type the new ones.</div>' : ''); }
+  return h + '<div class="cf" style="margin-top:6px"><button class="btn ghost sm" id="balRe">Read again from last year</button></div>'; }
+function genEdHtml(p, it) { var o = it.old || {}; if (!o.gen) { if (!genWanted(it)) return ''; return '<h5>Certificate tables</h5><div class="note">' + (CL.on && spOn() && !(o.genTried && Date.now() - o.genTried > 90000) ? '<span class="spin dark"></span> Copying last year\'s tables (same layout, cleaned)…' : (CL.on ? 'Could not copy the tables of last year\'s certificate.' : 'Copying other certificate layouts needs the Claude version for now.')) + (o.genTried ? ' <button class="btn ghost sm" id="genRe">Try again</button>' : '') + '</div>'; }
+  var g = o.gen, h = '<h5>Certificate as last year <small>' + esc(g.title || '') + ' · same tables · grey = last year, type the new values</small></h5><div class="cf" style="margin:0 0 6px"><button class="btn ghost sm" id="genUse">' + (g.use ? 'Use the normal results table instead' : 'Use these tables') + '</button><button class="btn ghost sm" id="genRe">Copy again</button></div>';
+  if (!g.use) return h;
+  g.blocks.forEach(function (b, bi) { h += b.h ? '<h6 class="gh">' + esc(b.h) + '</h6>' : '';
+    if (b.kind === 'text') { h += '<textarea class="pin gtx" rows="' + Math.min(6, Math.max(2, Math.ceil(String(genText(it, bi)).length / 70))) + '" data-gt="' + bi + '">' + esc(genText(it, bi)) + '</textarea>'; return; }
+    h += '<div style="overflow-x:auto"><table class="rt gt">' + b.rows.map(function (row, r) { return '<tr>' + row.map(function (x, c) { var hd = b.kind === 'table' && b.head && r === 0, lab = b.kind === 'kv' && c % 2 === 0, m = genMeas(b, r, c), nv = (it.ngen || {})[bi + '|' + r + '|' + c];
+        if (hd || lab) return '<th>' + esc(x) + '</th>';
+        return '<td><input class="pin' + (m ? ' num' : '') + '" data-gc="' + bi + '|' + r + '|' + c + '" value="' + esc(nv != null ? nv : (m ? '' : x)) + '" placeholder="' + esc(x) + '"' + (m ? ' inputmode="decimal"' : '') + '></td>'; }).join('') + '</tr>'; }).join('') + '</table></div>'; });
+  var n = genPh(it).length; return h + (n ? '<div class="tiny">' + n + ' value' + (n === 1 ? '' : 's') + ' still from last year (placeholders) – type the new ones.</div>' : ''); }
+function genBind(p, it, rr) { var ng = function () { return (it.ngen = it.ngen || {}); };
+  if (genOn(it)) { var rt = $('table.rt:not(.gt):not(.bt)'); if (rt && rt.parentNode) { rt.parentNode.style.display = 'none'; var hh = rt.parentNode.previousElementSibling; if (hh && /H5/.test(hh.tagName)) hh.style.display = 'none'; }
+    ['#sameRef', '#clrRef'].forEach(function (q) { var b = $(q); if (b && b.parentNode) b.parentNode.style.display = 'none'; }); }
+  $$('[data-gc]').forEach(function (e) { e.onchange = function () { ng()[e.dataset.gc] = e.value.trim(); it.saved = 0; saveProjects(); rr(); }; e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); var all = $$('.gt input'), i = all.indexOf(e); if (all[i + 1]) all[i + 1].focus(); else e.blur(); } }; });
+  $$('[data-gt]').forEach(function (e) { e.onchange = function () { ng()[e.dataset.gt + '|t'] = e.value; it.saved = 0; saveProjects(); }; });
+  var u = $('#genUse'); if (u) u.onclick = function () { it.old.gen.use = !it.old.gen.use; it.saved = 0; saveProjects(); rr(); };
+  var r2 = $('#genRe'); if (r2) r2.onclick = function () { delete it.old.gen; delete it.old.genTried; saveProjects(); rr(); }; }
+function balBind(p, it, rr) { var nb = function () { return (it.nbal = it.nbal || {}); }, d = resDec(it);
+  var keep = function (e, set) { e.onchange = function () { var v = e.value.trim().replace(',', '.'); if (d != null && isNum(v) && !e.dataset.bl && !e.dataset.bel) v = padTo(v, d); e.value = v; set(v); it.saved = 0; saveProjects(); rr(); }; e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); var all = $$('.bt input'), i = all.indexOf(e); if (all[i + 1]) all[i + 1].focus(); else e.blur(); } }; };
+  $$('[data-br]').forEach(function (e) { var a = e.dataset.br.split('|').map(Number); keep(e, function (v) { var r = (nb().rep = nb().rep || []); r[a[0]] = r[a[0]] || []; r[a[0]][a[1]] = v; }); });
+  $$('[data-bl]').forEach(function (e) { var i = +e.dataset.bl; keep(e, function (v) { (nb().repLoad = nb().repLoad || [])[i] = v; }); });
+  $$('[data-be]').forEach(function (e) { var k = +e.dataset.be; keep(e, function (v) { var x = (nb().ecc = nb().ecc || {}); (x.r = x.r || [])[k] = v; }); });
+  $$('[data-bel]').forEach(function (e) { keep(e, function (v) { (nb().ecc = nb().ecc || {}).load = v; }); });
+  var re = $('#balRe'); if (re) re.onclick = function () { if (it.old) { delete it.old.bal; delete it.old.balTried; } saveProjects(); rr(); };
+  var ad = $('#balAdd'); if (ad) ad.onclick = function () { var r0 = (it.old.points || []).map(function (q) { return numv(q.point); }).filter(function (x) { return x > 0; }), mx = r0.length ? Math.max.apply(null, r0) : 0;
+    it.old.bal = { unit: uOf(it) || 'g', rep: [{ load: '', r: ['', '', '', '', ''] }, { load: '', r: ['', '', '', '', ''] }], ecc: { load: mx ? String(Math.round(mx / 3)) : '', pos: ['1', '2', '3', '4', '5'], r: ['', '', '', '', ''], err: [] } }; saveProjects(); rr(); toast('Tables added – write the loads and the readings'); }; }
 
 /* ---------- next certificate number: continue after the last one of this year ---------- */
 var LASTNO = LS.get('lastNo', {});
@@ -2190,7 +2316,7 @@ function readTemplate(it, f) { return pdfPages(f.driveId, f.id).then(function (p
     if (best < 0) throw new Error('No data in ' + f.name); var sec = [pages[best]]; for (var k = best + 1; k < pages.length && sec.length < 5 && /continue/i.test(pages[k].join(' ')); k++) sec.push(pages[k]);
     var flat = [].concat.apply([], sec), rs = parseResults(flat), fl = parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | ')); try { learnCert(fl); } catch (e) {}
     if ((rs.points || []).length || !CL.on) return { file: fileRef(f), fields: fl, points: rs.points || [], dirs: rs.dirs || 1, score: bs }; /* quick local read – the AI only if that found no points */
-    return readSec(sec, 'Use the certificate whose description best matches "' + it.description + '".').then(function (x) { return { file: fileRef(f), fields: x.fields || {}, points: x.points || [], dirs: x.dirs || 1, score: bs }; }); }); }
+    return readSec(sec, 'Use the certificate whose description best matches "' + it.description + '".').then(function (x) { return { file: fileRef(f), fields: x.fields || {}, points: x.points || [], dirs: x.dirs || 1, bal: x.bal, score: bs }; }); }); }
 function withTime(pr, ms) { return Promise.race([pr, new Promise(function (r, j) { setTimeout(function () { j(new Error('slow')); }, ms); })]); }
 function tmplKey(it) { return itKind(it) + '|' + norm(it.description || ''); }
 function tmplFit(it, t) { var f = t.fields, sc = t.score || 0, rg = rngNums(f.range || ''); if (rg && it.unit && rg.u && unitKey(rg.u) === unitKey(it.unit)) sc += 3; if (rg && isNum(it.rMax) && isNum(rg.hi)) { var r = numv(rg.hi) / numv(it.rMax); if (r > 0.5 && r < 2) sc += 3; } if ((t.points || []).length) sc += 2; return sc; }
@@ -2226,7 +2352,7 @@ function autoTemplate(p, it, rerender) { if (!it.old || it.old.status !== 'manua
 function useSimilar(p, it, s) { return pdfPages(s.driveId, s.id).then(function (pages) { var toks = String((it.description || '') + ' ' + (it.manufacturer || '')).toLowerCase().split(/\W+/).filter(function (w) { return w.length > 2; }), best = 0, bs = -1;
     pages.forEach(function (pg, i) { var t = pg.join(' ').toLowerCase(); if (!/data\s*of\s*item/.test(t)) return; var sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 1 : 0); }, 0); if (sc > bs) { bs = sc; best = i; } });
     var sec = [pages[best]]; for (var k = best + 1; k < pages.length && sec.length < 5 && /continue/i.test(pages[k].join(' ')); k++) sec.push(pages[k]);
-    return readSec(sec, 'Use the certificate whose description best matches "' + it.description + ' ' + (it.manufacturer || '') + '".').then(function (x) { it.old = { status: 'similar', file: s, fields: x.fields, points: x.points, dirs: x.dirs, at: Date.now() }; saveProjects(); }); }); }
+    return readSec(sec, 'Use the certificate whose description best matches "' + it.description + ' ' + (it.manufacturer || '') + '".').then(function (x) { it.old = { status: 'similar', file: s, fields: x.fields, points: x.points, dirs: x.dirs, bal: x.bal, at: Date.now() }; saveProjects(); }); }); }
 
 
 /* ---------- editable certificate fields ---------- */
@@ -2465,11 +2591,11 @@ function pricesFromContract(t, items) { var rows = priceListRows(t), out = {};
   items.forEach(function (it) { var r = rowFor(it, rows); if (r) out[it.id] = r.price; }); return { map: out, rows: rows }; }
 function priceBook(p) { var all = LS.get('priceBook', {}); return all[p.company.id] || { kind: {} }; }
 function priceBookSet(p, kind, v) { var all = LS.get('priceBook', {}), b = all[p.company.id] || { kind: {} }; b.kind[kind] = v; all[p.company.id] = b; LS.set('priceBook', all); }
-function yearOf(f) { var m = String(pathOf(f) + ' ' + f.name).match(/20\d\d/g); return m ? Math.max.apply(null, m.map(Number)) : 0; }
+function yearIn(f) { var m = String(pathOf(f) + ' ' + f.name).match(/20\d\d/g); return m ? Math.max.apply(null, m.map(Number)) : 0; }
 function priceListFiles(p) { var yr = (s2d(p.info && p.info.cal) || new Date()).getFullYear(), terms = companyTerms(p.company), cn = terms[0].toLowerCase(), toks = cn.split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
   return Promise.all(['"Price List" "' + terms[0] + '" ' + yr, '"Unit Price" "Items to be calibrated" "' + terms[0] + '"'].map(function (q) { return withTime(spSearch(q, 25), 20000).catch(function () { return []; }); })).then(function (rs) { var seen = {}, fs = [];
     rs.forEach(function (l) { l.forEach(function (f) { if (seen[f.id] || !/\.(docx?|pdf)$/i.test(f.name)) return; seen[f.id] = 1; var pa = (pathOf(f) + '/' + f.name).toLowerCase(), sc = 0;
-      if (/price\s*list/.test(pa)) sc += 4; if (/contract/.test(pa)) sc += 2; if (yearOf(f) === yr) sc += 4; else if (yearOf(f) === yr - 1) sc += 1; else sc -= 3; if (/archi?e?ve|\/old\//.test(pa)) sc -= 3; if (/\/reports?\s*20|\/cert\s*20/.test(pa)) sc -= 6;
+      if (/price\s*list/.test(pa)) sc += 4; if (/contract/.test(pa)) sc += 2; if (yearIn(f) === yr) sc += 4; else if (yearIn(f) === yr - 1) sc += 1; else sc -= 3; if (/archi?e?ve|\/old\//.test(pa)) sc -= 3; if (/\/reports?\s*20|\/cert\s*20/.test(pa)) sc -= 6;
       toks.forEach(function (w) { if (pa.indexOf(w) >= 0) sc += 1; }); if (p.order && p.order.webUrl && pathOf({ webUrl: p.order.webUrl }).replace(/[^\/]+$/, '') === pathOf(f).replace(/[^\/]+$/, '')) sc += 5; if (/\.pdf$/i.test(f.name)) sc -= 0.5;
       if (sc > 2) { f.sc = sc; fs.push(f); } }); }); return fs.sort(function (a, b) { return b.sc - a.sc; }); }); }
 function autoPrices(p, done) { var g = genDefaults(p), items = certList(p), need = function () { return items.filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); }, got = { contract: 0, letters: 0, book: 0, src: [] }, rowsAll = [], listName = '';
@@ -2483,7 +2609,7 @@ function autoPrices(p, done) { var g = genDefaults(p), items = certList(p), need
   chain = chain.then(function () { if (!spOn() || rowsAll.length) return; return priceListFiles(p).then(function (fs) {
       return fs.slice(0, 3).reduce(function (pr, f) { return pr.then(function () { if (!rowsAll.length) return tryList(f); }); }, Promise.resolve()); }).catch(function () {}); });
   chain = chain.then(function () { if (!spOn()) return; var terms = companyTerms(p.company);
-    return withTime(spSearch('"Unit Price" "' + terms[0] + '"', 30), 20000).then(function (fs) { fs = fs.filter(function (f) { return /\/R\W?eports?\s*20\d\d\//i.test(pathOf(f)) && /\.(docx?|pdf)$/i.test(f.name); }).sort(function (a, b) { return yearOf(b) - yearOf(a) || String(b.mod || '').localeCompare(String(a.mod || '')); });
+    return withTime(spSearch('"Unit Price" "' + terms[0] + '"', 30), 20000).then(function (fs) { fs = fs.filter(function (f) { return /\/R\W?eports?\s*20\d\d\//i.test(pathOf(f)) && /\.(docx?|pdf)$/i.test(f.name); }).sort(function (a, b) { return yearIn(b) - yearIn(a) || String(b.mod || '').localeCompare(String(a.mod || '')); });
       return fs.slice(0, 3).reduce(function (pr, f) { return pr.then(function () { var left = miss0.filter(function (it) { return !letCode[it.id]; }); if (!left.length) return; return readF(f, 60000).then(function (t) { var r = pricesFromLetters(t, left), n = Object.keys(r.code).length; Object.keys(r.code).forEach(function (k) { letCode[k] = r.code[k]; }); Object.keys(r.desc).forEach(function (k) { if (!letDesc[k]) letDesc[k] = r.desc[k]; }); if (n && !letName) letName = f.name; }); }); }, Promise.resolve()); }).catch(function () {}); });
   chain.then(function () { put(letCode, 'letters', letName || 'last letters');
     var lm = {}; need().forEach(function (it) { var r = rowFor(it, rowsAll); if (r) lm[it.id] = r.price; }); put(lm, 'contract', listName);
@@ -2512,7 +2638,7 @@ function htmlPreview(title, html, word) { var paper = '<style>@media screen{html
     $('#pvC').onclick = closeSheet; if (word) $('#pvW').onclick = word; $('#pvPdf').onclick = function () { closeSheet(); pdfPreview(title, html); };
     $('#pvPr').onclick = function () { if (CL.on) return clSave(new Blob([html], { type: 'text/html' }), title.replace(/[^\w\- ]+/g, '') + '.html').then(function () { toast('Open the file in Chrome and print it or save it as PDF'); }).catch(function () {});
       try { f.contentWindow.focus(); f.contentWindow.print(); toast('To get a PDF choose “Save as PDF” as the printer'); } catch (e) { toast('Printing is not allowed here', true); } }; } }; }); }
-function exportSheet(p) { genGroups(p); var L = certList(p).filter(function (it) { return it.old && (it.old.points || []).length; });
+function exportSheet(p) { genGroups(p); var L = certList(p).filter(function (it) { return it.old && ((it.old.points || []).length || genOn(it)); });
   if (!L.length) return toast('No certificates with readings yet', true);
   var st = { what: '', which: 'all', from: 0, to: L.length - 1, on: {}, fmt: 'print' };
   var chosen = function () { return st.which === 'all' ? L : st.which === 'range' ? L.slice(Math.min(st.from, st.to), Math.max(st.from, st.to) + 1) : L.filter(function (it, i) { return st.on[i]; }); };
