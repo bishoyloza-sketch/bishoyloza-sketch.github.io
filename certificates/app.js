@@ -954,7 +954,8 @@ function balTables(bd) { var u = bd.unit, n = Math.max.apply(null, [1].concat(bd
   return out; }
 /* ---- other certificate formats (compressed air, HVAC, LAF, particle count, filters…): copy last year's tables as they are, cleaned ---- */
 var GENRX = /compress|nitrogen|\bn2\b|laminar|\blaf\b|hvac|particle|d\.?o\.?p|hepa|filter integ|air\s*velocity|air\s*change|recovery|air\s*pattern|dew\s*point|oil\s*content|steam quality|pass\s*box|biosafety|clean\s*room|smoke/i;
-function genWanted(it) { var o = it.old || {}, f = o.fields || {}; return !!(o.file && o.file.id) && (GENRX.test((it.description || '') + ' ' + (f.description || '') + ' ' + (o.title || '')) || !(o.points || []).length); }
+function multiQty(it) { var o = it.old || {}, f = o.fields || {}, d = (it.description || '') + ' ' + (f.description || ''); return /temp\w*\.?\s*(&|and|\/)\s*(rel\w*\s*)?humid|humid\w*\s*(&|and|\/)\s*temp|\bT\s*&\s*RH\b|thermo\s*-?\s*hygro/i.test(d) || /°\s*C.{0,12}(&|and).{0,12}%\s*R\.?H/i.test(f.calRange || '') ; }
+function genWanted(it) { var o = it.old || {}, f = o.fields || {}; return !!(o.file && o.file.id) && (GENRX.test((it.description || '') + ' ' + (f.description || '') + ' ' + (o.title || '')) || multiQty(it) || !(o.points || []).length); }
 function genEnsure(p, it, cb) { var o = it.old; if (!o || o.gen || o.genTried || !genWanted(it) || !spOn() || !CL.on || !CL.sample) return; o.genTried = Date.now(); saveProjects();
   pdfPages(o.file.driveId, o.file.id).then(function (pages) { var sec = certSection(pages, it.code || (o.fields || {}).code || '') || pages, txt = sec.map(function (pg) { return pg.join(' '); }).join('\n---PAGE---\n');
       return CL.sample.json('Text (spacing is messy) of ONE certificate of Akhnaton calibration lab (it can be compressed air, HVAC, laminar flow, particle count, filter test…). Copy its CONTENT so it can be printed again in the same layout.\n' +
@@ -1049,7 +1050,10 @@ function codeHits(p, code) { code = String(code || '').trim(); if (!code) return
 function findOldCert(p, it) {
   var key = it.code || it.prevCert; if (!key) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
   var mine = (p.deptSug && p.deptSug.certFolders) || [];
-  return codeHits(p, it.code || it.prevCert).then(function (fs) { return fs.length || !it.prevCert || !it.code ? fs : codeHits(p, it.prevCert); }).then(function (fs) { fs = fs.slice(); if (it.prevBase) { var pb = String(it.prevBase).toLowerCase(); fs.sort(function (a1, b1) { return (certBase(b1.name).toLowerCase() === pb ? 1 : 0) - (certBase(a1.name).toLowerCase() === pb ? 1 : 0); }); }
+  return codeHits(p, it.code || it.prevCert).then(function (fs) { return fs.length || !it.prevCert || !it.code ? fs : codeHits(p, it.prevCert); }).then(function (fs) { if (fs.length || !it.code) return fs;
+      /* not found by search: the code may be written with spaces in last year's file ("20 12 A/K") – look inside the files where the other codes of this project were found */
+      var seen = {}, sib = []; p.items.forEach(function (o) { var f = o !== it && o.old && o.old.status === 'found' && o.old.file; if (f && f.id && !seen[f.id]) { seen[f.id] = 1; sib.push(f); } });
+      return sib.slice(0, 6).reduce(function (pr, f) { return pr.then(function (hit) { if (hit.length) return hit; return pdfPages(f.driveId, f.id).then(function (pages) { return certSection(pages, it.code) ? [f] : []; }).catch(function () { return []; }); }); }, Promise.resolve([])); }).then(function (fs) { fs = fs.slice(); if (it.prevBase) { var pb = String(it.prevBase).toLowerCase(); fs.sort(function (a1, b1) { return (certBase(b1.name).toLowerCase() === pb ? 1 : 0) - (certBase(a1.name).toLowerCase() === pb ? 1 : 0); }); }
     fs.forEach(function (f) { f.yr = yearOf(f); f.mine = mine.some(function (m) { return pathOf(f).indexOf(m) >= 0; }) ? 1 : 0; });
     fs.sort(function (a, b) { return b.mine - a.mine || b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
     if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
@@ -1287,7 +1291,7 @@ function certNo(g, n) { var s = String(n); while (s.length < (g.pad || 3)) s = '
 function coverGroups(p) { /* every item, in cover order: one cover per machine, units of the same kind share one cover */
   var all = (p.items || []).filter(function (i) { return i.code || i.description || i.old; }), groups = [], byKey = {};
   (p.machines || []).forEach(function (m) { var its = all.filter(function (i) { return i.machineId === m.id; }); if (its.length) groups.push({ machine: m, items: its }); });
-  all.filter(function (i) { return !i.machineId || !(p.machines || []).some(function (m) { return m.id === i.machineId; }); }).forEach(function (it) { var k = norm((it.description || (it.old && it.old.fields && it.old.fields.description) || '') + '|' + (it.manufacturer || '')); if (!byKey[k]) { byKey[k] = { machine: null, items: [] }; groups.push(byKey[k]); } byKey[k].items.push(it); });
+  all.filter(function (i) { return !i.machineId || !(p.machines || []).some(function (m) { return m.id === i.machineId; }); }).forEach(function (it) { var k = coverKey(it) || norm((it.description || (it.old && it.old.fields && it.old.fields.description) || '') + '|' + (it.manufacturer || '')); if (!byKey[k]) { byKey[k] = { machine: null, items: [] }; groups.push(byKey[k]); } byKey[k].items.push(it); });
   return groups; }
 function genGroups(p) { /* one cover per machine; units of the same kind share one cover */
   var ready = function (i) { return i.old && ((i.old.points || []).length || genOn(i)); };
@@ -2259,7 +2263,7 @@ function hubList(p, L) { var idx = 0, sel = p.hubSel || (p.hubSel = {}), ed = p.
   var hints = ed ? [] : groupHints(p), miss = ed ? [] : coverGroups(p).filter(function (g2) { return missingHint(p, g2); });
   return miss.map(function (g2) { return '<div class="ghint"><span class="t"><b>' + esc(g2.machine ? g2.machine.name : (g2.items[0].code || g2.items[0].description)) + ': ' + missingHint(p, g2) + ' more items were in this cover last year</b><small>you have ' + g2.items.length + ' of ' + (g2.items.length + missingHint(p, g2)) + '</small></span><button class="btn sm" data-miss="' + esc(grpKey(g2)) + '">See &amp; bring</button></div>'; }).join('') + hints.map(function (h, k) { return '<div class="ghint"><span class="t"><b>' + h.items.length + ' items share the code ' + esc(h.code) + '</b><small>' + esc(h.items.map(function (x) { return x.code; }).join(', ')) + ' – one machine, one cover?</small></span><button class="btn sm" data-gh="' + k + '">One cover</button></div>'; }).join('') +
     (ed ? '<div class="selbar2"><span><b>' + nSel + '</b> selected</span><button class="btn sm" id="hGroup"' + (nSel ? '' : ' disabled') + '>Put under one cover</button></div>' : '') +
-    (L.length > 6 ? '<div class="hubtools"><div class="search sm">' + I.search + '<input id="hq" placeholder="Find a code or description in this project" value="' + esc(p.hubQ || '') + '" autocomplete="off"></div><button class="ia" id="hExp">' + (coverGroups(p).every(function (g2) { return grpOpen(p, g2); }) ? 'Collapse all' : 'Expand all') + '</button></div>' : '') +
+    (L.length > 6 ? '<div class="hubtools"><div class="search sm">' + I.search + '<input id="hq" placeholder="Find a code or description in this project" value="' + esc(p.hubQ || '') + '" autocomplete="off"></div><button class="ia" id="hLy" title="Put every certificate under the same cover as last year">Covers as last year</button><button class="ia" id="hExp">' + (coverGroups(p).every(function (g2) { return grpOpen(p, g2); }) ? 'Collapse all' : 'Expand all') + '</button></div>' : '') +
     coverGroups(p).map(function (gr, gi) { var m = gr.machine, done = gr.items.filter(function (x) { return x.saved; }).length, g0 = gen[gr.items[0].id], nums = gr.items.map(function (x) { return x.certNo; }).filter(Boolean);
       var q = norm(p.hubQ || ''), hit = function (it) { return !q || norm((it.code || '') + ' ' + (it.description || '') + ' ' + (it.certNo || '') + ' ' + (m ? m.name + ' ' + (m.code || '') : '')).indexOf(q) >= 0; }, nHit = gr.items.filter(hit).length;
       if (q && !nHit) { idx += gr.items.length; return ''; } var open = q ? true : grpOpen(p, gr);
@@ -2285,8 +2289,23 @@ function groupSheet(p, items, pre) { var mach = (p.machines || []).slice(), st =
           if (!m) { if (!st.name.trim()) return toast('Write the machine name', true); m = { id: uid(), name: st.name.trim(), code: st.code.trim(), dept: (items[0] && items[0].dept) || p.depts[0] || '' }; p.machines.push(m); }
           items.forEach(function (it) { it.machineId = m.id; }); p.hubSel = {}; saveProjects(); toast(items.length + ' items under ' + m.name + ' – one cover'); closeSheet(); }; } }; }); }
 function itBase(it) { return it.prevBase || (it.old && it.old.file && it.old.file.name ? certBase(it.old.file.name) : ''); }
+/* one cover file can hold many covers (e.g. 22 covers of 2 certificates each): read which certificates share each cover */
+var COVQ = {};
+function serialOf(no) { var m = String(no || '').match(/(\d{1,5})\s*-\s*20\d\d(?!.*\d{1,5}\s*-\s*20\d\d)/); return m ? +m[1] : null; }
+function itSerial(it) { return serialOf(it.prevCert || (it.old && it.old.fields && it.old.fields.certNo) || ''); }
+function covRanges(base) { return (LS.get('covRng', {})[String(base || '').toLowerCase()]) || null; }
+function covLoad(base, cb, always) { var k = String(base || '').toLowerCase(); if (!k || covRanges(base) || (COVQ[k] && !always) || !spOn()) { if (always && cb) setTimeout(cb, 0); return; } COVQ[k] = 1;
+  spSearch('filename:"' + base + '"', 10).then(function (fs) { var f = fs.filter(function (x) { return isCover(x.name) && certBase(x.name).toLowerCase() === k; })[0]; if (!f) return null;
+      return pdfPages(f.driveId, f.id).then(function (pages) { var L = [];
+        pages.forEach(function (pg) { var t = pg.join(' ').replace(/\s+/g, ' '), m = t.match(/CERTIFICATE\s*NO\s*\.?\s*:?\s*(.{0,160}?)(?:CUSTOMER|DATE|ADDRESS)/i); if (!m) return; var seg = m[1], ns = [], rx = /(\d{1,5})\s*-\s*20\d\d/g, x;
+          while ((x = rx.exec(seg))) ns.push(+x[1]); if (!ns.length) return; if (/from/i.test(seg) && ns.length === 2 && ns[1] > ns[0] && ns[1] - ns[0] < 400) { var a = []; for (var n = ns[0]; n <= ns[1]; n++) a.push(n); ns = a; }
+          if (!L.some(function (r) { return r.join() === ns.join(); })) L.push(ns); }); return L; }); })
+    .then(function (L) { if (L && L.length) { var all = LS.get('covRng', {}); all[k] = L; LS.set('covRng', all); } cb && cb(); }).catch(function () { cb && cb(); }); }
+function coverKey(it) { var b = itBase(it), L = b && covRanges(b), n = itSerial(it); if (!L || n == null) return ''; for (var i = 0; i < L.length; i++) if (L[i].indexOf(n) >= 0) return b.toLowerCase() + '#' + i; return ''; }
 function batchSize(base) { var m = String(base || '').match(/(\d+)\s*,\s*(\d+)\s*-\s*20\d\d/); return m ? Math.max(1, +m[2] - +m[1] + 1) : 1; }
-function missingHint(p, gr) { var b = {}; gr.items.forEach(function (it) { var x = itBase(it); if (x) b[x] = 1; }); var exp = Object.keys(b).reduce(function (a, x) { return a + batchSize(x); }, 0); return exp > gr.items.length ? exp - gr.items.length : 0; }
+function missingHint(p, gr) { var b = {}, want = {}, known = true; gr.items.forEach(function (it) { var x = itBase(it); if (x) b[x] = 1; });
+  Object.keys(b).forEach(function (x) { var L = covRanges(x); if (!L) { known = false; covLoad(x, function () { if (!sheetFn) render(); }); return; } gr.items.forEach(function (it) { if (itBase(it) !== x) return; var n = itSerial(it); L.forEach(function (r) { if (r.indexOf(n) >= 0) r.forEach(function (v) { want[x + '#' + v] = 1; }); }); }); });
+  if (!known) return 0; var have = {}; gr.items.forEach(function (it) { have[itBase(it) + '#' + itSerial(it)] = 1; }); return Object.keys(want).filter(function (k) { return !have[k]; }).length; }
 function cleanCode(c) { return String(c || '').replace(/\s*([\-\/])\s*/g, '$1').replace(/([A-Za-z])\s+(\d)$/, '$1$2').replace(/\s+/g, ' ').trim(); }
 function certPagesItems(base) { /* every certificate of a batch, read straight from the cal. cert pages */
   return spSearch('filename:"' + base + '"', 10).then(function (fs) { var f = fs.filter(function (x) { return isCalCert(x.name) && certBase(x.name).toLowerCase() === String(base).toLowerCase(); })[0]; if (!f) return [];
@@ -2298,7 +2317,8 @@ function loadBatchAll(base) { return Promise.all([withTime(batchItems({ base: ba
 function bringSheet(p, gr) { var bases = {}; gr.items.forEach(function (it) { var x = itBase(it); if (x) bases[x] = 1; }); var list = Object.keys(bases), st = { busy: true, rows: [], on: {}, pv: {}, mach: '', mcode: '' };
   if (!list.length) return toast('No last-year certificate is linked to these items yet – open one of them first', true);
   var have = function () { var h = {}; p.items.forEach(function (i) { if (i.code) h[norm(i.code)] = 1; }); return h; };
-  Promise.all(list.map(function (b) { return loadBatchAll(b).then(function (r) { r.base = b; return r; }); })).then(function (rs) { var h = have(); rs.forEach(function (r) { if (r.machine && !st.mach) { st.mach = r.machine; st.mcode = r.machineCode; } r.items.forEach(function (x) { x.base = r.base; if (!h[norm(x.code)]) st.on[st.rows.length] = true; st.rows.push(x); }); }); })
+  var mine = {}; gr.items.forEach(function (it) { var b0 = itBase(it), L = b0 && covRanges(b0), n = itSerial(it); if (L && n != null) L.forEach(function (r) { if (r.indexOf(n) >= 0) r.forEach(function (v) { mine[b0.toLowerCase() + '#' + v] = 1; }); }); });
+  Promise.all(list.map(function (b) { return loadBatchAll(b).then(function (r) { r.base = b; if (covRanges(b)) r.items = r.items.filter(function (x) { var n = serialOf(x.certNo); return n == null || mine[b.toLowerCase() + '#' + n]; }); return r; }); })).then(function (rs) { var h = have(); rs.forEach(function (r) { if (r.machine && !st.mach) { st.mach = r.machine; st.mcode = r.machineCode; } r.items.forEach(function (x) { x.base = r.base; if (!h[norm(x.code)]) st.on[st.rows.length] = true; st.rows.push(x); }); }); })
     .catch(function (e) { st.err = e.message; }).then(function () { st.busy = false; if (sheetFn) renderSheet(); });
   openSheet(function () { var h = have(), n = st.rows.filter(function (x, i) { return st.on[i] && !h[norm(x.code)]; }).length;
     return { title: 'Last year\'s cover', body: '<div class="note">' + esc(list.join(' · ')) + (st.mach ? ' — <b>' + esc(st.mach) + (st.mcode ? ' · ' + esc(st.mcode) : '') + '</b>' : '') + '</div>' +
@@ -2376,6 +2396,17 @@ function tHub(p) { if (!$('#pm')) return; knowSeed(); certList(p).forEach(functi
   $$('[data-cov]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); coverSheet(p, +b.dataset.cov); }; });
   $$('[data-tg]').forEach(function (b) { b.onclick = function () { var k = b.dataset.tg; p.hubOpen = p.hubOpen || {}; var gr = coverGroups(p).filter(function (g2) { return grpKey(g2) === k; })[0]; p.hubOpen[k] = !(gr && grpOpen(p, gr)); saveProjects(); var y = window.scrollY; tHub(p); window.scrollTo(0, y); }; });
   var hq = $('#hq'); if (hq) hq.oninput = function () { p.hubQ = hq.value; var pos = hq.selectionStart, y = window.scrollY; tHub(p); window.scrollTo(0, y); var n2 = $('#hq'); if (n2) { n2.focus(); n2.setSelectionRange(pos, pos); } };
+  var hl = $('#hLy'); if (hl) hl.onclick = function () { var bases = {}; p.items.forEach(function (it) { var b = itBase(it); if (b) bases[b] = 1; }); var B = Object.keys(bases), left = B.filter(function (b) { return !covRanges(b); });
+    if (!B.length) return toast('No last-year certificates linked yet', true); toast('Reading last year\'s covers…');
+    var go = function () { var byC = {}, order = []; p.items.forEach(function (it) { var k = coverKey(it); if (!k) return; if (!byC[k]) { byC[k] = []; order.push(k); } byC[k].push(it); });
+      if (!order.length) return toast('Could not read last year\'s covers', true);
+      var moved = {}; order.forEach(function (k) { byC[k].forEach(function (it) { moved[it.id] = 1; }); });
+      p.machines = (p.machines || []).filter(function (m) { return p.items.some(function (it) { return it.machineId === m.id && !moved[it.id]; }); });
+      order.forEach(function (k) { var its = byC[k], f = its[0], nm = (f.description || (f.old && f.old.fields && f.old.fields.description) || 'Cover'), m = { id: uid(), name: nm, code: codePre(f.code) || cleanCode(f.code).replace(/p(?=\/)/i, ''), dept: f.dept || (p.depts || [])[0] || '' };
+        p.machines.push(m); its.sort(function (a, b) { return (itSerial(a) || 0) - (itSerial(b) || 0); }).forEach(function (it) { it.machineId = m.id; }); });
+      var pos = {}; order.forEach(function (k, i) { byC[k].forEach(function (it, j) { pos[it.id] = i * 1000 + j; }); }); p.items.sort(function (a, b) { return (pos[a.id] == null ? 1e9 : pos[a.id]) - (pos[b.id] == null ? 1e9 : pos[b.id]); });
+      saveProjects(); toast(order.length + ' covers – the same as last year'); tHub(p); };
+    var n = left.length; if (!n) return go(); left.forEach(function (b) { covLoad(b, function () { if (--n === 0) go(); }, true); }); };
   var hx = $('#hExp'); if (hx) hx.onclick = function () { var gs = coverGroups(p), all = gs.every(function (g2) { return grpOpen(p, g2); }); p.hubOpen = {}; gs.forEach(function (g2) { p.hubOpen[grpKey(g2)] = !all; }); saveProjects(); tHub(p); };
   $$('[data-miss]').forEach(function (b) { b.onclick = function () { var g2 = coverGroups(p).filter(function (x) { return grpKey(x) === b.dataset.miss; })[0]; if (!g2) return; bringSheet(p, g2); }; });
   $$('[data-gh]').forEach(function (b) { b.onclick = function () { var h = groupHints(p)[+b.dataset.gh]; if (h) groupSheet(p, h.items, h.code); }; });
