@@ -1,6 +1,6 @@
 /* App shell cache: the app opens instantly; data always comes live from the server. */
-var CACHE = 'akh-devices-v37';
-var SHELL = ['./', './index.html', './app.css?v=37', './app.js?v=37', './core.js?v=37', './config.js', './logo.png', './logo-en-light.png', './jspdf.umd.min.js', './icon-192.png'];
+var CACHE = 'akh-devices-v38';
+var SHELL = ['./', './index.html', './app.css?v=38', './app.js?v=38', './core.js?v=38', './config.js', './logo.png', './logo-en-light.png', './jspdf.umd.min.js', './icon-192.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }));

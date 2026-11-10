@@ -384,12 +384,12 @@
   function softJobs() {
     clearTimeout(softT);
     softT = setTimeout(function () {
-      var main = $('main'), box = main && $('.jsearch', main); if (!box) return render();
+      var main = $('main'), box = main && $('.gsearch', main); if (!box) return render();
       var tmp = document.createElement('div'); tmp.innerHTML = viewJobs();
-      var nbox = $('.jsearch', tmp); if (!nbox) return render();
+      var nbox = $('.gsearch', tmp); if (!nbox) return render();
       while (box.nextSibling) main.removeChild(box.nextSibling);
       var n = nbox.nextSibling; while (n) { var nx = n.nextSibling; main.appendChild(n); n = nx; }
-      var a = $('.jsh', box), b = $('.jsh', nbox); if (a && b) a.innerHTML = b.innerHTML;
+      var a = $('.gsub', box), b = $('.gsub', nbox); if (a && b) a.innerHTML = b.innerHTML;
       wire();
     }, 220);
   }
@@ -881,47 +881,56 @@
   function jobText(j) { return [j.id, j.title || '', j.ref || '', jobBasis(j), coName(j.companyId), j.byName || ''].concat(jobReceipts(j).map(rcptText)).join(' '); }
   function qHit(text, q) { if (!q) return true; text = String(text).toLowerCase(); return q.toLowerCase().split(/\s+/).filter(Boolean).every(function (w) { return text.indexOf(w) >= 0; }); }
   function jobTeam(j) { var p = {}; jobReceipts(j).forEach(function (c) { (c.engineers || []).forEach(function (e) { p[e.name] = 1; }); }); return Object.keys(p); }
-  /* One search panel: free text + company / engineer / opened by / device (type to search) + date range */
-  function jfl() { return S.jfl || (S.jfl = { co: '', eng: '', by: '', dev: '', from: '', to: '' }); }
+  /* Jobs search, Gmail-style: one bar + "search in" list; Enter turns it into a chip so several can be combined; one period list */
+  var JS_FIELDS = [['all', 'Everything'], ['co', 'Company'], ['eng', 'Engineer'], ['by', 'Opened by'], ['dev', 'Device']];
+  var JS_PER = [['', 'Any time'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['m', 'This month'], ['y', 'This year']];
   function has(t, q) { return String(t || '').toLowerCase().indexOf(String(q).toLowerCase().trim()) >= 0; }
-  function devTxt(id) { var d = IDX.dev[id]; return d ? d.description + ' ' + (d.range || '') + ' ' + d.serial + ' ' + (d.model || '') + ' ' + (d.sub || '') : id; }
-  function inRange(ts, F) { var day = String(ts || '').slice(0, 10); return (!F.from || day >= F.from) && (!F.to || day <= F.to); }
-  function rcptPass(c) {
-    var F = jfl();
-    return (!F.co || has(coName(c.companyId), F.co)) && (!F.eng || (c.engineers || []).some(function (e) { return has(e.name, F.eng); })) &&
-      (!F.dev || (c.deviceIds || []).some(function (id) { return has(devTxt(id), F.dev); }) || has(itemsText(c.items), F.dev)) && inRange(c.ts, F);
+  function devTxt(id) { var d = IDX.dev[id]; return d ? d.description + ' ' + (d.range || '') + ' ' + d.serial + ' ' + (d.manufacturer || '') + ' ' + (d.model || '') + ' ' + (d.sub || '') : id; }
+  function jsTerms() { return (S.jchips || []).concat(S.jq && S.jq.trim() ? [{ f: S.jqf || 'all', v: S.jq.trim() }] : []); }
+  function jsRange() {
+    var v = S.jper || ''; if (!v) return null;
+    var d = new Date(), from = new Date(d);
+    if (v === 'm') from.setDate(1); else if (v === 'y') { from.setMonth(0); from.setDate(1); } else from.setDate(d.getDate() - (+v - 1));
+    return { from: isoDay(from), to: isoDay(d) };
   }
+  function matchR(c, t) {
+    if (t.f === 'co') return has(coName(c.companyId), t.v);
+    if (t.f === 'eng') return (c.engineers || []).some(function (e) { return has(e.name, t.v); });
+    if (t.f === 'dev') return (c.deviceIds || []).some(function (id) { return has(devTxt(id), t.v); }) || has(itemsText(c.items), t.v);
+    if (t.f === 'by') { var j = jobById(c.jobId); return has(j ? j.byName : c.byName, t.v); }
+    var jb = jobById(c.jobId); return qHit(rcptText(c) + ' ' + (jb ? jb.id + ' ' + (jb.title || '') + ' ' + jobBasis(jb) + ' ' + (jb.contactName || '') : ''), t.v);
+  }
+  function rcptPass(c) { var R = jsRange(), day = String(c.ts || '').slice(0, 10); if (R && (day < R.from || day > R.to)) return false; return jsTerms().every(function (t) { return matchR(c, t); }); }
   function jobPass(j) {
-    var F = jfl();
-    if (F.co && !has(coName(j.companyId), F.co)) return false;
-    if (F.by && !has(j.byName, F.by)) return false;
-    if ((F.from || F.to)) { var st = String(j.ts || '').slice(0, 10), en = j.status === 'Closed' ? String(j.closedTs || j.ts || '').slice(0, 10) : '9999'; if ((F.to && st > F.to) || (F.from && en < F.from)) return false; }
-    if (!F.eng && !F.dev) return true;
-    var G = { co: '', eng: F.eng, dev: F.dev, from: '', to: '' }, keep = S.jfl; S.jfl = G; var ok = jobReceipts(j).some(rcptPass); S.jfl = keep; return ok;
+    var R = jsRange();
+    if (R) { var st = String(j.ts || '').slice(0, 10), en = j.status === 'Closed' ? String(j.closedTs || j.ts || '').slice(0, 10) : '9999'; if (st > R.to || en < R.from) return false; }
+    return jsTerms().every(function (t) {
+      if (t.f === 'co') return has(coName(j.companyId), t.v);
+      if (t.f === 'by') return has(j.byName, t.v);
+      if (t.f === 'all') return qHit(jobText(j) + ' ' + (j.contactName || '') + ' ' + (j.contactPhone || ''), t.v);
+      return jobReceipts(j).some(function (c) { return matchR(c, t); });
+    });
   }
-  function jflCount() { var F = jfl(); return ['co', 'eng', 'by', 'dev', 'from', 'to'].filter(function (k) { return F[k]; }).length + (S.jq ? 1 : 0); }
+  function jflCount() { return jsTerms().length + (S.jper ? 1 : 0); }
+  function jsSuggest(f) {
+    var J = jobsList(), R = S.data.checkouts || [], o = {};
+    if (f === 'co') J.forEach(function (j) { o[coName(j.companyId)] = 1; });
+    if (f === 'eng') R.forEach(function (c) { (c.engineers || []).forEach(function (e) { o[e.name] = 1; }); });
+    if (f === 'by') J.forEach(function (j) { if (j.byName) o[j.byName] = 1; });
+    if (f === 'dev') R.forEach(function (c) { (c.deviceIds || []).forEach(function (id) { var d = IDX.dev[id]; if (d) o[d.description + (d.range ? ' ' + d.range : '')] = 1; }); });
+    return Object.keys(o).sort();
+  }
   function jobSearchPanel(ds) {
-    var F = jfl(), J = jobsList(), R = S.data.checkouts || [], uniq = function (a) { var o = {}; a.forEach(function (x) { if (x) o[x] = 1; }); return Object.keys(o).sort(); };
-    var lists = {
-      co: uniq(J.map(function (j) { return coName(j.companyId); }).concat(R.map(function (c) { return coName(c.companyId); }))),
-      eng: uniq([].concat.apply([], R.map(function (c) { return (c.engineers || []).map(function (e) { return e.name; }); }))),
-      by: uniq(J.map(function (j) { return j.byName; })),
-      dev: uniq([].concat.apply([], R.map(function (c) { return (c.deviceIds || []).map(function (id) { var d = IDX.dev[id]; return d ? d.description + (d.range ? ' ' + d.range : '') + ' · ' + d.serial : ''; }); })))
-    };
-    function fld(k, label, ph) {
-      return '<label class="f"><span>' + label + '</span><div class="jsin"><input class="inp" id="jf_' + k + '" data-jfk="' + k + '" list="jl_' + k + '" value="' + esc(F[k]) + '" placeholder="' + ph + '" autocomplete="off">' +
-        (F[k] ? '<button class="jsx" data-jfx="' + k + '" aria-label="Clear">✕</button>' : '') + '</div><datalist id="jl_' + k + '">' + lists[k].map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist></label>';
-    }
-    var n = jflCount(), open = !!S.jsOpen;
-    var bar = '<div class="jstog"><button class="jsbtn' + (open || n ? ' on' : '') + '" data-jsopen>' + ICON.search + '<span>' + (open ? 'Close search' : 'Search') + '</span>' + (n && !open ? '<em>' + n + '</em>' : '') + '</button>' +
-      (n && !open ? '<button class="btn sm ghost" data-jfclear>Clear</button>' : '') + '</div>';
-    if (!open) return bar;
-    return bar + '<div class="box jsearch"><div class="jsh"><b>Search ' + (ds ? 'data sheets' : 'jobs') + '</b>' + (n ? '<button class="btn sm ghost" data-jfclear>Clear all</button>' : '') + '</div>' +
-      '<div class="search" style="margin:0 0 10px">' + ICON.search + '<input id="jsq" type="search" placeholder="Any word: job no., PO, receipt, serial…" value="' + esc(S.jq || '') + '" autocomplete="off" aria-label="Search"></div>' +
-      '<div class="jfgrid">' + fld('co', 'Company', 'Type a company') + fld('eng', 'Engineer who went', 'Type a name') + (ds ? '' : fld('by', 'Job opened by', 'Type a name')) + fld('dev', 'Device', 'Name or serial') +
-      '<label class="f"><span>From</span><input class="inp" type="date" id="jf_from" data-jfk="from" value="' + esc(F.from) + '"></label>' +
-      '<label class="f"><span>To</span><input class="inp" type="date" id="jf_to" data-jfk="to" value="' + esc(F.to) + '"></label></div>' +
-      '<div class="jsq">' + [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['m', 'This month'], ['y', 'This year']].map(function (x) { return '<button class="fbtn" data-jfq="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>';
+    var f = S.jqf || 'all', chips = S.jchips || [], lab = function (k) { return JS_FIELDS.filter(function (x) { return x[0] === k; })[0][1]; };
+    var ph = { all: 'Search ' + (ds ? 'receipts' : 'jobs'), co: 'Company name…', eng: 'Engineer name…', by: 'Who opened the job…', dev: 'Device name or serial…' }[f];
+    return '<div class="gsearch"><div class="gbar">' + ICON.search +
+      '<input id="jsq" type="search" list="jsl" placeholder="' + ph + '" value="' + esc(S.jq || '') + '" autocomplete="off" enterkeyhint="search" aria-label="Search">' +
+      '<datalist id="jsl">' + (f === 'all' ? '' : jsSuggest(f).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('')) + '</datalist>' +
+      '<select id="jsf" aria-label="Search in">' + JS_FIELDS.filter(function (x) { return !(ds && x[0] === 'by'); }).map(function (x) { return '<option value="' + x[0] + '"' + (f === x[0] ? ' selected' : '') + '>' + (x[0] === 'all' ? 'All' : x[1]) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="gsub"><select id="jsp" class="' + (S.jper ? 'on' : '') + '" aria-label="Period">' + JS_PER.map(function (x) { return '<option value="' + x[0] + '"' + ((S.jper || '') === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+      chips.map(function (c, i) { return '<span class="gchip">' + esc(lab(c.f)) + ': <b>' + esc(c.v) + '</b><button data-jchipx="' + i + '" aria-label="Remove">✕</button></span>'; }).join('') +
+      (S.jq && S.jq.trim() && f !== 'all' ? '<button class="gadd" data-jadd>＋ Add</button>' : '') +
+      (jflCount() ? '<button class="gclear" data-jfclear>Clear</button>' : '') + '</div></div>';
   }
   function viewJobs() {
     var f = S.jf || 'all', rep = can('report'), jq = S.jq || '';
@@ -937,11 +946,11 @@
     }
     if (can('job') && f !== 'ds' && !jq) h += '<button class="btn blue wide" data-newjob style="margin:4px 0 6px">＋ Open a new job</button>';
     if (f === 'ds') return h + dsReport() + '<div style="height:24px"></div></main>';
-    var list = jobsList().filter(function (j) { return (f === 'all' || (f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed')) && qHit(jobText(j), jq) && jobPass(j); })
+    var list = jobsList().filter(function (j) { return (f === 'all' || (f === 'closed' ? j.status === 'Closed' : j.status !== 'Closed')) && jobPass(j); })
       .sort(function (a, b) { return (a.status === 'Closed') - (b.status === 'Closed') || (b.ts || '').localeCompare(a.ts || ''); });
-    var F = jfl();
     if (jflCount()) h += '<div class="sortbar"><span><b>' + list.length + '</b> job' + (list.length === 1 ? '' : 's') + ' found</span></div>';
-    if (F.dev && list.length) { var cs = {}; list.forEach(function (j) { cs[coName(j.companyId)] = 1; }); h += '<div class="note"><b>' + esc(F.dev) + '</b> went to: ' + esc(Object.keys(cs).join(', ')) + '</div>'; }
+    var devT = jsTerms().filter(function (t) { return t.f === 'dev'; })[0];
+    if (devT && list.length) { var cs = {}; list.forEach(function (j) { cs[coName(j.companyId)] = 1; }); h += '<div class="note"><b>' + esc(devT.v) + '</b> went to: ' + esc(Object.keys(cs).join(', ')) + '</div>'; }
     if (!list.length && jflCount()) h += '<div class="empty"><b>No job matches these filters.</b>Try a company, an engineer\'s name, a job or receipt number, or the last digits of a serial.</div>';
     else if (!list.length) h += '<div class="empty"><b>' + (f === 'closed' ? 'No closed jobs yet.' : 'No open jobs.') + '</b>' + (f === 'closed' ? '' : can('job') ? 'Open a job for each client visit, then add requests inside it.' : 'The site supervisor opens a job for each client visit.') + '</div>';
     var jv = S.jv || 'list';
@@ -978,7 +987,7 @@
     });
   }
   function dsReport() {
-    var jq = S.jq || '', rows = dsRows().filter(function (r) { return rcptPass(r.c) && qHit(rcptText(r.c) + ' ' + (r.job ? r.job.id + ' ' + (r.job.title || '') + ' ' + jobBasis(r.job) : ''), jq); }), miss = rows.filter(function (r) { return !dsBack(r.c); }), ok = rows.filter(function (r) { return dsBack(r.c); });
+    var jq = S.jq || '', rows = dsRows().filter(function (r) { return rcptPass(r.c); }), miss = rows.filter(function (r) { return !dsBack(r.c); }), ok = rows.filter(function (r) { return dsBack(r.c); });
     var outMiss = miss.filter(function (r) { return r.out.n; }).length;
     var h = '<div class="placesum"><div class="ks out"><b>' + miss.length + '</b><span>data sheets missing</span></div><div class="ks"><b>' + ok.length + '</b><span>back in office</span></div><div class="ks"><b>' + outMiss + '</b><span>still outside</span></div></div>' +
       '<div class="sortbar" style="margin-top:12px"><span>Data sheet report</span><button class="printbtn" data-dspdf>' + ICON.pdf + 'PDF</button><button class="printbtn xl" data-dsxls>' + ICON.pdf + 'Excel</button></div>';
@@ -1365,21 +1374,16 @@
     $$('[data-dgrp]').forEach(function (b) { b.onclick = function () { S.devGrp = b.dataset.dgrp; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-dgrpback]').forEach(function (b) { b.onclick = function () { S.devGrp = null; S._keepScroll = false; render(); window.scrollTo(0, 0); }; });
     $$('[data-sort]').forEach(function (b) { b.onclick = function () { S.sort = b.dataset.sort; S.devGrp = null; LS.set('sort2', S.sort); S._keepScroll = false; render(); }; });
-    function refocus(id, pos) { var n = document.getElementById(id); if (n) { n.focus(); try { if (pos != null) n.setSelectionRange(pos, pos); } catch (e) {} } }
-    $$('[data-jfk]').forEach(function (el) {
-      var k = el.dataset.jfk, isDate = el.type === 'date';
-      el[isDate ? 'onchange' : 'oninput'] = function () { jfl()[k] = el.value; softJobs(); };
-    });
-    $$('[data-jfx]').forEach(function (b) { b.onclick = function () { jfl()[b.dataset.jfx] = ''; S._keepScroll = true; render(); }; });
-    $$('[data-jfq]').forEach(function (b) { b.onclick = function () {
-      var d = new Date(), v = b.dataset.jfq, F = jfl(), from = new Date(d);
-      if (v === 'm') from.setDate(1); else if (v === 'y') { from.setMonth(0); from.setDate(1); } else from.setDate(d.getDate() - (+v - 1));
-      F.from = isoDay(from); F.to = isoDay(d); S._keepScroll = true; render(); }; });
-    void refocus;
-    $$('[data-jsopen]').forEach(function (b) { b.onclick = function () { S.jsOpen = !S.jsOpen; S._keepScroll = true; render(); if (S.jsOpen) { var n = document.getElementById('jsq'); if (n) n.focus(); } }; });
-    $$('[data-jfclear]').forEach(function (b) { b.onclick = function () { S.jfl = null; S.jq = ''; S._keepScroll = true; render(); }; });
-    var jqi = $('#jsq');
-    if (jqi) jqi.oninput = function () { S.jq = jqi.value; softJobs(); };
+    var jsi = $('#jsq');
+    if (jsi) {
+      jsi.oninput = function () { S.jq = jsi.value; softJobs(); };
+      jsi.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); if ((S.jqf || 'all') !== 'all' && S.jq.trim()) { (S.jchips = S.jchips || []).push({ f: S.jqf, v: S.jq.trim() }); S.jq = ''; S._keepScroll = true; render(); var n = $('#jsq'); if (n) n.focus(); } else jsi.blur(); } };
+    }
+    var jsf = $('#jsf'); if (jsf) jsf.onchange = function () { S.jqf = jsf.value; S._keepScroll = true; render(); var n = $('#jsq'); if (n) n.focus(); };
+    var jsp = $('#jsp'); if (jsp) jsp.onchange = function () { S.jper = jsp.value; S._keepScroll = true; render(); };
+    $$('[data-jadd]').forEach(function (b) { b.onclick = function () { (S.jchips = S.jchips || []).push({ f: S.jqf, v: S.jq.trim() }); S.jq = ''; S._keepScroll = true; render(); }; });
+    $$('[data-jchipx]').forEach(function (b) { b.onclick = function () { S.jchips.splice(+b.dataset.jchipx, 1); S._keepScroll = true; render(); }; });
+    $$('[data-jfclear]').forEach(function (b) { b.onclick = function () { S.jchips = []; S.jq = ''; S.jper = ''; S._keepScroll = true; render(); }; });
     var q = $('#q');
     if (q) {
       q.oninput = function () {
