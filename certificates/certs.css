@@ -421,3 +421,33 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 #loadov .lbox{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--surface,#fff);border-radius:18px;padding:20px 26px;box-shadow:0 10px 30px rgba(19,41,75,.25);font-weight:600;color:var(--navy)}
 #loadov .lball{width:44px;height:44px;border-radius:50%;border:5px solid #DCE8F5;border-top-color:#1F6FB5;animation:lspin .8s linear infinite}
 @keyframes lspin{to{transform:rotate(360deg)}}
+/* cover on top, certificates flip underneath */
+.cvbar{position:sticky;top:0;z-index:20;background:var(--bg,#EDF1F6);padding:6px 0 8px;margin:-6px 0 8px}
+.cvtabs{display:flex;gap:6px;margin-bottom:8px}
+.cvtabs button{flex:1;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 6px;font:inherit;font-size:13.5px;font-weight:700;color:var(--navy);cursor:pointer;line-height:1.2}
+.cvtabs button small{display:block;font-weight:600;color:var(--muted);font-size:11.5px}
+.cvtabs button.on{background:var(--navy);border-color:var(--navy);color:#fff;cursor:default}
+.cvtabs button:disabled{opacity:.5}
+.cvhead{position:relative;background:var(--surface);border:1.5px solid var(--line);border-left:5px solid var(--navy);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.cvhead b{font-size:16px;color:var(--navy);padding-right:40px;line-height:1.25}.cvhead small{color:var(--muted);font-size:12.5px}
+.cvhead .tcnt{top:9px;right:10px}
+.cvstrip{display:flex;align-items:center;gap:6px;margin-top:8px}
+.cvchips{flex:1;display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;padding:2px 0}
+.cvc{flex:none;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;font-weight:600;color:#45556B;cursor:pointer;white-space:nowrap}
+.cvc.on{background:#1F6FB5;border-color:#1F6FB5;color:#fff}.cvc.ok{color:#1F8A5B;border-color:#BFE3CF}.cvc.on.ok{color:#fff}.cvc.bad{color:#C0392B;border-color:#F2C6C0}
+.cvno{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:#13294B;color:#fff;border-radius:12px;padding:8px 12px;margin-bottom:8px}
+.cvno span{font-size:11.5px;font-weight:700;letter-spacing:.5px;opacity:.75}.cvno b{font-size:17px;letter-spacing:.3px}.cvno small{margin-left:auto;font-weight:600;opacity:.85}
+.demorib{background:#C9A227;color:#1B2430;text-align:center;font-size:13px;font-weight:700;padding:6px 10px}.demorib a{color:#13294B}
+/* wide screens: the page gets wide; the cover sits on the left and stays there, the certificate fills the rest */
+@media (min-width:1100px){
+  .shell:has(#pm .cvbar),.shell:has(#pm .viewbar){max-width:1260px}
+  body:has(#pm .cvbar) .wiz-foot>div,body:has(#pm .viewbar) .wiz-foot>div{max-width:1228px}
+  #pm:has(>.cvbar){display:grid;grid-template-columns:300px minmax(0,1fr);column-gap:18px;align-items:start}
+  #pm:has(>.cvbar)>*{grid-column:2}
+  #pm>.cvbar{grid-column:1;grid-row:1 / span 99;position:sticky;top:12px;margin:0;padding:0;background:none;max-height:calc(100vh - 120px);overflow:auto}
+  #pm>.cvbar .cvtabs{flex-direction:column}
+  #pm>.cvbar .cvstrip{flex-wrap:wrap}
+  #pm>.cvbar .cvchips{flex-direction:column;overflow:visible;flex:1 1 100%;order:3}
+  #pm>.cvbar .cvc{text-align:left;border-radius:10px}
+  .htiles{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+}

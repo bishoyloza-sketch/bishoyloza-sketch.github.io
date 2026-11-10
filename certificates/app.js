@@ -9,10 +9,12 @@ var $$ = function (s) { return Array.prototype.slice.call(document.querySelector
 var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 var uid = function () { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
 var norm = function (s) { return String(s || '').toLowerCase().replace(/[\s\-_.\/()&]/g, ''); };
+/* TRIAL mode (demo.html): sample files instead of SharePoint, its own storage – nothing real is touched */
+var DEMO = window.DEMO_DATA || null, LSP = DEMO ? 'akhd.' : 'akhc.';
 var LS = {
-  get: function (k, d) { try { var v = localStorage.getItem('akhc.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set: function (k, v) { try { localStorage.setItem('akhc.' + k, JSON.stringify(v)); } catch (e) { toast('Phone storage is full', true); } },
-  del: function (k) { try { localStorage.removeItem('akhc.' + k); } catch (e) {} }
+  get: function (k, d) { try { var v = localStorage.getItem(LSP + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set: function (k, v) { try { localStorage.setItem(LSP + k, JSON.stringify(v)); } catch (e) { toast('Phone storage is full', true); } },
+  del: function (k) { try { localStorage.removeItem(LSP + k); } catch (e) {} }
 };
 /* photos go to IndexedDB (too big for localStorage) */
 var MEMIMG = {};
@@ -155,9 +157,10 @@ var Api = { call: function (req) {
     .then(function (r) { if (!r.ok) throw new Error('The server did not answer (' + r.status + '). Check the internet and try again.'); return r.json(); })
     .then(function (j) { if (!j.ok) throw new Error(j.error || 'Something went wrong.'); return j.data; });
 } };
-(function () { try { var pr = JSON.parse(localStorage.getItem('akhc.projects') || '[]'); pr.forEach(function (p) { (p.items || []).forEach(function (it) { if (it.old && it.old.status === 'searching') it.old = null; }); }); localStorage.setItem('akhc.projects', JSON.stringify(pr)); } catch (e) {} })();
-var S = { session: LS.get('session', null), me: null, people: LS.get('people', null), data: LS.get('cache', null), projects: LS.get('projects', []), cur: null, view: 'home' };
-function req(action, payload) { return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
+(function () { try { var pr = JSON.parse(localStorage.getItem(LSP + 'projects') || '[]'); pr.forEach(function (p) { (p.items || []).forEach(function (it) { if (it.old && it.old.status === 'searching') it.old = null; }); }); localStorage.setItem(LSP + 'projects', JSON.stringify(pr)); } catch (e) {} })();
+var S = { session: DEMO ? { userId: 'U01', pin: 'demo' } : LS.get('session', null), me: null, people: LS.get('people', null), data: LS.get('cache', null), projects: LS.get('projects', []), cur: null, view: 'home' };
+function demoState() { return { companies: [DEMO.company], users: DEMO.people, devices: [] }; }
+function req(action, payload) { if (DEMO) return Promise.resolve(action === 'state' ? demoState() : action === 'people' ? DEMO.people : action === 'login' ? { user: DEMO.people[0] } : {}); return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
   S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; return d; }); }
 function saveProjects() { LS.set('projects', S.projects); }
@@ -184,14 +187,20 @@ function graph(method, path, body) { return msToken().then(function (tk) {
     .then(function (r) { if (r.status === 403) throw new Error('SharePoint said no access (403). Your company may need to allow this app.'); if (!r.ok) return r.text().then(function (t) { throw new Error('SharePoint error ' + r.status + ': ' + t.slice(0, 160)); }); return r.json(); }); }); }
 var FILES = { ok: null, err: '' };
 var useFiles = function () { return !!CFG.FILES_URL; };
-var spOn = function () { if (CL.on) return true; return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
+var spOn = function () { if (DEMO) return true; if (CL.on) return true; return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
 function fcall(action, payload) { if (!CFG.FILES_URL) return Promise.reject(new Error('The files server is not set up yet'));
   return fetch(CFG.FILES_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }), redirect: 'follow' })
     .then(function (r) { if (!r.ok) throw new Error('The files server did not answer (' + r.status + ')'); return r.json(); })
     .then(function (j) { if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j.data; }); }
 function filesPing() { if (!useFiles()) return Promise.resolve(); return fcall('ping').then(function (d) { FILES.ok = true; FILES.root = d.root; FILES.err = d.root ? '' : 'The SharePoint copy is not on Google Drive yet'; }).catch(function (e) { FILES.ok = false; FILES.err = e.message; }); }
 /* search files in SharePoint / OneDrive */
+function demoSearch(q) { var phr = [], fn = [], s0 = String(q || '').replace(/\(filename:cert OR filename:cover\)/gi, ' ');
+  s0 = s0.replace(/filename:"([^"]+)"|filename:([^\s)]+)/gi, function (m, a, b) { fn.push(norm(a || b).replace(/\*/g, '')); return ' '; }).replace(/"([^"]+)"/g, function (m, a) { phr.push(norm(a)); return ' '; });
+  s0.split(/\s+/).forEach(function (w) { if (w.length > 2 && !/^(or|and)$/i.test(w)) phr.push(norm(w)); });
+  return new Promise(function (res) { setTimeout(function () { res(DEMO.files.filter(function (f) { var nm = norm(f.name), tx = norm(f.name + ' ' + f.text); return fn.every(function (x) { return nm.indexOf(x) >= 0; }) && phr.every(function (x) { return tx.indexOf(x) >= 0; }); })
+    .map(function (f) { return { id: f.id, driveId: 'demo', name: f.name, webUrl: f.webUrl, mod: '2025-02-20T10:00:00Z', path: f.path, summary: f.text.slice(0, 220) }; })); }, 250); }); }
 function spSearch(q, size, off) {
+  if (DEMO) return off ? Promise.resolve([]) : demoSearch(q);
   if (CL.on) return clSearch(q, size, off);
   if (useFiles()) return fcall('search', { q: q, limit: size || 25 }).then(function (l) { return l.map(function (f) { return { id: f.id, driveId: '', name: f.name, webUrl: f.webUrl, mod: f.mod, path: f.path, summary: '' }; }); });
   return graph('POST', '/search/query', { requests: [{ entityTypes: ['driveItem'], query: { queryString: q }, from: off || 0, size: size || 25 }] }).then(function (r) {
@@ -257,7 +266,7 @@ function signOut() { S.session = null; S.me = null; LS.del('session'); renderLog
 
 /* ================= app shell ================= */
 function top(title, sub, extra) {
-  return '<div class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton"><span class="bdiv"></span><span class="bname"><small>Akhnaton</small><b>Certificates</b></span></div>' +
+  return (DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton"><span class="bdiv"></span><span class="bname"><small>Akhnaton</small><b>Certificates</b></span></div>' +
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
     (S.cur ? '<button class="homebtn" id="goHome2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>All projects</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
@@ -536,11 +545,11 @@ function fillEmpty(it) { var f = (it.old || {}).fields || {}; if (!f) return;
   if (c && r && (c.lo !== r.lo || c.hi !== r.hi) && !isNum(it.cMin)) { it.cMin = c.lo; it.cMax = c.hi; }
   var rs = tidy(f.resolution || '').match(/(\d*\.?\d+)\s*(\S+)?/); if (rs && !isNum(it.res)) { it.res = rs[1]; it.resUnit = unitKey(rs[2] || it.unit || ''); }
   if (it.unit) it.unit = unitKey(it.unit); }
-function queueOld(p) { if (!spOn()) return; p.items.forEach(function (it) { if ((!it.old || it.old.status === 'searching') && (it.code || it.prevCert) && AQ.q.indexOf(it) < 0) AQ.q.push(it); }); runQ(p); }
+function queueOld(p) { if (!spOn()) return; p.items.forEach(function (it) { if ((!it.old || it.old.status === 'searching') && (it.code || it.prevCert) && AQ.q.indexOf(it) < 0 && (AQ.run || []).indexOf(it.id) < 0) AQ.q.push(it); }); runQ(p); }
 function runQ(p) { /* two at a time; one slow certificate never blocks the others */
-  AQ.n = AQ.n || 0; while (AQ.n < 2 && AQ.q.length) (function (it) { AQ.n++; it.old = { status: 'searching', at: Date.now() }; if (!sheetFn) render();
+  AQ.n = AQ.n || 0; while (AQ.n < 3 && AQ.q.length) (function (it) { AQ.n++; AQ.run = AQ.run || []; AQ.run.push(it.id); it.old = { status: 'searching', at: Date.now() }; if (!sheetFn) render();
     withTime(findOldCert(p, it), 90000).catch(function (e) { return { status: 'error', note: e && e.message === 'slow' ? 'SharePoint took too long – tap “Search again”' : (e && e.message) || 'error' }; })
-      .then(function (r) { it.old = r; if (r.status === 'found') fillEmpty(it); saveProjects(); AQ.n--; if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
+      .then(function (r) { AQ.run = (AQ.run || []).filter(function (x) { return x !== it.id; }); it.old = r; if (r.status === 'found') fillEmpty(it); saveProjects(); AQ.n--; if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
 
 /* ---- 5. items: photo / Excel / unit or machine ---- */
 var UNITS = ['°C', '°F', '%RH', 'bar', 'mbar', 'psi', 'kPa', 'MPa', 'Pa', 'inH2O', 'mmH2O', 'mmHg', 'g', 'mg', 'kg', 'rpm', 's', 'min', 'h', 'lux', 'm/s', 'm³/h', 'CFM', 'V', 'mV', 'A', 'mA', 'Ω', 'mm', 'µm', 'L', 'mL', 'µL', 'pH', 'µS/cm', '%'];
@@ -889,6 +898,7 @@ function tDet(p) {
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 function needPdf() { return window.pdfjsLib ? Promise.resolve() : loadScript(PDFJS + 'pdf.min.js').then(function () { pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; }); }
 function pdfPages(driveId, id) { /* SharePoint converts the Word file to PDF; we read its text line by line */
+  if (DEMO) { var df = DEMO.files.filter(function (f) { return f.id === id; })[0]; return new Promise(function (res, rej) { setTimeout(function () { df ? res(df.pages.map(function (pg) { return pg.slice(); })) : rej(new Error('Not in the trial files')); }, 300); }); }
   if (CL.on) return clPages(id);
   if (useFiles()) return fcall('text', { id: id }).then(function (r) { return r.pages || []; });
   return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + driveId + '/items/' + id + '/content?format=pdf', { headers: { Authorization: 'Bearer ' + r[1] } }); })
@@ -914,7 +924,7 @@ var NUM = /^[-+±]?\d+(?:\.\d+)?$/;
 function parseResults(lines) { /* rows of numbers after the results header → points */
   var start = lines.findIndex(function (l) { return /result|reading|deviation|standard|nominal|set ?point|load/i.test(l) && !/data of item/i.test(l); }); if (start < 0) return { points: [], dirs: 1 };
   var head = lines.slice(start, start + 4).join(' '), dirs = /ascend|descend|\bup\b.*\bdown\b/i.test(head) || (head.match(/reading/gi) || []).length >= 2 ? 2 : 1, pts = [];
-  for (var i = start + 1; i < lines.length; i++) { var l = lines[i]; if (/not be duplicated|remarks|calibrated by|repeatab|eccentric|uncertainty|page \d/i.test(l)) break;
+  for (var i = start + 1; i < lines.length; i++) { var l = lines[i]; if (/not be duplicated|remarks|calibrated by|repeatab|eccentric|uncertainty|page \d|standard\(?s?\)?\s*utili[sz]ed|^\s*item\s*no/i.test(l)) break;
     var toks = l.replace(/±\s*/g, '±').replace(/-\s+(\d)/g, '-$1').split(/[|\s]+/).filter(Boolean), nums = toks.filter(function (x) { return NUM.test(x); }); if (nums.length < 2) continue;
     var lim = nums.filter(function (x) { return x[0] === '±'; }).pop() || ''; var v = nums.filter(function (x) { return x[0] !== '±'; });
     var pt = { point: v[0], ref: v[0], reading: v[1] || '', deviation: v[2] || '', reading2: dirs === 2 ? (v[3] || '') : '', deviation2: dirs === 2 ? (v[4] || '') : '', limit: lim };
@@ -1980,7 +1990,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
 function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
   if (!L.length) { $('#pm').innerHTML = '<div class="empty"><b>No codes yet</b>Go back to Codes and add them.</div>'; $('#cf').innerHTML = '<button class="btn ghost" id="cb">Back</button>'; $('#cb').onclick = function () { gotoStep(p, 'det'); }; return; }
   genGroups(p); p.ci = Math.min(Math.max(p.ci || 0, 0), L.length - 1);
-  var it = L[p.ci], nav0 = '<div class="certtop"><button class="btn ghost sm" id="toHub" style="flex:none">‹ All certificates</button><span><b>' + savedN(p) + '</b> of ' + L.length + ' saved</span></div><div class="bp-bar thin"><i style="width:' + Math.round(savedN(p) / L.length * 100) + '%"></i></div><div class="certnav"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + '>‹</button><select class="inp" id="cj">' + L.map(function (x, i) { var rd = x.old && (x.old.points || []).length, pm = i ? L[i - 1].machineId || '' : '', mm = x.machineId || ''; return (mm !== pm ? (pm ? '</optgroup>' : '') + (mm ? '<optgroup label="' + esc(machName(p, x)) + '">' : '') : '') + (i === L.length - 1 && mm ? '' : '') + '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + (i + 1) + ' / ' + L.length + ' · ' + esc(x.code || x.description) + (x.saved ? '  ✓ saved' : rd ? '' : '  (no old cert)') + '</option>' + (i === L.length - 1 && mm ? '</optgroup>' : ''); }).join('') + '</select><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + '>›</button></div>';
+  var it = L[p.ci], nav0 = coverBar(p, L, it) + '<select class="inp" id="cj" style="display:none">' + L.map(function (x, i) { return '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + i + '</option>'; }).join('') + '</select><button id="toHub" style="display:none"></button>';
   var to0 = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
   if (!(it.old && ((it.old.points || []).length || genOn(it) || (/found|similar/.test(it.old.status || '') && it.old.file && it.old.file.id && CL.on && genWanted(it))))) { var os = (it.old || {}).status;
     $('#pm').innerHTML = nav0 + '<div class="paper"><div class="ph-top"><div><b>' + esc(it.code || it.description) + '</b><small>' + esc(it.description || '') + '</small></div><span>No old certificate</span></div>' +
@@ -1991,7 +2001,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
           '<h5>Similar devices from last year</h5>' + (it.simBusy ? '<div class="okline"><span class="spin dark"></span> Looking for similar devices…</div>' : (it.simList || []).length ? '<div class="list">' + it.simList.map(function (x, i) { return '<button class="row" data-sim="' + i + '"><span class="t"><b>' + esc(x.name) + '</b><small>' + esc([x.folder, x.snip].filter(Boolean).join(' · ').slice(0, 140)) + '</small></span><span class="pill">Use</span></button>'; }).join('') + '</div>' : '<div class="small">' + (it.description ? 'None found.' : 'Write the description (Edit item) to find similar devices.') + '</div>') +
           '<div class="cf"><button class="btn ghost" id="eItem">Edit item</button></div>') + '</div>';
     $('#cf').innerHTML = '<button class="btn ghost" id="cbk">' + (p.ci ? '‹ Previous' : '‹ All') + '</button><button class="btn blue" id="cnx">' + (p.ci === L.length - 1 ? 'All certificates' : 'Skip ›') + '</button>';
-    var bind0 = function () { var x; if ((x = $('#cp'))) x.onclick = function () { to0(p.ci - 1); }; if ((x = $('#cn'))) x.onclick = function () { to0(p.ci + 1); }; $('#cj').onchange = function () { to0(+$('#cj').value); };
+    var bind0 = function () { coverBarBind(p); var x; if ((x = $('#cp'))) x.onclick = function () { to0(p.ci - 1); }; if ((x = $('#cn'))) x.onclick = function () { to0(p.ci + 1); }; $('#cj').onchange = function () { to0(+$('#cj').value); };
       $('#cbk').onclick = function () { if (p.ci) to0(p.ci - 1); else toHub(p); }; $('#cnx').onclick = function () { if (p.ci === L.length - 1) toHub(p); else to0(p.ci + 1); };
       if ((x = $('#oAgain'))) x.onclick = function () { it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
       if ((x = $('#oCert'))) x.onclick = function () { var v = window.prompt('Old certificate number (e.g. 10/EP-3107-2025)', it.prevCert || ''); if (!v) return; it.prevCert = v.trim(); it.old = { status: 'searching' }; tCertEd(p); findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; saveProjects(); if (S.cur === p.id && p.tab === 'cert') tCertEd(p); }); };
@@ -2094,7 +2104,7 @@ function tCertEd(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(
       var a = tr.dataset.pt.split('|'), k = a[0] + (a[1] === '2' ? 'd' : ''); if (inp.dataset.k === 'reading' && it.rounded && it.rounded[k] != null) { delete it.rounded[k]; inp.classList.remove('rnd'); } (it.nv[k] = it.nv[k] || {})[inp.dataset.k] = inp.value.trim(); saveProjects(); var r = upd(tr); if (r.res === 'OUT' && inp.dataset.k === 'reading') toast('OUT – deviation ' + r.dev + ' is beyond ±' + r.lim, true); };
     inp.onblur = function () { var dd = decFor(inp), nv = padTo(inp.value, dd); if (nv !== inp.value) { inp.value = nv; inp.oninput(); } };
     inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); var i = inputs.indexOf(inp); if (inputs[i + 1]) inputs[i + 1].focus(); else $('#cnx').focus(); } }; }); });
-  oldBind(p, it, function () { tCertEd(p); }); balBind(p, it, function () { tCertEd(p); }); genBind(p, it, function () { tCertEd(p); }); genEnsure(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); }); balEnsure(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); });
+  coverBarBind(p); oldBind(p, it, function () { tCertEd(p); }); balBind(p, it, function () { tCertEd(p); }); genBind(p, it, function () { tCertEd(p); }); genEnsure(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); }); balEnsure(p, it, function () { if (S.cur === p.id && p.tab === 'cert' && certList(p)[p.ci] === it && !sheetFn) tCertEd(p); });
   var firstEmpty = inputs.filter(function (x) { return !x.value; })[0]; if (firstEmpty && !CERT_NOFOCUS) setTimeout(function () { try { firstEmpty.focus({ preventScroll: true }); } catch (e) {} }, 50);
 }
 var CERT_NOFOCUS = /Android|iPhone|iPad/i.test(navigator.userAgent);
@@ -2166,6 +2176,15 @@ function oldBind(p, it, rr) { var o = it.old;
     $$('[data-obe]').forEach(function (e) { e.onchange = function () { var e0 = b.ecc; e0.r[+e.dataset.obe] = e.value.trim(); if (e0.r.every(isNum)) e0.err = e0.r.map(function (v, k) { var x = numv(v) - numv(e0.r[0]); return k === 0 ? '—' : (x === 0 ? '0' : x.toFixed(decMax(e0.r))); }); it.saved = 0; saveProjects(); rr(); }; });
     $$('[data-obel]').forEach(function (e) { e.onchange = function () { b.ecc.load = e.value.trim(); it.saved = 0; saveProjects(); rr(); }; }); }
   $$('[data-ogc]').forEach(function (e) { e.onchange = function () { var a = e.dataset.ogc.split('|').map(Number); o.gen.blocks[a[0]].rows[a[1]][a[2]] = e.value.trim(); it.saved = 0; saveProjects(); rr(); }; }); }
+/* the cover stays on top while you flip through its certificates */
+function coverBar(p, L, it) { var gs = coverGroups(p), gi = -1, gr = null; gs.forEach(function (g2, k) { if (gr) return; if (g2.items.indexOf(it) >= 0) { gr = g2; gi = k; } }); if (!gr) gr = { items: [it] };
+  var gg = genGroups(p).filter(function (g2) { return g2.items.indexOf(it) >= 0; })[0], m = gr.machine, title = m ? m.name + (m.code ? ' · ' + m.code : '') : (gr.items[0].description || 'Units'), done = gr.items.filter(function (x) { return x.saved; }).length, pos = gr.items.indexOf(it);
+  return '<div class="cvbar"><div class="cvtabs"><button id="cvAll">▦ Whole project <small>' + savedN(p) + '/' + L.length + '</small></button><button id="cvCov"' + (gi < 0 ? ' disabled' : '') + ' data-gi="' + gi + '">📄 Cover page</button><button class="on">✎ ' + (pos + 1) + ' of ' + gr.items.length + ' in this cover</button></div>' +
+    '<div class="cvno"><span>CERTIFICATE NO.</span><b>' + esc(it.certNo || '—') + '</b><small>' + esc(it.code || it.description || '') + '</small></div>' +
+    '<div class="cvhead"><span class="tcnt">' + gr.items.length + '</span><b>' + esc(title) + '</b><small>' + (gg ? esc(gg.from + (gg.to !== gg.from ? ' → ' + gg.to : '')) + ' · ' : '') + done + ' of ' + gr.items.length + ' saved' + (gs.length > 1 ? ' · cover ' + (gi + 1) + ' of ' + gs.length : '') + '</small></div>' +
+    '<div class="cvstrip"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + ' title="Previous">‹</button><div class="cvchips">' + gr.items.map(function (x) { var i = L.indexOf(x); return '<button class="cvc' + (x === it ? ' on' : '') + (x.saved ? ' ok' : cState(x) === 'none' ? ' bad' : '') + '" data-cj2="' + i + '">' + esc(x.code || x.description || '—') + (x.saved ? ' ✓' : '') + '</button>'; }).join('') + '</div><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + ' title="Next">›</button></div></div>'; }
+function coverBarBind(p) { var a = $('#cvAll'); if (a) a.onclick = function () { p.hubFocus = null; toHub(p); }; var c = $('#cvCov'); if (c) c.onclick = function () { coverSheet(p, +c.dataset.gi); };
+  $$('[data-cj2]').forEach(function (b) { b.onclick = function () { p.ci = +b.dataset.cj2; saveProjects(); tCertEd(p); window.scrollTo(0, 0); }; }); var on = $('.cvc.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' }); }
 function balBind(p, it, rr) { var nb = function () { return (it.nbal = it.nbal || {}); }, d = resDec(it);
   var keep = function (e, set) { e.onchange = function () { var v = e.value.trim().replace(',', '.'); if (d != null && isNum(v) && !e.dataset.bl && !e.dataset.bel) v = padTo(v, d); e.value = v; set(v); it.saved = 0; saveProjects(); rr(); }; e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); var all = $$('.bt input'), i = all.indexOf(e); if (all[i + 1]) all[i + 1].focus(); else e.blur(); } }; };
   $$('[data-br]').forEach(function (e) { var a = e.dataset.br.split('|').map(Number); keep(e, function (v) { var r = (nb().rep = nb().rep || []); r[a[0]] = r[a[0]] || []; r[a[0]][a[1]] = v; }); });
@@ -2981,5 +3000,10 @@ function subItemSheet(p, it) { var KINDS = ['RPM', 'Timer', 'Temperature', 'Pres
 
 /* ================= start ================= */
 window.addEventListener('popstate', function () { if (sheetFn) { sheetFn = null; renderSheet(); render(); return; } if (S.cur) goHome(); });
+/* trial: a ready project with six codes; their last-year certificates come from the sample files */
+if (DEMO && !S.projects.length) { var dd = new Date(), iso = function (x) { return x.toISOString().slice(0, 10); }, ad = function (n) { var x = new Date(dd); x.setDate(x.getDate() + n); return iso(x); };
+  var dp = { id: uid(), created: new Date().toISOString(), by: 'U01', stage: 'done', tab: 'cert', reached: 9, company: { id: DEMO.company.id, name: DEMO.company.name, official: DEMO.company.official, code: DEMO.company.code, group: '' }, depts: ['QC'], orderType: 'po', order: { number: 'DEMO-001', fileName: '' }, items: [], machines: [],
+    gen: { start: '201' }, info: { cal: iso(dd), wo: ad(-7), iss: ad(3), rec: ad(-1), due: ad(365), woPre: '99', tech: 'Omar Essam', techId: 'U09', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} } };
+  DEMO.codes.forEach(function (c) { dp.items.push(newItem({ code: c, src: 'trial', dept: 'QC' })); }); S.projects.push(dp); saveProjects(); }
 Promise.all([MS.ready, CL.ready]).then(function () { if (S.session) boot(); else renderLogin(); });
 })();
