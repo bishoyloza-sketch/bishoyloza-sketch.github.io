@@ -334,7 +334,7 @@ function msCard() {
 function projTitle(p) { return p.company ? p.company.name : 'New job'; }
 var TYPES = { contract: ['Contract', I.doc], po: ['Purchase order (PO)', I.po], offer: ['Price offer', I.offer], approval: ['General approval', I.ok], visit: ['One visit', I.visit] };
 function renderHome() { var HM = HOME, now = new Date(), Y = HM.yr || now.getFullYear(), MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  if (DEMO && !LS.get('demoHist', 0)) demoHistory();
+  if (DEMO && !LS.get('demoHist', 0)) demoHistory(); if (DEMO && !LS.get('demoMore', 0)) setTimeout(function () { var b0 = S.projects.filter(function (q) { return !q.finished && q.company && q.company.code === '99DP'; })[0]; if (b0) { try { queueOld(b0); } catch (e) {} } demoMore(); }, 500);
   var jobs = S.projects.slice().sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
   var certsOf = function (p) { try { return certList(p); } catch (e) { return (p.items || []).filter(function (x) { return x.code || x.description; }); } };
   var isDone = function (p) { var L = certsOf(p); return p.finished || (L.length > 0 && L.every(function (x) { return x.saved; })); };
@@ -373,6 +373,18 @@ var STAGE_T = { company: ['Company', 'Which company is this work for?'], date: [
 var W = { q: '' };
 function paperSheet(ev, Y) { var MS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'], rows = MS.map(function (m, k) { var e = ev.filter(function (x) { return x.y === Y && x.m === k; }), pages = 0, covers = {}; e.forEach(function (x) { try { pages += pagesOf(x.it); } catch (er) { pages += 1; } covers[x.p.id + '|' + (x.it.machineId || x.it.id)] = 1; }); return { m: m, s: pages + Object.keys(covers).length }; }), tot = rows.reduce(function (a, r) { return a + r.s; }, 0);
   openSheet(function () { return { title: 'Paper used · ' + Y, body: '<div class="ppt"><div class="ppt-t"><span>' + Y + '</span><b>' + tot.toLocaleString() + ' sheets</b></div>' + rows.filter(function (r, k) { return r.s || k <= new Date().getMonth() || Y < new Date().getFullYear(); }).map(function (r) { return '<div class="ppt-r"><span>' + r.m + '</span><b>' + (r.s || '—') + '</b></div>'; }).join('') + '</div>', foot: '<button class="btn" data-close2>Close</button>', mount: function () { $('[data-close2]').onclick = closeSheet; } }; }); }
+/* trial: two more open jobs (one half done, one new) made from the sample job once its old certificates are read – so the trial looks like a real working week */
+function demoMore() { if (!DEMO || LS.get('demoMore', 0)) return; var base = S.projects.filter(function (q) { return !q.finished && q.company && q.company.code === '99DP'; })[0];
+  if (!base || !base.items.length || base.items.some(function (it) { return !it.old || it.old.status === 'searching' || !(it.old.points || []).length; })) return;
+  var dd = new Date(), iso = function (n) { var x = new Date(dd); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  [{ name: 'Nile Labs', official: 'Nile Laboratories for Pharmaceuticals (sample)', code: '45NL', start: '310', pick: [0, 1, 2, 4], saved: 2, loc: 'On Site', cal: -3, wo: 'NL-118' },
+   { name: 'Delta Cosmetics', official: 'Delta Cosmetics Co. (sample)', code: '62DC', start: '120', pick: [1, 2, 3], saved: 0, loc: 'Permanent', cal: -1, wo: 'DC-042' }].forEach(function (c, ci) {
+    var p = JSON.parse(JSON.stringify(base)); p.id = uid(); p.created = new Date(Date.now() - (ci + 1) * 864e5).toISOString(); p.company = { id: 'DEMO-' + c.code, name: c.name, official: c.official, code: c.code, group: '' };
+    p.order = { number: c.wo, fileName: '' }; p.gen = Object.assign({}, p.gen, { start: c.start }); p.gen.prefix = c.code.replace(/^(\d+)([A-Z]+)$/i, '$1/$2-'); p.info = Object.assign({}, p.info, { cal: iso(c.cal), wo: iso(c.cal - 7), iss: iso(c.cal + 4), rec: iso(c.cal - 1), eLoc: c.loc, woPre: c.code.replace(/\D.*$/, '') });
+    p.machines = []; p.items = c.pick.map(function (k) { return base.items[k]; }).filter(Boolean).map(function (it, n) { var x = JSON.parse(JSON.stringify(it)); x.id = uid(); x.machineId = null; x.certNo = ''; x.saved = 0; x.nv = {};
+      if (n < c.saved) { (x.old.points || []).forEach(function (q, i) { x.nv[i] = { ref: q.ref, reading: q.reading }; if (x.old.dirs === 2) x.nv[i + 'd'] = { ref: q.ref, reading: q.reading2 }; }); x.saved = Date.now() - (n + 1) * 36e5; } return x; });
+    p.ci = null; p.cv = null; S.projects.push(p); });
+  LS.set('demoMore', 1); saveProjects(); if (!sheetFn && S.view === 'home') render(); }
 function demoHistory() { var cos = [['Demo Pharma', 9], ['Nile Labs', 6], ['Delta Cosmetics', 4]], y = new Date().getFullYear(), k = 0;
   cos.forEach(function (c, ci) { for (var j = 0; j < 4 - ci; j++) { var m = (j * 3 + ci * 2) % 11, items = []; for (var n = 0; n < c[1] + j * 2; n++) items.push({ id: 'dh' + (k++), code: 'D-' + n, description: 'Sample item', saved: new Date(y, m, 5 + n % 20).getTime(), certNo: '' }); S.projects.push({ id: 'dhist' + ci + j, created: new Date(y, m, 1).toISOString(), company: { name: c[0] }, info: { cal: y + '-' + String(m + 1).padStart(2, '0') + '-03' }, items: items, finished: true, stage: 'done', tab: 'cert', reached: 99 }); } });
   LS.set('demoHist', 1); saveProjects(); }
@@ -614,7 +626,7 @@ function queueOld(p) { if (!spOn()) return; p.items.forEach(function (it) { if (
 function runQ(p) { /* two at a time; one slow certificate never blocks the others */
   AQ.n = AQ.n || 0; while (AQ.n < 3 && AQ.q.length) (function (it) { AQ.n++; AQ.run = AQ.run || []; AQ.run.push(it.id); it.old = { status: 'searching', at: Date.now() }; if (!sheetFn) render();
     withTime(findOldCert(p, it), 90000).catch(function (e) { return { status: 'error', note: e && e.message === 'slow' ? 'SharePoint took too long – tap “Search again”' : (e && e.message) || 'error' }; })
-      .then(function (r) { AQ.run = (AQ.run || []).filter(function (x) { return x !== it.id; }); it.old = r; if (r.status === 'found') fillEmpty(it); applyKindDef(it); saveProjects(); AQ.n--; if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
+      .then(function (r) { AQ.run = (AQ.run || []).filter(function (x) { return x !== it.id; }); it.old = r; if (r.status === 'found') fillEmpty(it); applyKindDef(it); saveProjects(); AQ.n--; if (DEMO && !AQ.q.length) setTimeout(demoMore, 300); if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
 
 /* ---- 5. items: photo / Excel / unit or machine ---- */
 var UNITS = ['°C', '°F', '%RH', 'bar', 'mbar', 'psi', 'kPa', 'MPa', 'Pa', 'inH2O', 'mmH2O', 'mmHg', 'g', 'mg', 'kg', 'rpm', 's', 'min', 'h', 'lux', 'm/s', 'm³/h', 'CFM', 'V', 'mV', 'A', 'mA', 'Ω', 'mm', 'µm', 'L', 'mL', 'µL', 'pH', 'µS/cm', '%'];
