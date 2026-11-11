@@ -865,3 +865,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 
 .gapbar{margin:6px 0 8px;padding:8px 12px;border-radius:10px;background:#FFF4E0;border:1px solid #F0C27A;color:#7A4B00;font-size:13.5px}.gapbar span{color:#9A6A1E;font-size:12.5px}
 .gapnote{margin:0 0 10px;font-size:13px;line-height:1.5}.gapnote>div{margin-top:2px}
+
+.gapbar .gpest{color:#1F4E86}.gapbar .gpest span{color:#4A6E99}.gapbar>div+div{margin-top:4px}
