@@ -2068,7 +2068,7 @@ function tCertEd(p) { var same = p._edCi === p.ci && p.cv == null && p.tab === '
 function tCertEd0(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults(p); if (!String(g.start).trim() && !g.autoTried && spOn()) autoStart(p, function () { if (S.cur === p.id && p.tab === 'cert' && !sheetFn) tCertEd(p); });
   if (!L.length) { $('#pm').innerHTML = '<div class="empty"><b>No codes yet</b>Go back to Codes and add them.</div>'; $('#cf').innerHTML = '<button class="btn ghost" id="cb">Back</button>'; $('#cb').onclick = function () { gotoStep(p, 'det'); }; return; }
   genGroups(p); p.ci = Math.min(Math.max(p.ci || 0, 0), L.length - 1);
-  if (p.cv != null) return tCover(p, L);
+  if (p.cv != null) { var g9 = coverGroups(p)[p.cv]; p.cv = null; if (g9 && L.indexOf(g9.items[0]) >= 0) p.ci = L.indexOf(g9.items[0]); saveProjects(); }
   var it = L[p.ci], nav0 = railHtml(p, L, { ci: p.ci }) + certNoBar(p, it) + '<select class="inp" id="cj" style="display:none">' + L.map(function (x, i) { return '<option value="' + i + '"' + (i === p.ci ? ' selected' : '') + '>' + i + '</option>'; }).join('') + '</select><button id="toHub" style="display:none"></button>';
   var to0 = function (i) { p.ci = i; saveProjects(); tCertEd(p); window.scrollTo(0, 0); };
   if (it.old && ((it.old.points || []).length || (genOn(it) && it.old.gen))) { if (it.refs == null) { var op0 = refOptions(p, it)[0]; it.refs = op0 ? [op0.d.id] : []; it.refAuto = !!op0; syncRefs(p); } return tSheet(p, L, it, nav0, to0); }
@@ -2758,7 +2758,8 @@ function hubDetails(p, L, only) { var idx = 0, sel = p.hubSel || (p.hubSel = {})
 /* the certificates page: Tiles / Grid / Details – like the devices app */
 function gState(p, gr) { var n = gr.items.length, done = gr.items.filter(function (x) { return x.saved; }).length, none = gr.items.filter(function (x) { return cState(x) === 'none'; }).length, load = gr.items.filter(function (x) { return cState(x) === 'loading'; }).length;
   return { n: n, done: done, none: none, load: load, cls: done === n ? 'ok' : none ? 'bad' : load ? 'load' : done ? 'mid' : 'new', txt: done === n ? 'All saved ✓' : load ? 'Getting last year…' : none ? none + ' without last year\'s certificate' : done ? done + ' of ' + n + ' saved' : 'Not started' }; }
-function hubList(p, L) { var hv = LS.get('hubView', 'tiles'), q = norm(p.hubQ || ''), gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
+function hubList(p, L) { return ''; }
+function hubListOld(p, L) { var hv = LS.get('hubView', 'tiles'), q = norm(p.hubQ || ''), gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
   var gs = coverGroups(p), foc = p.hubFocus && gs.some(function (g2) { return grpKey(g2) === p.hubFocus; }) ? p.hubFocus : null;
   var bar = '<div class="viewbar" role="radiogroup">' + [['tiles', '▦', 'Tiles'], ['grid', '⊞', 'Grid'], ['list', '☰', 'Details']].map(function (v) { return '<button data-hv="' + v[0] + '" class="' + (hv === v[0] ? 'on' : '') + '"><i>' + v[1] + '</i>' + v[2] + '</button>'; }).join('') + '</div>';
   var tools = '<div class="hubtools"><div class="search sm">' + I.search + '<input id="hq" placeholder="Search a code, description, cover or certificate no." value="' + esc(p.hubQ || '') + '" autocomplete="off"></div><button class="ia" id="hLy" title="Put every certificate under the same cover as last year">Covers as last year</button>' + (hv === 'list' && !foc ? '<button class="ia" id="hExp">' + (gs.every(function (g2) { return grpOpen(p, g2); }) ? 'Collapse all' : 'Expand all') + '</button>' : '') + '</div>';
