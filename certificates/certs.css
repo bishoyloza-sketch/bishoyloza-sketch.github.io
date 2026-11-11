@@ -795,3 +795,6 @@ td.shc{background:#FFFBEA!important}
 .rgg .btn{height:30px;min-height:0;font-size:12.5px;padding:0 10px;flex:none}.rgg .btn.clr{color:var(--danger)}
 .cf1.x{color:#C0392B;border-color:#F0C9C4}.cf1.x:hover{background:#C0392B;color:#fff}
 .rgt tr.mis td{background:#FDECEC}.rgt tr.mis .rgi{border-color:#C0392B}
+.donebar{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;z-index:70;display:none;align-items:center;gap:12px;background:#13294B;color:#fff;border-radius:999px;padding:7px 8px 7px 18px;box-shadow:0 8px 24px rgba(19,41,75,.35);font-size:13.5px;font-weight:600}
+.donebar.on{display:flex}.donebar .btn{height:36px;min-height:0;padding:0 18px;background:#2FA36B;border-color:#2FA36B;font-size:14px;flex:none}
+.pvtop .shg{display:flex;gap:6px;flex-wrap:wrap}
