@@ -597,6 +597,12 @@ function wOrder(p) {
 var AQ = { busy: false, q: [] };
 function rngNums(t) { var m = tidy(t).match(/(-?\d+(?:\.\d+)?)\s*(?::|to|~)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?$/i), mx = !m && tidy(t).match(/max\.?\s*(-?\d+(?:\.\d+)?)\s*(\S+)?/i);
   return m ? { lo: m[1], hi: m[2], u: unitKey((m[3] || '').trim()) } : mx ? { lo: '0', hi: mx[1], u: unitKey(mx[2] || '') } : null; }
+function applyKindDef(it) { var d = it.kindDef, w = it.wantSop; if (!d && !w) return; delete it.kindDef; delete it.wantSop; d = d || {}; var o = it.old && it.old.fields ? it.old : null, f = o ? o.fields : {};
+  if (w) { if (!o) o = it.old = Object.assign(it.old || {}, { fields: {}, points: (it.old && it.old.points) || [] }); o.fields.procedure = w; }
+  if (d.descAuto && String(f.description || '').trim()) it.description = String(f.description).trim();
+  if (d.unit && !it.unit) it.unit = d.unit; if (d.res && !isNum(it.res)) { it.res = d.res; it.resUnit = it.resUnit || d.unit || it.unit; it.resFrom = 'kind'; }
+  if (d.lim && (!it.lim || !isNum(it.lim.val)) && !String(f.limits || '').trim()) { it.lim = d.lim; it.limFrom = 'user'; }
+  if (d.procedure && !String(f.procedure || '').trim()) { if (!it.old || !it.old.fields) it.old = Object.assign(it.old || {}, { fields: {}, points: (it.old && it.old.points) || [] }); it.old.fields.procedure = d.procedure; } }
 function fillEmpty(it) { var f = (it.old || {}).fields || {}; if (!f) return;
   ['description', 'manufacturer', 'model', 'serial'].forEach(function (k) { if (!it[k] && f[k]) it[k] = f[k]; });
   var r = rngNums(f.range || ''), c = rngNums(f.calRange || ''); if (!r && c) r = c;
@@ -608,7 +614,7 @@ function queueOld(p) { if (!spOn()) return; p.items.forEach(function (it) { if (
 function runQ(p) { /* two at a time; one slow certificate never blocks the others */
   AQ.n = AQ.n || 0; while (AQ.n < 3 && AQ.q.length) (function (it) { AQ.n++; AQ.run = AQ.run || []; AQ.run.push(it.id); it.old = { status: 'searching', at: Date.now() }; if (!sheetFn) render();
     withTime(findOldCert(p, it), 90000).catch(function (e) { return { status: 'error', note: e && e.message === 'slow' ? 'SharePoint took too long – tap “Search again”' : (e && e.message) || 'error' }; })
-      .then(function (r) { AQ.run = (AQ.run || []).filter(function (x) { return x !== it.id; }); it.old = r; if (r.status === 'found') fillEmpty(it); saveProjects(); AQ.n--; if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
+      .then(function (r) { AQ.run = (AQ.run || []).filter(function (x) { return x !== it.id; }); it.old = r; if (r.status === 'found') fillEmpty(it); applyKindDef(it); saveProjects(); AQ.n--; if (!sheetFn) render(); runQ(p); }); })(AQ.q.shift()); }
 
 /* ---- 5. items: photo / Excel / unit or machine ---- */
 var UNITS = ['°C', '°F', '%RH', 'bar', 'mbar', 'psi', 'kPa', 'MPa', 'Pa', 'inH2O', 'mmH2O', 'mmHg', 'g', 'mg', 'kg', 'rpm', 's', 'min', 'h', 'lux', 'm/s', 'm³/h', 'CFM', 'V', 'mV', 'A', 'mA', 'Ω', 'mm', 'µm', 'L', 'mL', 'µL', 'pH', 'µS/cm', '%'];
@@ -1175,7 +1181,7 @@ function runCerts(p, only) { if (CRUN.on) return; if (!spOn()) return toast('Con
   CRUN = { on: true, stop: false, d: 0, n: list.length }; render(); var i = 0;
   var next = function () { if (CRUN.stop || i >= list.length) { CRUN.on = false; saveProjects(); render(); toast(CRUN.stop ? 'Stopped' : 'Search finished'); return; }
     var it = list[i++]; it.old = { status: 'searching' }; if (!sheetFn) render();
-    findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; CRUN.d++; saveProjects(); if (!sheetFn) render(); next(); }); };
+    findOldCert(p, it).catch(function (e) { return { status: 'error', note: e.message }; }).then(function (r) { it.old = r; applyKindDef(it); CRUN.d++; saveProjects(); if (!sheetFn) render(); next(); }); };
   next(); }
 var OST = { found: ['Found', 'var(--office)', 'var(--office-soft)'], similar: ['Similar', 'var(--pending)', 'var(--pending-soft)'], missing: ['Missing', 'var(--danger)', 'var(--danger-soft)'], error: ['Error', 'var(--danger)', 'var(--danger-soft)'], searching: ['Searching…', 'var(--blue)', 'var(--blue-soft)'] };
 function opill(it) { var s = OST[(it.old || {}).status] || ['To search', 'var(--oos)', 'var(--oos-soft)']; return '<span class="pill" style="--s-fg:' + s[1] + ';--s-bg:' + s[2] + '">' + s[0] + '</span>'; }
@@ -2624,12 +2630,15 @@ function itemSheet(p, gi, it0, pick) { var gsAll = coverGroups(p), gr = gi === '
         var o = $('#isO'); if (o) o.onclick = function () { closeSheet(); p.ci = certList(p).indexOf(it0); p.cv = null; saveProjects(); render(); window.scrollTo(0, 0); };
         $('#isOk').onclick = function () { if (!st.description && !st.code && !(st.ty && st.ty !== 'other')) return toast('Choose the type or write the description', true);
           var it = it0;
-          if (isNew && gi === 'new') { it = newItem({ code: st.code, description: st.description || kind8(st.code) || 'Item', dept: (p.items[p.items.length - 1] || {}).dept || '', src: 'sub-item' }); p.items.push(it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
+          if (isNew && gi === 'new') { it = newItem({ code: st.code, description: st.description || ({ 'Temperature': 'Temperature Sensor', 'Humidity': 'Humidity Sensor', 'Pressure': 'Pressure Gauge', 'Differential Pressure': 'Differential Pressure Gauge', 'Weight': 'Balance', 'Timer': 'Timer', 'RPM': 'RPM', 'Air Velocity': 'Air Velocity' })[st.ty || kind8(st.code)] || kind8(st.code) || 'Item', dept: (p.items[p.items.length - 1] || {}).dept || '', src: 'sub-item' }); p.items.push(it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
           else if (isNew) { if (!m) { var f0 = (gr.items[0].old && gr.items[0].old.fields) || {}; m = { id: uid(), name: gr.items[0].description || f0.description || 'Machine', code: (gr.items[0].code || '').replace(/[\/\-][^\/\-]*$/, ''), dept: gr.items[0].dept || (p.depts || [])[0] || '' }; p.machines = p.machines || []; p.machines.push(m); gr.items.forEach(function (x) { x.machineId = m.id; }); }
             var after = gr.items[gr.items.length - 1]; it = newItem({ machineId: m.id, code: st.code, description: st.description || ({ 'Temperature': 'Temperature Sensor', 'Humidity': 'Humidity Sensor', 'Pressure': 'Pressure Gauge', 'Differential Pressure': 'Differential Pressure Gauge', 'Weight': 'Balance', 'Timer': 'Timer', 'RPM': 'RPM', 'Air Velocity': 'Air Velocity' })[st.ty || kind8(st.code)] || 'Item', dept: after.dept || '', src: 'sub-item' }); p.items.splice(p.items.indexOf(after) + 1, 0, it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
-          ['description', 'code', 'manufacturer', 'model', 'serial', 'unit', 'rMin', 'rMax', 'cMin', 'cMax', 'res'].forEach(function (k) { if (k !== 'description' || st[k]) it[k] = st[k]; }); it.resUnit = st.unit;
-          if (st.limVal) { it.lim = { type: st.limType, val: st.limVal, unit: st.limType === 'abs' ? st.unit : '' }; it.limFrom = it.limFrom || 'user'; }
-          if (st.procedure) { var o2 = it.old || (it.old = { fields: {}, points: [] }); (o2.fields = o2.fields || {}).procedure = sopNorm(st.procedure); }
+          /* a new item with a code: last year's certificate is searched after adding – the values filled from the type are kept aside and used only where last year's certificate has nothing, so its data is never blocked or lost */
+          var waitOld = isNew && st.code && spOn(), kdef = waitOld ? {} : null, keep = function (k) { return !waitOld || touched[k]; };
+          ['description', 'code', 'manufacturer', 'model', 'serial', 'unit', 'rMin', 'rMax', 'cMin', 'cMax', 'res'].forEach(function (k) { if (k === 'description' && !st[k]) return; if ((k === 'unit' || k === 'res') && !keep(k)) { if (st[k]) kdef[k] = st[k]; return; } it[k] = st[k]; }); if (keep('unit')) it.resUnit = st.unit;
+          if (st.limVal) { var lm = { type: st.limType, val: st.limVal, unit: st.limType === 'abs' ? st.unit : '' }; if (keep('limVal') || keep('limType')) { it.lim = lm; it.limFrom = it.limFrom || 'user'; } else kdef.lim = lm; }
+          if (st.procedure) { if (keep('procedure')) { var o2 = it.old || (it.old = { fields: {}, points: [] }); (o2.fields = o2.fields || {}).procedure = sopNorm(st.procedure); if (waitOld) it.wantSop = o2.fields.procedure; } else kdef.procedure = sopNorm(st.procedure); }
+          if (waitOld) { if (!st.description) kdef.descAuto = 1; it.kindDef = kdef; if (it.old && !(it.old.points || []).length && !it.old.status) it.old = null; }
           p.cv = null; saveProjects(); if (window.__backPanel == null) closeSheet(); toast(isNew ? 'Item added' : 'Saved'); if (isNew && st.code) queueOld(p);
           if (!isNew) { var cds = $$('[data-cd]'), chain = function (k) { if (k >= cds.length) return fin(); var e2 = cds[k], key = e2.dataset.cd, v = e2.value.trim();
               var cur = key === 'calDate' ? (it.calDate || ensureInfo(p).cal || '') : key === 'interval' ? itInterval(p, it) : key === 'dsr' ? dsRef(p, it) : key === 'uncVal' ? (it.unc || '') : key === 'rcvSt' ? (it.rcvSt || 'In A Good Condition') : (it.dlvSt || '');
@@ -3505,7 +3514,8 @@ function pdfPreview(title, html, fname, mode) {
 
 
 /* ---------- manual certificate, sub-items under a machine ---------- */
-function startManual(it) { it.old = { status: 'manual', fields: { description: it.description || '', manufacturer: it.manufacturer || '', model: it.model || '', serial: it.serial || '' }, points: [{ point: '', ref: '', reading: '', limit: '' }], dirs: 1, split: 1, cleaned: 1, crPts: 1, resDone: 1, limDone: 1, at: Date.now() }; }
+function startManual(it) { var sop0 = it.old && it.old.fields && it.old.fields.procedure; startManual0(it); if (sop0 && !it.old.fields.procedure) it.old.fields.procedure = sop0; }
+function startManual0(it) { it.old = { status: 'manual', fields: { description: it.description || '', manufacturer: it.manufacturer || '', model: it.model || '', serial: it.serial || '' }, points: [{ point: '', ref: '', reading: '', limit: '' }], dirs: 1, split: 1, cleaned: 1, crPts: 1, resDone: 1, limDone: 1, at: Date.now() }; }
 function machName(p, it) { var m = (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0]; return m ? m.name + (m.code ? ' · ' + m.code : '') : ''; }
 var KUNIT = { 'RPM': ['RPM', '1'], 'Timer': ['sec', '1'], 'Temperature': ['°C', '0.1'], 'Pressure': ['bar', '0.01'], 'Humidity': ['%RH', '0.1'], 'Differential Pressure': ['Pa', '1'], 'Air Velocity': ['m/s', '0.01'], 'Weight': ['g', '0.01'] };
 function subItemSheet(p, it) { var KINDS = ['RPM', 'Timer', 'Temperature', 'Pressure', 'Humidity', 'Differential Pressure', 'Air Velocity', 'Weight'];
