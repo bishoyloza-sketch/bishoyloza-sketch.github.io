@@ -1175,12 +1175,19 @@ var KSEED = { busy: false };
 function knowSeed() { /* once a week: read a few certificates of each kind so the defaults exist from the first day */
   if (KSEED.busy || !spOn()) return; var k0 = knowGet(); if (k0.at && Date.now() - k0.at < 7 * 864e5) return; KSEED.busy = true; k0.at = Date.now(); LS.set('know', k0);
   var words = ['Temperature', 'Pressure gauge', 'Timer', 'RPM', 'Humidity', 'Balance', 'Differential Pressure', 'Air velocity'];
-  words.reduce(function (pr, w) { return pr.then(function () { return spSearch('"Procedure No." "' + w + '"', 15).then(function (fs) { var cs = fs.filter(function (f) { return isCalCert(f.name); }).slice(0, 2);
+  words.reduce(function (pr, w) { return pr.then(function () { return spSearch('"Procedure No." "' + w + '"', 15).then(function (fs) { var cs = fs.filter(function (f) { return isCalCert(f.name, f); }).slice(0, 2);
       return cs.reduce(function (pr2, f) { return pr2.then(function () { return pdfPages(f.driveId, f.id).then(function (pages) { pages.forEach(function (pg) { var t = pg.join(' | '); if (/data\s*of\s*item/i.test(t)) learnCert(parseFields(t)); }); }).catch(function () {}); }); }, Promise.resolve()); }).catch(function () {}); }); }, Promise.resolve())
     .then(function () { KSEED.busy = false; }); }
 /* find every certificate file that holds a code: cal certs directly, covers → their cal cert */
 var CODE_CACHE = {};
-function isCalCert(n) { var b = String(n).replace(/\.(docx?|pdf)$/i, ''); return b !== n && !/cover/i.test(b) && /(^|[\s\-_.])(cal\.?\s*)?cert(ificate)?(\s*page)?[\s.]*$/i.test(b); }
+function isCalCert(n, f) { var b = String(n).replace(/\.(docx?|pdf)$/i, ''); if (b === n || /cover/i.test(b)) return false;
+  if (/(^|[\s\-_.])(cal\.?\s*)?cert(ificate)?s?(\s*page)?[\s.]*$/i.test(b)) return true;
+  /* integrity / filter tests and other certificates saved only under their number, e.g. "96-112-2026", "58-013,024-2026", "96-070-111-2026 Integrity Test Certificates" */
+  if (/letter|price|offer|invoice|report|plan|protocol|\bp\.?q\b|\bo\.?q\b|\bi\.?q\b|uncertaint|sheet|copy of|- copy\b|^~/i.test(b) && !/integrity/i.test(b)) return false;
+  var path = ''; try { path = decodeURIComponent((f && (f.webUrl || f.path)) || ''); } catch (e) { path = (f && (f.webUrl || f.path)) || ''; }
+  var num = /^\s*\d{1,3}\s*[A-Za-z]{0,4}\s*[-_ ]\s*\d{1,4}(\s*[,\-]\s*\d{1,4})*\s*[-_ ]\s*(19|20)\d{2}\b/.test(b);
+  if (/integrity\s*test|filter\s*test/i.test(b)) return true;
+  return num && (!path || /\/Certificates\/[^\/]*Cert/i.test(path)) && /^[\s\d\-_,.()A-Za-z]*$/.test(b.replace(/integrity|test|certificates?/gi, '')); }
 function isCover(n) { return /cover/i.test(n) && /\.(docx?|pdf)$/i.test(n); }
 function certBase(n) { return String(n).replace(/\.(docx?|pdf)$/i, '').replace(/[\s.]*(cover\s*page|cover|cal\.?\s*cert(ificate)?|cert(ificate)?\s*page|cert(ificate)?)[\s.]*$/i, '').trim(); }
 function codeHits(p, code) { code = String(code || '').trim(); if (!code) return Promise.resolve([]);
@@ -1190,11 +1197,11 @@ function codeHits(p, code) { code = String(code || '').trim(); if (!code) return
   var all = {}, add = function (fs) { (fs || []).forEach(function (f) { if (!all[f.id]) all[f.id] = f; }); };
   return Promise.all(qs.map(function (x) { return spSearch(x, 50).then(add).catch(function () {}); })).then(function () {
     var fs = Object.keys(all).map(function (k) { return all[k]; }), cc = norm(code);
-    var certs = fs.filter(function (f) { return isCalCert(f.name); }), have = {}; certs.forEach(function (f) { have[certBase(f.name).toLowerCase()] = 1; });
+    var certs = fs.filter(function (f) { return isCalCert(f.name, f); }), have = {}; certs.forEach(function (f) { have[certBase(f.name).toLowerCase()] = 1; });
     var covers = fs.filter(function (f) { return isCover(f.name) && !have[certBase(f.name).toLowerCase()]; });
     covers.forEach(function (f) { f.yr = yearOf(f); }); covers.sort(function (a, b) { return b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
     return Promise.all(covers.slice(0, 10).map(function (cv) { var b = certBase(cv.name);
-      return spSearch('filename:"' + b + '"', 10).then(function (r) { r.filter(function (f) { return isCalCert(f.name) && certBase(f.name).toLowerCase() === b.toLowerCase(); }).forEach(function (f) { if (!have[b.toLowerCase()]) { have[b.toLowerCase()] = 1; f.viaCover = cv.summary; certs.push(f); } }); }).catch(function () {}); }))
+      return spSearch('filename:"' + b + '"', 10).then(function (r) { r.filter(function (f) { return isCalCert(f.name, f) && certBase(f.name).toLowerCase() === b.toLowerCase(); }).forEach(function (f) { if (!have[b.toLowerCase()]) { have[b.toLowerCase()] = 1; f.viaCover = cv.summary; certs.push(f); } }); }).catch(function () {}); }))
       .then(function () { certs.forEach(function (f) { f.yr = yearOf(f); f.inSnip = norm((f.summary || '') + ' ' + (f.viaCover || '')).indexOf(cc) >= 0 ? 1 : 0; });
         certs.sort(function (a, b) { return b.yr - a.yr || b.inSnip - a.inSnip || String(b.mod).localeCompare(String(a.mod)); });
         CODE_CACHE[key] = certs; return certs; }); }); }
@@ -1215,7 +1222,7 @@ function findOldCert(p, it) {
 function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
 function findSimilar(p, it) { var q = [it.description, it.manufacturer, it.model].filter(Boolean).join(' ');
   if (!q) return Promise.reject(new Error('Write the description first'));
-  return spSearch(q, 30).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name); }).slice(0, 6).map(function (f) { var r = fileRef(f); r.snip = f.summary; return r; }); }); }
+  return spSearch(q, 30).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name, f); }).slice(0, 6).map(function (f) { var r = fileRef(f); r.snip = f.summary; return r; }); }); }
 var CRUN = { on: false, stop: false, d: 0, n: 0 };
 function runCerts(p, only) { if (CRUN.on) return; if (!spOn()) return toast('Connect SharePoint first (home screen)', true);
   var list = only ? [only] : p.items.filter(function (i) { return !i.old || i.old.status === 'error'; }); if (!list.length) return toast('All items were searched');
@@ -1833,7 +1840,7 @@ function certBatches(p, y, m) { var pre = String(p.company.code || '').replace(/
   var q = '"Calibration Date" (' + alts + ')' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"'), all = {};
   var got = [], page = function (off, k) { return spSearch(q, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); return r.length && k < 4 ? page(off + r.length, k + 1) : got; }); };
   return page(0, 0).then(function (rs) { var bases = {};
-    rs.forEach(function (f) { if (!isCalCert(f.name) || all[f.id]) return; var bk = certBase(f.name).toLowerCase(); if (bases[bk]) return; var t = (f.summary || '').replace(/\s+/g, ' ');
+    rs.forEach(function (f) { if (!isCalCert(f.name, f) || all[f.id]) return; var bk = certBase(f.name).toLowerCase(); if (bases[bk]) return; var t = (f.summary || '').replace(/\s+/g, ' ');
       var rx = new RegExp('Calibration Date\\s*(?:\\d{1,2}\\s*)?(' + M3[m] + '[a-z]*)\\.?\\s*' + y, 'i'); if (!rx.test(t)) return;
       var ds = [], mm, re = /Description\s+(.+?)\s+Calibration interval/gi; while ((mm = re.exec(t))) if (ds.indexOf(mm[1]) < 0) ds.push(mm[1]);
       f.descs = ds; f.base = certBase(f.name); bases[bk] = 1; all[f.id] = f; });
@@ -1850,7 +1857,7 @@ function monOf(t) { var m = String(t || '').replace(/\s+/g, ' ').match(/Calibrat
 function itemsNoAI(f, cover) { /* the website (no AI): machine from the cover, items from the "Data of item" pages of the cal. cert */
   var mach = '', mcode = '', ct = cover.map(function (pg) { return pg.join('\n'); }).join('\n').split('\n'), ui = ct.findIndex(function (l) { return /unit\s*under\s*test/i.test(l); });
   if (ui >= 0) for (var i = ui + 1; i < Math.min(ct.length, ui + 6); i++) { var c = ct[i].split('|').map(function (x) { return x.trim(); }); if (/^1$/.test(c[0]) && c.length >= 4) { mach = c[2] || ''; mcode = (c[5] && c[5] !== 'N/A') ? c[5] : ''; break; } if (/item\s*to\s*be|items?\s*to\s*be/i.test(ct[i])) break; }
-  return spSearch('filename:"' + f.base + '"', 10).then(function (r) { var cc = r.filter(function (x) { return isCalCert(x.name) && certBase(x.name).toLowerCase() === f.base.toLowerCase(); })[0] || (isCalCert(f.name) ? f : null);
+  return spSearch('filename:"' + f.base + '"', 10).then(function (r) { var cc = r.filter(function (x) { return isCalCert(x.name, x) && certBase(x.name).toLowerCase() === f.base.toLowerCase(); })[0] || (isCalCert(f.name, f) ? f : null);
     if (!cc) throw new Error('No cal. cert for ' + f.base); return pdfPages(cc.driveId, cc.id); }).then(function (pages) { var items = [];
     pages.forEach(function (pg) { var t = pg.join(' | '); if (!/data\s*of\s*item/i.test(t) || /continue\s*certificate/i.test(t)) return; var fl = parseFields(t); if (!fl.code && !fl.description) return;
       items.push({ code: fl.code, description: fl.description, manufacturer: fl.manufacturer, certNo: fl.certNo, calDate: fl.calDate }); });
@@ -1961,7 +1968,7 @@ function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer
     next(); };
   var run = function () { var q = st.q.trim(); if (/[\n,;]/.test(q)) { st.res = []; return runMany(many()); } st.multi = null; if (q.length < 2) { st.res = []; renderSheet(); return; } st.busy = true; renderSheet();
     var terms = companyTerms(p.company), toks = terms.map(function (t) { return t.toLowerCase().split(/[^a-z0-9؀-ۿ]+/).filter(function (w) { return w.length > 2 && !/pharma|company|egypt|for|the|and/.test(w); }); });
-    var exactQ = codeHits(p, q), wild = q.indexOf(' ') > 0 ? Promise.resolve([]) : spSearch(q + '*', 40).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name); }); }).catch(function () { return []; });
+    var exactQ = codeHits(p, q), wild = q.indexOf(' ') > 0 ? Promise.resolve([]) : spSearch(q + '*', 40).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name, f); }); }).catch(function () { return []; });
     Promise.all([exactQ, wild]).then(function (rr) { var seen = {}, out = [], ids = {}, fs = rr[0].concat(rr[1]).filter(function (f) { if (ids[f.id]) return false; ids[f.id] = 1; return true; });
       fs.forEach(function (f) {
         var pa = pathOf(f).toLowerCase(), mine = toks.some(function (ws) { return ws.some(function (w) { return pa.indexOf(w) >= 0; }); }) || (p.company.code && f.name.indexOf(String(p.company.code).replace(/[A-Z]+$/i, '')) === 0);
@@ -2090,7 +2097,7 @@ function sugScan() { var ms = sugMonths(), key = ms[0].y + '-' + ms[0].m; SUG = 
   return ms.reduce(function (pr, mo) { return pr.then(function () { var q = monthQ(mo.y, mo.m), got = [];
       var page = function (off, k) { return spSearch(q, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); SUG.d = got.length; if (!sheetFn && !S.cur) render(); return r.length && k < 7 ? page(off + r.length, k + 1) : got; }); };
       return page(0, 0).then(function (fs) { var by = {}, seen = {}, rx = new RegExp('Calibration Date\\s*(?:\\d{1,2}\\s*)?' + M3[mo.m] + '[a-z]*\\.?\\s*' + mo.y, 'i');
-        fs.forEach(function (f) { if (!isCalCert(f.name)) return; var t = (f.summary || '').replace(/\s+/g, ' '); if (!rx.test(t)) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) return; seen[b] = 1;
+        fs.forEach(function (f) { if (!isCalCert(f.name, f)) return; var t = (f.summary || '').replace(/\s+/g, ' '); if (!rx.test(t)) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) return; seen[b] = 1;
           var pre = (f.name.match(/^\s*(\d+\s*[A-Za-z]*)\s*-/) || [])[1]; if (!pre) return; pre = pre.replace(/\s+/g, '').toUpperCase(); var fo = (pathOf(f).match(/\/Cert\s*20\d\d\/([^\/]+)\//i) || [])[1] || '';
           var x = by[pre] = by[pre] || { pre: pre, folder: fo.replace(/\s*20\d\d\s*$/, '').trim(), n: 0 }; x.n++; });
         var list = Object.keys(by).map(function (k) { var x = by[k], c = coByPrefix(x.pre); x.coId = c ? c.id : ''; x.name = c ? c.name : (x.folder || x.pre); return x; }).sort(function (a, b) { return b.n - a.n; });
@@ -2163,7 +2170,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
       .catch(function () { st.prog.fail.push(c); }).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
   var searchCerts = function () { var L = list(); if (!L.length) return; reset(); st.rows = []; st.prog = { d: 0, n: L.length, fail: [] }; renderSheet();
     L.reduce(function (pr, c) { return pr.then(function () { if (st.stop) return; var nc = norm(c);
-      return spSearch('"' + c + '"', 25).then(function (fs) { var f = fs.filter(function (x) { return (isCalCert(x.name) || isCover(x.name)) && syOk(yearOf(x)) && monOk(monOf(x.summary)); }).sort(function (a, b) { return (isCalCert(b.name) ? 1 : 0) - (isCalCert(a.name) ? 1 : 0); })[0]; if (!f) throw new Error('none');
+      return spSearch('"' + c + '"', 25).then(function (fs) { var f = fs.filter(function (x) { return (isCalCert(x.name, x) || isCover(x.name)) && syOk(yearOf(x)) && monOk(monOf(x.summary)); }).sort(function (a, b) { return (isCalCert(b.name, b) ? 1 : 0) - (isCalCert(a.name, a) ? 1 : 0); })[0]; if (!f) throw new Error('none');
         f.base = certBase(f.name); return batchItems(f).then(function (r) { var hit = r.items.filter(function (x) { return norm(x.certNo) === nc; });
           (r.items.length > 1 && r.machine ? r.items : hit.length ? hit : r.items).forEach(function (x) { if (hit.indexOf(x) >= 0) st.on[st.rows.length] = true; st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? r.machine : '', machineCode: r.machineCode, from: f.base, year: yearOf(f), mon: monOf('Calibration Date ' + (x.calDate || '')) || monOf(f.summary), exact: !!hit.length }); }); }); })
       .catch(function () { st.prog.fail.push(c); }).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
@@ -2173,7 +2180,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
       var qq = '"' + q + '"' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"') + ' (filename:cert OR filename:cover)', got = [];
       var page = function (off, k) { return spSearch(qq, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); return r.length >= 50 && k < 5 ? page(off + r.length, k + 1) : got; }); };
       return page(0, 0).then(function (fs) { var seen = {}, files = [];
-        fs.forEach(function (f) { if (!(isCalCert(f.name) || isCover(f.name))) return; var y = yearOf(f); if (!syOk(y) || !monOk(monOf(f.summary))) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) { if (isCover(f.name)) seen[b].f = f; return; } f.base = certBase(f.name); f.yr = y; seen[b] = { f: f }; files.push(seen[b]); });
+        fs.forEach(function (f) { if (!(isCalCert(f.name, f) || isCover(f.name))) return; var y = yearOf(f); if (!syOk(y) || !monOk(monOf(f.summary))) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) { if (isCover(f.name)) seen[b].f = f; return; } f.base = certBase(f.name); f.yr = y; seen[b] = { f: f }; files.push(seen[b]); });
         var ny0 = new Date().getFullYear(); files = files.map(function (x) { return x.f; }).filter(function (x) { return st.per !== 'all' || x.yr >= ny0 - 2; }).sort(function (a1, b1) { return b1.yr - a1.yr; }).slice(0, 15); st.prog.n += files.length; renderSheet(); if (!files.length) st.prog.fail.push(q);
         return files.reduce(function (pr2, f) { return pr2.then(function () { if (st.stop) return; return batchItems(f).then(function (r) { var hit = r.items.filter(function (x) { var t = (x.description || '').toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); }), mach = words.every(function (w) { return (r.machine || '').toLowerCase().indexOf(w) >= 0; });
             (mach || (hit.length && r.items.length > 1 && r.machine) ? r.items : hit).forEach(function (x) { var mo3 = monOf('Calibration Date ' + (x.calDate || '')) || monOf(f.summary); if (!monOk(mo3)) return; if (st.rows.some(function (y) { return norm(y.code) === norm(x.code) && y.year === f.yr; })) return; if (!mach && hit.indexOf(x) >= 0) st.on[st.rows.length] = true; st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? r.machine : '', machineCode: r.machineCode, from: f.base, year: f.yr, mon: mo3 }); }); })
@@ -2193,7 +2200,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
       ((pv.points || []).length ? '<table class="pvt"><tr><th>Point</th><th>Ref</th><th>Reading</th><th>Limit</th></tr>' + pv.points.slice(0, 12).map(function (q) { return '<tr><td>' + esc(q.point) + '</td><td>' + esc(q.ref || '') + '</td><td>' + esc(q.reading || '') + (q.reading2 ? ' / ' + esc(q.reading2) : '') + '</td><td>' + esc(q.limit || '') + '</td></tr>'; }).join('') + '</table>' + (pv.points.length > 12 ? '<div class="tiny">+' + (pv.points.length - 12) + ' more points</div>' : '') : '<div class="tiny">No readings found on its page.</div>') +
       (pv.webUrl ? '<a class="tiny" href="' + esc(pv.webUrl) + '" target="_blank" rel="noopener">Open the file</a>' : '') + '</div>'; };
   var openPv = function (i) { st.pv = st.pv || {}; var r = st.rows[i], cur = st.pv[i]; if (cur && !cur.busy) { cur.open = !cur.open; return renderSheet(); } if (cur) return; st.pv[i] = { open: true, busy: true }; renderSheet();
-    spSearch('filename:"' + r.from + '"', 10).then(function (fs) { var f = fs.filter(function (x) { return isCalCert(x.name) && certBase(x.name).toLowerCase() === String(r.from).toLowerCase(); })[0] || fs.filter(function (x) { return isCalCert(x.name); })[0]; if (f) return f; return r.code ? codeHits(p, r.code).then(function (h) { if (!h[0]) throw new Error('The certificate file was not found'); return h[0]; }) : Promise.reject(new Error('The certificate file was not found')); }).then(function (f) {
+    spSearch('filename:"' + r.from + '"', 10).then(function (fs) { var f = fs.filter(function (x) { return isCalCert(x.name, x) && certBase(x.name).toLowerCase() === String(r.from).toLowerCase(); })[0] || fs.filter(function (x) { return isCalCert(x.name, x); })[0]; if (f) return f; return r.code ? codeHits(p, r.code).then(function (h) { if (!h[0]) throw new Error('The certificate file was not found'); return h[0]; }) : Promise.reject(new Error('The certificate file was not found')); }).then(function (f) {
       return pdfPages(f.driveId, f.id).then(function (pages) { var sec = certSection(pages, r.code || r.description) || [pages[0] || []], rs = parseResults([].concat.apply([], sec)), fl = parseFields(sec.map(function (pg) { return pg.join(' | '); }).join(' | '));
         st.pv[i] = { open: true, fields: fl, points: rs.points, webUrl: f.webUrl }; }); }).catch(function (e) { st.pv[i] = { open: true, err: e.message || 'Could not open it' }; }).then(function () { if (sheetFn) renderSheet(); }); };
   openSheet(function () { var h = have(), years = [], ny = new Date().getFullYear(); for (var y = ny; y >= ny - 5; y--) years.push(y);
@@ -2889,7 +2896,7 @@ function resFromText(t) { var m = String(t).replace(/,/g, '.').match(/resolution
 function refResAuto(p, id, done) { /* the resolution of our own reference, read once from its calibration certificate (client 25 = Akhnaton) and kept for good */
   if (!id || isNum(refResOf(p, id)) || REFQ[id] || !spOn()) return; var d = labDevices().filter(function (x) { return x.id === id; })[0]; if (!d) return; REFQ[id] = 1;
   var sn = norm(d.serial || ''), qs = ['"' + (d.model || d.description) + '" filename:25-*', '"' + (d.serial || '') + '" "CLIENT ID"', '"' + (d.serial || '') + '"', '"' + (d.model || '') + '" "' + (d.manufacturer || '') + '"'];
-  var tryQ = function (k) { if (k >= qs.length) return Promise.resolve(null); return spSearch(qs[k], 20).then(function (fs) { fs = fs.filter(function (f) { return (isCalCert(f.name) && /^25-/.test(f.name)) || /akhnaton\s*lab\.?\s*cert/i.test(pathOf(f)); }).sort(function (a, b) { return yearOf(b) - yearOf(a); });
+  var tryQ = function (k) { if (k >= qs.length) return Promise.resolve(null); return spSearch(qs[k], 20).then(function (fs) { fs = fs.filter(function (f) { return (isCalCert(f.name, f) && /^25-/.test(f.name)) || /akhnaton\s*lab\.?\s*cert/i.test(pathOf(f)); }).sort(function (a, b) { return yearOf(b) - yearOf(a); });
       return fs.slice(0, 4).reduce(function (pr, f) { return pr.then(function (got) { if (got) return got; return pdfPages(f.driveId, f.id).then(function (pages) { var t = pages.map(function (pg) { return pg.join(' | '); }).join(' | ');
           if (sn && norm(t).indexOf(sn) < 0) return null; var fl = parseFields(t), rm = String(fl.resolution || '').match(/(\d*\.?\d+)/); if (rm && isNum(rm[1])) return { res: rm[1], from: f.name };
           var dm = -1, on = false; [].concat.apply([], pages).forEach(function (l) { if (/uut|dut|unit\s*under|indication/i.test(l) && /reading|indication|value/i.test(l)) { on = true; return; } if (!on) return; if (/remarks|standard\(s\)\s*utilized|uncertainty/i.test(l)) { on = false; return; }
@@ -3011,7 +3018,7 @@ function missingHint(p, gr) { var b = {}, want = {}, known = true; gr.items.forE
   if (!known) return 0; var have = {}; gr.items.forEach(function (it) { have[itBase(it) + '#' + itSerial(it)] = 1; }); return Object.keys(want).filter(function (k) { return !have[k]; }).length; }
 function cleanCode(c) { return String(c || '').replace(/\s*([\-\/])\s*/g, '$1').replace(/([A-Za-z])\s+(\d)$/, '$1$2').replace(/\s+/g, ' ').trim(); }
 function certPagesItems(base) { /* every certificate of a batch, read straight from the cal. cert pages */
-  return spSearch('filename:"' + base + '"', 10).then(function (fs) { var f = fs.filter(function (x) { return isCalCert(x.name) && certBase(x.name).toLowerCase() === String(base).toLowerCase(); })[0]; if (!f) return [];
+  return spSearch('filename:"' + base + '"', 10).then(function (fs) { var f = fs.filter(function (x) { return isCalCert(x.name, x) && certBase(x.name).toLowerCase() === String(base).toLowerCase(); })[0]; if (!f) return [];
     return pdfPages(f.driveId, f.id).then(function (pages) { var out = [];
       pages.forEach(function (pg) { var t = pg.join(' | '); if (!/data\s*of\s*item/i.test(t) || /continue\s*certificate/i.test(t)) return; var fl = parseFields(t); if (!fl.code && !fl.description) return;
         var rs = parseResults(pg); out.push({ code: cleanCode(fl.code), description: String(fl.description || '').split(/\s+(?:calibration|code|model)\b/i)[0].trim(), manufacturer: fl.manufacturer, certNo: fl.certNo, fields: fl, points: rs.points }); }); return out; }); }).catch(function () { return []; }); }
@@ -3171,7 +3178,7 @@ function certPreview(p, it, onSave) { var n = parseInt(String(it.certNo || '').r
 /* ---- new item: start from a similar certificate (points, limits, SOP, resolution, range) ---- */
 function simFind(p, it) { var d = String(it.description || '').trim(); if (!d) return Promise.resolve([]); var toks = d.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; });
   var qs = ['"' + d + '" "Data of item"'], all = {};
-  var run = function (q) { return spSearch(q, 40).then(function (fs) { fs.forEach(function (f) { if (isCalCert(f.name) && !all[f.id]) all[f.id] = f; }); }).catch(function () {}); };
+  var run = function (q) { return spSearch(q, 40).then(function (fs) { fs.forEach(function (f) { if (isCalCert(f.name, f) && !all[f.id]) all[f.id] = f; }); }).catch(function () {}); };
   return run(qs[0]).then(function () { if (Object.keys(all).length < 2) return run(d + ' ' + (it.unit || '') + ' "Calibration Date"'); }).then(function () {
     var ny = new Date().getFullYear(), u = String(it.unit || '').toLowerCase();
     return Object.keys(all).map(function (k) { var f = all[k], t = String(f.summary || '').toLowerCase(), sc = toks.reduce(function (a, w) { return a + (t.indexOf(w) >= 0 ? 2 : 0); }, 0);
