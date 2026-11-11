@@ -798,3 +798,11 @@ td.shc{background:#FFFBEA!important}
 .donebar{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;z-index:70;display:none;align-items:center;gap:12px;background:#13294B;color:#fff;border-radius:999px;padding:7px 8px 7px 18px;box-shadow:0 8px 24px rgba(19,41,75,.35);font-size:13.5px;font-weight:600}
 .donebar.on{display:flex}.donebar .btn{height:36px;min-height:0;padding:0 18px;background:#2FA36B;border-color:#2FA36B;font-size:14px;flex:none}
 .pvtop .shg{display:flex;gap:6px;flex-wrap:wrap}
+.stdtop{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.stdc{border:1px solid #DCE3EC;border-radius:12px;background:#fff;margin-bottom:8px;overflow:hidden}
+.stdc>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#F5F7FA}
+.stdc>summary::-webkit-details-marker{display:none}
+.stdc>summary b{font-size:14.5px;color:#13294B}.stdc>summary b:before{content:'▸';display:inline-block;margin-right:8px;color:#6B7B90;transition:transform .15s}
+.stdc[open]>summary b:before{transform:rotate(90deg)}.stdc>summary span{font-size:12.5px;color:var(--muted)}
+.stdc .stdl{padding:8px}
+.fitb{font-style:normal;font-size:10.5px;font-weight:800;color:#1F8A5B;background:#E7F6EE;border-radius:20px;padding:1px 7px;margin-left:6px;vertical-align:middle}
