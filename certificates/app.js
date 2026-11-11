@@ -1858,7 +1858,8 @@ function testItems(f) { /* a test-certificate file (e.g. filter integrity): one 
       if (out.some(function (o) { return o.certNo === c.no; })) return; out.push({ code: fl || c.no, description: 'Filter integrity test' + (pt ? ' · ' + pt.trim() : ''), manufacturer: '', certNo: c.no }); });
     if (!out.length) out.push({ code: f.base, description: 'Filter integrity test', manufacturer: '', certNo: f.base });
     return { machine: '', machineCode: '', items: out }; }); }
-function batchItems(f) { /* the cover page lists every item of the batch */ if (f.test) return testItems(f);
+function isTestCert(f) { return !!f && /integrity|test\s*program|filter\s*line|filter\s*location|bubble\s*point|diffusion\s*test/i.test((f.summary || '') + ' ' + (f.name || '')); }
+function batchItems(f) { /* the cover page lists every item of the batch */ if (f.test || isTestCert(f)) return testItems(f);
   return spSearch('filename:"' + f.base + '"', 10).then(function (r) { var cv = r.filter(function (x) { return isCover(x.name) && certBase(x.name).toLowerCase() === f.base.toLowerCase(); })[0] || f;
     return pdfPages(cv.driveId, cv.id); }).then(function (pages) { var txt = pages.map(function (pg) { return pg.join(' '); }).join('\n').slice(0, 30000);
     if (!CL.on || !CL.sample) return itemsNoAI(f, pages);
@@ -2201,7 +2202,9 @@ function lySearch(p, mode, opt) { opt = opt || {};
     L.reduce(function (pr, q) { return pr.then(function () { if (st.stop) return; var words = q.toLowerCase().split(/\s+/).filter(Boolean);
       var qq = '"' + q + '"' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"') + ' (filename:cert OR filename:cover)', got = [];
       var page = function (off, k) { return spSearch(qq, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); return r.length >= 50 && k < 5 ? page(off + r.length, k + 1) : got; }); };
-      return page(0, 0).then(function (fs) { var seen = {}, files = [];
+      /* test certificates (filter integrity…) are saved only under their number – search them without the cert/cover file-name rule, by code and by company name */
+      var cw1 = companyTerms(p.company)[0] || p.company.name, extra = [('"' + q + '" "' + cw1 + '"')].concat(pre ? ['"' + q + '" filename:' + pre.replace(/[A-Za-z]+$/, '') + '*'] : []);
+      return Promise.all([page(0, 0)].concat(extra.map(function (x) { return spSearch(x, 50).catch(function () { return []; }); }))).then(function (rs) { var u0 = {}, fs = [].concat.apply([], rs).filter(function (f) { if (u0[f.id]) return false; u0[f.id] = 1; return true; }); var seen = {}, files = [];
         fs.forEach(function (f) { if (!(isCalCert(f.name, f) || isCover(f.name))) return; var y = yearOf(f); if (!syOk(y) || !monOk(monOf(f.summary))) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) { if (isCover(f.name)) seen[b].f = f; return; } f.base = certBase(f.name); f.yr = y; seen[b] = { f: f }; files.push(seen[b]); });
         var ny0 = new Date().getFullYear(); files = files.map(function (x) { return x.f; }).filter(function (x) { return st.per !== 'all' || x.yr >= ny0 - 2; }).sort(function (a1, b1) { return b1.yr - a1.yr; }).slice(0, 15); st.prog.n += files.length; renderSheet(); if (!files.length) st.prog.fail.push(q);
         return files.reduce(function (pr2, f) { return pr2.then(function () { if (st.stop) return; return batchItems(f).then(function (r) { var hit = r.items.filter(function (x) { var t = (x.description || '').toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); }), mach = words.every(function (w) { return (r.machine || '').toLowerCase().indexOf(w) >= 0; });
