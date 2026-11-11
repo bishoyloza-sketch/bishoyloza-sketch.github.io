@@ -794,3 +794,4 @@ td.shc{background:#FFFBEA!important}
 .rgg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#fff;border:1px solid #DCE3EC;border-radius:10px;padding:5px 8px}.rgg>span{font-size:12px;font-weight:800;color:#13294B;margin-right:2px}
 .rgg .btn{height:30px;min-height:0;font-size:12.5px;padding:0 10px;flex:none}.rgg .btn.clr{color:var(--danger)}
 .cf1.x{color:#C0392B;border-color:#F0C9C4}.cf1.x:hover{background:#C0392B;color:#fff}
+.rgt tr.mis td{background:#FDECEC}.rgt tr.mis .rgi{border-color:#C0392B}
