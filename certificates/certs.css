@@ -811,3 +811,8 @@ td.shc{background:#FFFBEA!important}
 .ltbl tr:hover .lx{color:#C0392B;border-color:#F0C9C4;background:#fff}.lx:hover{background:#C0392B!important;color:#fff!important}
 @media (max-width:700px){.lx{color:#C0392B}}
 body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{display:none!important}
+.selbar3{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#EAF3FC;border:1px solid #B9D3EE;border-radius:12px;padding:8px 12px;margin-bottom:10px}
+.selbar3>span{flex:1;font-size:13.5px;color:#13294B}.selbar3 .btn{flex:none;height:32px;min-height:0;font-size:12.5px}
+.selbar3 .btn.danger{background:#C0392B;border-color:#C0392B;color:#fff}.selbar3 .btn:disabled{opacity:.45}
+.lck{display:inline-flex;width:20px;height:20px;border:1.5px solid #9FB0C5;border-radius:6px;align-items:center;justify-content:center;font-size:13px;color:#fff;background:#fff}
+.lck.on{background:#1F6FB5;border-color:#1F6FB5}.ltbl tr.sel td{background:#EEF6FE}
