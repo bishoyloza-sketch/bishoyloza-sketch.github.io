@@ -1185,7 +1185,7 @@ function isCalCert(n, f) { var b = String(n).replace(/\.(docx?|pdf)$/i, ''); if 
   /* integrity / filter tests and other certificates saved only under their number, e.g. "96-112-2026", "58-013,024-2026", "96-070-111-2026 Integrity Test Certificates" */
   if (/letter|price|offer|invoice|report|plan|protocol|\bp\.?q\b|\bo\.?q\b|\bi\.?q\b|uncertaint|sheet|copy of|- copy\b|^~/i.test(b) && !/integrity/i.test(b)) return false;
   var path = ''; try { path = decodeURIComponent((f && (f.webUrl || f.path)) || ''); } catch (e) { path = (f && (f.webUrl || f.path)) || ''; }
-  var num = /^\s*\d{1,3}\s*[A-Za-z]{0,4}\s*[-_ ]\s*\d{1,4}(\s*[,\-]\s*\d{1,4})*\s*[-_ ]\s*(19|20)\d{2}\b/.test(b);
+  var num = /^\s*\d{1,3}\s*[A-Za-z]{0,4}\s*[-_ ]\s*\d{1,4}(\s*[,\-]\s*\d{0,4})*\s*[-_ ,]\s*(19|20)\d{2}\b/.test(b);
   if (/integrity\s*test|filter\s*test/i.test(b)) return true;
   return num && (!path || /\/Certificates\/[^\/]*Cert/i.test(path)) && /^[\s\d\-_,.()A-Za-z]*$/.test(b.replace(/integrity|test|certificates?/gi, '')); }
 function isCover(n) { return /cover/i.test(n) && /\.(docx?|pdf)$/i.test(n); }
@@ -1839,13 +1839,26 @@ function certBatches(p, y, m) { var pre = String(p.company.code || '').replace(/
   var alts = [M3[m] + '.' + y, M3[m] + ' ' + y, MFULL[m] + ' ' + y].filter(function (v, i, a) { return a.indexOf(v) === i; }).map(function (v) { return '"' + v + '"'; }).join(' OR ');
   var q = '"Calibration Date" (' + alts + ')' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"'), all = {};
   var got = [], page = function (off, k) { return spSearch(q, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); return r.length && k < 4 ? page(off + r.length, k + 1) : got; }); };
-  return page(0, 0).then(function (rs) { var bases = {};
+  var cw0 = companyTerms(p.company)[0] || p.company.name, tqs = ['"Test program" "' + cw0 + '"'].concat(pre ? ['"Test program" filename:' + pre.replace(/[A-Za-z]+$/, '') + '*'] : []),
+    tests = Promise.all(tqs.map(function (x) { return spSearch(x, 50).catch(function () { return []; }); })).then(function (rs) { var u = {}; return [].concat.apply([], rs).filter(function (f) { if (u[f.id]) return false; u[f.id] = 1; return true; }); });
+  return Promise.all([page(0, 0), tests]).then(function (two) { var rs = two[0], bases = {};
+    /* filter integrity / other test certificates: one file per batch, numeric dates ("DATE RECEIVED: 18/07/2025"), no cover */
+    (two[1] || []).forEach(function (f) { if (!isCalCert(f.name, f) || all[f.id]) return; var t = (f.summary || '').replace(/\s+/g, ' '), dm = t.match(/(?:Calibration\s*Date|DATE\s*RECEIVED)\s*:?\s*\d{1,2}\s*\/\s*(\d{1,2})\s*\/\s*(20\d\d)/i) || t.match(/WORK\s*ORDER\s*No\.?\s*:?\s*\d+\s*\/\s*\d{1,2}\s*\/\s*(\d{1,2})\s*\/\s*(20\d\d)/i);
+      if (!dm || +dm[1] !== m + 1 || +dm[2] !== y) return; var bk = certBase(f.name).toLowerCase(); if (bases[bk]) return; var ar = (t.match(/Production\s*Area\s+(.+?)\s+(?:Filter\s*Location|Production|Test\s*program|$)/i) || [])[1];
+      f.descs = ['Filter integrity test' + (ar ? ' · ' + ar.trim() : '')]; f.base = certBase(f.name); f.test = 1; bases[bk] = 1; all[f.id] = f; });
     rs.forEach(function (f) { if (!isCalCert(f.name, f) || all[f.id]) return; var bk = certBase(f.name).toLowerCase(); if (bases[bk]) return; var t = (f.summary || '').replace(/\s+/g, ' ');
       var rx = new RegExp('Calibration Date\\s*(?:\\d{1,2}\\s*)?(' + M3[m] + '[a-z]*)\\.?\\s*' + y, 'i'); if (!rx.test(t)) return;
       var ds = [], mm, re = /Description\s+(.+?)\s+Calibration interval/gi; while ((mm = re.exec(t))) if (ds.indexOf(mm[1]) < 0) ds.push(mm[1]);
       f.descs = ds; f.base = certBase(f.name); bases[bk] = 1; all[f.id] = f; });
     return Object.keys(all).map(function (k) { return all[k]; }).sort(function (a, b) { return a.base.localeCompare(b.base, undefined, { numeric: true }); }); }); }
-function batchItems(f) { /* the cover page lists every item of the batch */
+function testItems(f) { /* a test-certificate file (e.g. filter integrity): one item per certificate inside it */
+  return pdfPages(f.driveId, f.id).then(function (pages) { var txt = pages.map(function (pg) { return pg.join(' '); }).join('\n').replace(/\s+/g, ' '), out = [], re = /CERTIFICATE\s*NO\.?\s*:?\s*/gi, m, cuts = [];
+    while ((m = re.exec(txt))) { var nx = txt.slice(re.lastIndex, re.lastIndex + 40).replace(/\s+/g, '').match(/^(\d{1,3}\/?[A-Z]{0,4}-\d{1,5}(?:,\d{0,5})?-(?:19|20)\d\d)/i); if (nx) cuts.push({ at: m.index, no: nx[1] }); }
+    cuts.forEach(function (c, i) { var seg = txt.slice(c.at, cuts[i + 1] ? cuts[i + 1].at : txt.length), fl = (seg.match(/Filter\s*Line\s+([A-Z0-9][A-Za-z0-9\-\/]{2,24})/i) || [])[1], pt = (seg.match(/Point\s*Name\s+(.+?)\s+(?:Filter\s*Line|Product\s*batch|Filter\s*Part|Housing|Test\s*pressure)/i) || [])[1];
+      if (out.some(function (o) { return o.certNo === c.no; })) return; out.push({ code: fl || c.no, description: 'Filter integrity test' + (pt ? ' · ' + pt.trim() : ''), manufacturer: '', certNo: c.no }); });
+    if (!out.length) out.push({ code: f.base, description: 'Filter integrity test', manufacturer: '', certNo: f.base });
+    return { machine: '', machineCode: '', items: out }; }); }
+function batchItems(f) { /* the cover page lists every item of the batch */ if (f.test) return testItems(f);
   return spSearch('filename:"' + f.base + '"', 10).then(function (r) { var cv = r.filter(function (x) { return isCover(x.name) && certBase(x.name).toLowerCase() === f.base.toLowerCase(); })[0] || f;
     return pdfPages(cv.driveId, cv.id); }).then(function (pages) { var txt = pages.map(function (pg) { return pg.join(' '); }).join('\n').slice(0, 30000);
     if (!CL.on || !CL.sample) return itemsNoAI(f, pages);
