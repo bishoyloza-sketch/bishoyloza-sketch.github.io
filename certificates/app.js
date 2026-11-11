@@ -1208,7 +1208,7 @@ function codeHits(p, code) { code = String(code || '').trim(); if (!code) return
 function findOldCert(p, it) {
   var key = it.code || it.prevCert; if (!key) return Promise.resolve({ status: 'missing', note: 'No code – use a similar device' });
   var mine = (p.deptSug && p.deptSug.certFolders) || [];
-  return codeHits(p, it.code || it.prevCert).then(function (fs) { return fs.length || !it.prevCert || !it.code ? fs : codeHits(p, it.prevCert); }).then(function (fs) { if (fs.length || !it.code) return fs;
+  return (it.oldFile && it.oldFile.id ? Promise.resolve([it.oldFile]) : codeHits(p, it.code || it.prevCert)).then(function (fs) { return fs.length || !it.prevCert || !it.code ? fs : codeHits(p, it.prevCert); }).then(function (fs) { if (fs.length || !it.code) return fs;
       /* not found by search: the code may be written with spaces in last year's file ("20 12 A/K") – look inside the files where the other codes of this project were found */
       var seen = {}, sib = []; p.items.forEach(function (o) { var f = o !== it && o.old && o.old.status === 'found' && o.old.file; if (f && f.id && !seen[f.id]) { seen[f.id] = 1; sib.push(f); } });
       return sib.slice(0, 6).reduce(function (pr, f) { return pr.then(function (hit) { if (hit.length) return hit; return pdfPages(f.driveId, f.id).then(function (pages) { return certSection(pages, it.code) ? [f] : []; }).catch(function () { return []; }); }); }, Promise.resolve([])); }).then(function (fs) { fs = fs.slice(); if (it.prevBase) { var pb = String(it.prevBase).toLowerCase(); fs.sort(function (a1, b1) { return (certBase(b1.name).toLowerCase() === pb ? 1 : 0) - (certBase(a1.name).toLowerCase() === pb ? 1 : 0); }); }
@@ -1216,7 +1216,7 @@ function findOldCert(p, it) {
     fs.sort(function (a, b) { return b.mine - a.mine || b.yr - a.yr || String(b.mod).localeCompare(String(a.mod)); });
     if (!fs.length) return { status: 'missing', note: 'No certificate with this code on SharePoint' };
     var tryN = function (k) { if (k >= Math.min(4, fs.length)) return { status: 'missing', note: 'Files found, but the code is not clearly inside them', files: fs.slice(0, 6).map(fileRef) };
-      var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = (it.prevCert && certSection(pages, it.prevCert)) || (it.code && certSection(pages, it.code)); if (!sec) return tryN(k + 1);
+      var f = fs[k]; return pdfPages(f.driveId, f.id).then(function (pages) { var sec = (it.prevCert && certSection(pages, it.prevCert)) || (it.code && certSection(pages, it.code)); if (!sec && it.oldFile && f.id === it.oldFile.id) sec = pages; if (!sec) return tryN(k + 1);
         return readSec(sec, 'The certificate is for equipment code "' + it.code + '".').then(function (x) { return { status: 'found', file: fileRef(f), fields: x.fields, points: x.points, dirs: x.dirs, bal: x.bal, files: fs.slice(0, 6).map(fileRef), at: Date.now() }; }); }); };
     return tryN(0); }); }
 function fileRef(f) { return { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, year: f.yr || yearOf(f), folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') }; }
@@ -1969,12 +1969,21 @@ function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer
   var run = function () { var q = st.q.trim(); if (/[\n,;]/.test(q)) { st.res = []; return runMany(many()); } st.multi = null; if (q.length < 2) { st.res = []; renderSheet(); return; } st.busy = true; renderSheet();
     var terms = companyTerms(p.company), toks = terms.map(function (t) { return t.toLowerCase().split(/[^a-z0-9؀-ۿ]+/).filter(function (w) { return w.length > 2 && !/pharma|company|egypt|for|the|and/.test(w); }); });
     var exactQ = codeHits(p, q), wild = q.indexOf(' ') > 0 ? Promise.resolve([]) : spSearch(q + '*', 40).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name, f); }); }).catch(function () { return []; });
-    Promise.all([exactQ, wild]).then(function (rr) { var seen = {}, out = [], ids = {}, fs = rr[0].concat(rr[1]).filter(function (f) { if (ids[f.id]) return false; ids[f.id] = 1; return true; });
+    /* words (integrity, filter, HEPA…) are searched inside this company's certificates too – filter tests have no cover and no "Code" line */
+    var cw = (toks[0] || [])[0] || '', pre0 = String(p.company.code || '').replace(/[^0-9]/g, ''), qq = /\s/.test(q) ? '"' + q + '"' : q + '*',
+      inCo = Promise.all([cw ? spSearch(qq + ' ' + cw, 50) : Promise.resolve([]), pre0 ? spSearch(qq + ' filename:' + pre0 + '*', 50) : Promise.resolve([]), /integ|filter|hepa|leak|bubble|diffusion/i.test(q) && cw ? spSearch('"Integrity Test" ' + cw, 50) : Promise.resolve([])])
+        .then(function (rs) { return [].concat.apply([], rs).filter(function (f) { return isCalCert(f.name, f); }); }).catch(function () { return []; });
+    Promise.all([exactQ, wild, inCo]).then(function (rr) { var seen = {}, out = [], ids = {}, fs = rr[0].concat(rr[1], rr[2]).filter(function (f) { if (ids[f.id]) return false; ids[f.id] = 1; return true; });
       fs.forEach(function (f) {
         var pa = pathOf(f).toLowerCase(), mine = toks.some(function (ws) { return ws.some(function (w) { return pa.indexOf(w) >= 0; }); }) || (p.company.code && f.name.indexOf(String(p.company.code).replace(/[A-Z]+$/i, '')) === 0);
         var txt = (f.summary || '') + ' ' + (f.viaCover || '') + ' ', codes = [], m, re = /Code\s*:?\s*([A-Z0-9][A-Za-z0-9\-\/ ]{1,18}?)(?=\s+(?:Calibration|Range|Cal\.|Model|Serial|Description|Manufacturer|$))/g;
         while ((m = re.exec(txt))) codes.push(m[1].trim());
         var cn = (txt.match(/CERTI\s*FICATE\s*NO\.?\s*:?\s*([0-9A-Z][0-9A-Z \/\-]{2,24}?\d{4})/i) || [])[1], ds = (txt.match(/Description\s+(.+?)\s+(?:Calibration|Code)/i) || [])[1], mf = (txt.match(/Manufacturer\s+(.+?)\s+(?:Calibration|Description)/i) || [])[1];
+        if (!codes.length && /integrity|filter\s*line|test\s*program|bubble\s*point|diffusion/i.test(txt + ' ' + f.name)) { /* a test certificate (one file, no cover, no Code line): one row per file */
+          var fl = (txt.match(/Filter\s*Line\s+([A-Z0-9][A-Za-z0-9\-\/]{2,24})/i) || [])[1], ptn = (txt.match(/Point\s*Name\s+(.+?)\s+(?:Filter\s*Line|Product\s*batch|Filter\s*Part|Housing|Test\s*pressure|$)/i) || [])[1], ar = (txt.match(/Production\s*Area\s+(.+?)\s+(?:Filter\s*Location|Production|Test\s*program|$)/i) || [])[1], cno = cn ? cn.replace(/\s+/g, '') : '';
+          if (norm(txt + ' ' + f.name + ' ' + pathOf(f)).indexOf(norm(q)) < 0 && !/integ|filter/i.test(q)) return; var key2 = 'f:' + (cno || f.id); if (seen[key2]) return;
+          var row2 = { code: fl || cno || certBase(f.name), certNo: cno || certBase(f.name), desc: 'Filter integrity test' + (ptn ? ' · ' + ptn.trim() : ar ? ' · ' + ar.trim() : ''), man: '', file: f.name, ff: { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, summary: f.summary, mod: f.mod }, folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / '), mine: mine ? 1 : 0, exact: 1, yr: yearOf(f), base: certBase(f.name) };
+          seen[key2] = row2; out.push(row2); return; }
         var nq = norm(q), hit = codes.filter(function (c) { return norm(c).indexOf(nq) >= 0; });
         (hit.length ? hit : [q.toUpperCase()]).forEach(function (c) { var k = norm(c); if (seen[k]) { if (seen[k].yr >= yearOf(f)) return; }  var row = { code: c, certNo: cn ? cn.replace(/\s+/g, '') : '', desc: ds || '', man: mf || '', file: f.name, folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / '), mine: mine ? 1 : 0, exact: hit.length || norm(txt).indexOf(nq) >= 0 ? 1 : 0, yr: yearOf(f), base: certBase(f.name) };
           if (seen[k]) out.splice(out.indexOf(seen[k]), 1); seen[k] = row; out.push(row); }); });
@@ -2001,7 +2010,7 @@ function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer
         st.multi.forEach(function (r) { if (!r.on || have[norm(r.code)]) return; have[norm(r.code)] = 1; p.items.push(newItem({ code: r.code, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' })); n++; });
         saveProjects(); closeSheet(); toast(n + ' codes added – loading their certificates'); queueOld(p); };
       $$('[data-fr]').forEach(function (b) { b.onclick = function () { var r = st.res[+b.dataset.fr];
-        p.items.push(newItem({ code: r.code, description: r.desc, manufacturer: r.man, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' })); saveProjects(); toast(r.code + ' added'); renderSheet(); queueOld(p); }; });
+        var ni0 = newItem({ code: r.code, description: r.desc, manufacturer: r.man, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' }); if (r.ff) ni0.oldFile = r.ff; p.items.push(ni0); saveProjects(); toast(r.code + ' added'); renderSheet(); queueOld(p); }; });
       $('#fDone').onclick = closeSheet; } }; }); }
 
 /* ================= references: a suggestion for every item ================= */
