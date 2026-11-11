@@ -1112,13 +1112,19 @@ function testIssues(it) { var out = [], g = it.old && it.old.gen; if (!g) return
     else if (b.kind === 'kv' && /standard/i.test(b.h || '')) b.rows.forEach(function (row, r) { for (var c = 1; c < row.length; c += 2) if (/due/i.test(genLab(b, r, c))) { var v = genRaw(it, bi, r, c), d = dueOf(v); if (d && (d.y < cd.getFullYear() || (d.y === cd.getFullYear() && d.m < cd.getMonth()))) out.push('Reference calibration due <b>' + esc(v) + '</b> is before this calibration – update the reference'); } }); });
   return out; }
 /* a new filter with no certificate last year: the same layout as our filter integrity certificates, empty for typing */
-function blankFilter(it) { var o = it.old || (it.old = {}); o.status = o.status === 'found' ? o.status : 'manual'; o.points = []; o.fields = o.fields || {}; if (!o.fields.form) o.fields.form = 'TF630013 Rev. (0) 01/08/2018';
-  o.gen = { use: true, title: 'Integrity Test Certificate', pages: 1, blocks: [{ h: '', kind: 'kv', rows: [['Reference Serial Number', '', 'Function', 'FF'], ['Test program', '', 'Production Area', ''], ['Filter Location or Point Name', '', 'Filter Line', it.code || ''], ['Product batch no', '', 'Filter Part no.', ''], ['Housing', '', 'Test pressure', ''], ['Test Time', '', 'Maximum flow allowed', ''], ['Flow', '', 'Flow Within Limits', ''], ['Filter Serial No.', '', 'Calibration Date', ''], ['Calibration Due Date', '', '', '']] },
-    { h: 'Calibration Standard(s) Utilized', kind: 'table', head: true, rows: [['Item No.', 'Manufacturer', 'Description', 'Model', 'Serial Number', 'Range', 'Calibration Due Date'], ['1', 'PALL', 'INTEGRITY TEST FILTER', '', '', 'up to 100 ml/min', '']] }] }; it.ngen = it.ngen || {}; it.saved = 0; }
+function blankFilter(it) { var o = it.old || (it.old = {}); o.status = o.status === 'found' ? o.status : 'manual'; o.points = []; o.fields = o.fields || {}; if (!o.fields.form) o.fields.form = 'F-7.2.2 ISSUE(1) 15/05/2019';
+  o.gen = { use: true, two: 1, title: 'Integrity Test Certificate', pages: 1, blocks: [{ h: '', kind: 'kv', rows: [['Reference Serial Number', ''], ['Function', ''], ['Test program', ''], ['Production Area', ''], ['Filter Line', ''], ['Product name', 'NA'], ['Product batch no', 'NA'], ['Filter Part no.', ''], ['Filter Serial no.', ''], ['Housing', ''], ['Test pressure', ''], ['Test Time', ''], ['Maximum flow allowed', ''], ['Flow', ''], ['Flow Within Limits', ''], ['Calibration Date', ''], ['Calibration Due Date', '']] },
+    { h: 'Calibration Standard(s) Utilized', kind: 'table', head: true, rows: [['Item No.', 'Manufacturer', 'Description', 'Model', 'Serial Number', 'Range', 'Calibration Due Date'], ['1', 'PALL', 'INTEGRITY TEST FILTER', 'FFSXC', '', 'up to 100 ml/min', '']] }] }; it.ngen = it.ngen || {}; it.saved = 0; }
+/* filter certificates are a 2-column list (label | value) as on last year's certificate – turn any 4-column grid into that list, keeping typed values */
+function genTwo(it) { var g = it.old.gen; g.two = 1; var map = {}, nb = g.blocks.map(function (b, bi) { if (b.kind !== 'kv' || !b.rows.some(function (r) { return r.length > 2; })) return b; var rows = [];
+    b.rows.forEach(function (row, r) { for (var c = 0; c < row.length; c += 2) { var lab = String(row[c] || '').trim(), val = row[c + 1] == null ? '' : row[c + 1], k0 = bi + '|' + r + '|' + c, k1 = bi + '|' + r + '|' + (c + 1), nv = it.ngen || {};
+      if (!lab && !String(val).trim() && nv[k1] == null) continue; var nr = rows.length; rows.push([lab, val]); map[k0] = bi + '|' + nr + '|0'; map[k1] = bi + '|' + nr + '|1'; } });
+    return Object.assign({}, b, { rows: rows }); });
+  if (Object.keys(map).length) { var ng = {}; Object.keys(it.ngen || {}).forEach(function (k) { ng[map[k] || k] = it.ngen[k]; }); it.ngen = ng; } g.blocks = nb; }
 function genVal0(it, bi, r, c) { var b = it.old.gen.blocks[bi], k = bi + '|' + r + '|' + c, nv = (it.ngen || {})[k]; if (nv != null && nv !== '') return { v: nv, ph: false }; var ov = (b.rows[r] || [])[c] || ''; return { v: ov, ph: genMeas(b, r, c) && ov !== '' }; }
 function genText(it, bi) { var nv = (it.ngen || {})[bi + '|t']; return nv != null ? nv : it.old.gen.blocks[bi].text; }
 function genPh(it) { var L = []; if (!(it.old && it.old.gen && it.old.gen.use)) return L; it.old.gen.blocks.forEach(function (b, bi) { (b.rows || []).forEach(function (row, r) { row.forEach(function (x, c) { if (genVal(it, bi, r, c).ph) L.push({ point: (b.h || 'Table') + ' · ' + (b.kind === 'table' && b.head ? (b.rows[0][c] || '') + ' ' : '') + (row[0] || ''), why: 'no new reading' }); }); }); }); return L; }
-function genOn(it) { return !!(it.old && it.old.gen && it.old.gen.use); }
+function genOn(it) { var on = !!(it.old && it.old.gen && it.old.gen.use); if (on && !it.old.gen.two && /integrity|filter\s*line|test\s*program|bubble\s*point|diffusion/i.test((it.old.gen.title || '') + ' ' + (it.description || ''))) try { genTwo(it); } catch (e) {} return on; }
 function genWord(p, it, head) { var g = it.old.gen, body = '';
   g.blocks.forEach(function (b, bi) { if (b.pb && bi) body += head(true, true); if (b.h) body += H(b.h);
     if (b.kind === 'text') { String(genText(it, bi)).split(/\n+/).forEach(function (ln) { if (ln.trim()) body += W.p(W.r(ln.trim(), { sz: FS }), { jc: 'both', after: 40 }); }); return; }
@@ -1133,7 +1139,7 @@ function genHtml(p, it, newPage) { var g = it.old.gen, h = '';
     var ed = GEN_EDIT === it.id;
     h += htmlTbl(b.rows.map(function (row, r) { return row.map(function (x, c) { var gv = genVal(it, bi, r, c), v = gv.v; if (b.kind === 'kv' && c % 2 === 0) return { t: v, b: 1 };
       if (ed && !(b.kind === 'table' && b.head && r === 0)) return { raw: '<span class="gv' + (gv.ph ? ' gm' : '') + (gv.auto ? ' ga' : '') + (gv.bad ? ' gbad' : '') + '" data-gk="' + bi + '|' + r + '|' + c + '" contenteditable="true" spellcheck="false">' + esc(v) + '</span>' };
-      return v; }); }), b.kind === 'table' && b.head); });
+      return v; }); }), b.kind === 'table' && b.head).replace(b.kind === 'kv' && (b.rows[0] || []).length === 2 ? '<table class="pt kv">' : '\u0000', '<table class="pt kv fkv"><colgroup><col style="width:38%"><col style="width:62%"></colgroup>'); });
   return h; }
 function certSection(pages, code) { var nc = norm(code), at = -1;
   for (var i = 0; i < pages.length; i++) { var j = norm(pages[i].join(' ')); if (j.indexOf(nc) >= 0 && /dataofitem/.test(j)) { at = i; break; } }
@@ -2674,7 +2680,7 @@ function tSheet(p, L, it, nav0, to) { it.nv = it.nv || {}; try { if (isSteam(it)
   var sr = host.shadowRoot || host.attachShadow({ mode: 'open' });
   sr.innerHTML = '<style>' + css0.replace(/@page\{[^}]*\}/g, '').replace(/\bhtml\b/g, ':host').replace(/\bbody\b/g, '.sbody') + SH_CSS.replace(/\bhtml\b|\bbody\b/g, '.sbody') + '</style><div class="sbody' + (lh0 && LS.get('pvMode', 'cust') !== 'plain' ? ' cust' : '') + '" data-lh="' + (lh0 ? 1 : 0) + '">' + body0 + '</div>';
   var f = { contentDocument: sr };
-  var fit = function () { try { var sb = sr.querySelector('.sbody'), w = host.parentNode.clientWidth - 12, pg = sr.querySelector('.pg'), pw = pg ? pg.offsetWidth / (parseFloat(sb.style.zoom) || 1) : 794, sc = Math.min(1.2, Math.max(innerWidth < 700 ? 0.6 : 0, w / pw)); sb.style.zoom = sc; } catch (e) {} };
+  var fit = function () { try { var sb = sr.querySelector('.sbody'), w = host.parentNode.clientWidth - 12, pg = sr.querySelector('.pg'), pw = 800, sc = Math.min(1.2, Math.max(0.35, w / pw)); sb.style.zoom = sc; } catch (e) {} };
   var dv = function (i, dr) { var r = evalPt(it, i, dr); return r.dev == null ? null : (d == null ? String(r.dev) : (Math.abs(r.dev) < Math.pow(10, -d) / 2 ? 0 : r.dev).toFixed(d)); };
   (function () { var dd = sr; var hs = Array.prototype.filter.call(dd.querySelectorAll('section.pg[data-it="' + it.id + '"] h4'), function (h) { return /Calibration Results/.test(h.textContent); }), ri = 0;
     hs.forEach(function (h) { var t = h.nextElementSibling; if (!t || t.tagName !== 'TABLE') return; Array.prototype.forEach.call(t.querySelectorAll('tr'), function (tr) { if (tr.querySelector('th')) return; var i = ri++, q = o.points[i]; if (!q) return; var td = tr.children, v1 = it.nv[i] || {}, v2 = it.nv[i + 'd'] || {};
