@@ -724,7 +724,7 @@ function addChoice(p) {
     '<button id="chM">' + I.mach + '<b>Machine</b><small>Has several instruments – e.g. an autoclave. You write the machine, then add what is under it.</small></button></div>' +
     '<div class="cf"><button class="btn ghost" id="chX">Cancel</button></div></div></div>';
   $('#chX').onclick = function () { $('#dlg-root').innerHTML = ''; };
-  $('#chU').onclick = function () { $('#dlg-root').innerHTML = ''; itemSheet(p, null, newItem({ dept: p.depts[0] || '' })); };
+  $('#chU').onclick = function () { $('#dlg-root').innerHTML = ''; itemSheet(p, 'new', null); };
   $('#chM').onclick = function () { $('#dlg-root').innerHTML = ''; machineSheet(p, null, { id: uid(), name: '', code: '', dept: p.depts[0] || '' }); };
 }
 function deptField(p, val, attr) { if (!p.depts.length) return '';
@@ -2868,7 +2868,13 @@ function machinePanel(p, gi) { var gr = coverGroups(p)[gi]; if (!gr) return; var
         $('#mpAdd').onclick = function () { window.__backPanel = gi; itemSheet(p, gi, null); };
         $('#mpOk').onclick = function () { window.__backPanel = null; closeSheet(); window.__keepY = window.scrollY; render(); }; } }; }); }
 
-function itemSheet(p, gi, it0, pick) { var gsAll = coverGroups(p), gr = gi === 'new' ? { machine: null, items: [] } : gsAll[gi]; if (!gr) return; var isNew = !it0, m = gr.machine, ff = (it0 && it0.old && it0.old.fields) || {};
+function itemSheet(p, gi, it0, pick) { delete p._nm; /* also accepts the old calls: itemSheet(p, itemId) and itemSheet(p, null, newItem({...})) */
+  if (gi !== 'new' && typeof gi !== 'number') { var gsX = coverGroups(p), fx = function (pred) { var r = -1; gsX.forEach(function (g, k) { if (r < 0 && g.items.some(pred)) r = k; }); return r; };
+    if (gi != null && !/^\d+$/.test(String(gi))) { var itX = p.items.filter(function (x) { return x.id === gi; })[0]; if (!itX) return; var k1 = fx(function (x) { return x === itX; }); return itemSheet2(p, k1 < 0 ? 'new' : k1, k1 < 0 ? null : itX, pick); }
+    if (gi == null) { var mid = it0 && it0.machineId, k2 = mid ? fx(function (x) { return x.machineId === mid; }) : -1; if (it0 && p.items.indexOf(it0) >= 0) { var k3 = fx(function (x) { return x === it0; }); return itemSheet2(p, k3 < 0 ? 'new' : k3, k3 < 0 ? null : it0, pick); } if (k2 < 0 && mid) p._nm = mid; return itemSheet2(p, k2 < 0 ? 'new' : k2, null, pick); }
+    gi = +gi; }
+  return itemSheet2(p, gi, it0, pick); }
+function itemSheet2(p, gi, it0, pick) { var gsAll = coverGroups(p), gr = gi === 'new' ? { machine: null, items: [] } : gsAll[gi]; if (!gr) return; var isNew = !it0, m = gr.machine, ff = (it0 && it0.old && it0.old.fields) || {};
   var KMAP = { 'Humidity': 'RH', 'Differential Pressure': 'Differential pressure', 'Air Velocity': 'Air velocity' };
   var l0 = (it0 && it0.lim) || { type: 'rdg', val: '', unit: '' };
   var st = it0 ? { description: it0.description || ff.description || '', code: it0.code || '', manufacturer: it0.manufacturer || ff.manufacturer || '', model: it0.model || ff.model || '', serial: it0.serial || ff.serial || '', unit: it0.unit || '', rMin: it0.rMin || '', rMax: it0.rMax || '', cMin: it0.cMin || '', cMax: it0.cMax || '', res: it0.res || '', procedure: sopNorm(ff.procedure), limVal: l0.val || '', limType: l0.type || 'rdg' }
@@ -2927,7 +2933,7 @@ function itemSheet(p, gi, it0, pick) { var gsAll = coverGroups(p), gr = gi === '
         var o = $('#isO'); if (o) o.onclick = function () { closeSheet(); p.ci = certList(p).indexOf(it0); p.cv = null; saveProjects(); render(); window.scrollTo(0, 0); };
         $('#isOk').onclick = function () { if (!st.description && !st.code && !(st.ty && st.ty !== 'other')) return toast('Choose the type or write the description', true);
           var it = it0;
-          if (isNew && gi === 'new') { it = newItem({ code: st.code, description: st.description || ({ 'Temperature': 'Temperature Sensor', 'Humidity': 'Humidity Sensor', 'Pressure': 'Pressure Gauge', 'Differential Pressure': 'Differential Pressure Gauge', 'Weight': 'Balance', 'Timer': 'Timer', 'RPM': 'RPM', 'Air Velocity': 'Air Velocity', 'Steam Quality': 'Steam Quality Test', 'Filter Integrity': 'Filter Integrity Test' })[st.ty || kind8(st.code)] || kind8(st.code) || 'Item', dept: (p.items[p.items.length - 1] || {}).dept || '', src: 'sub-item' }); p.items.push(it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
+          if (isNew && gi === 'new') { it = newItem({ code: st.code, description: st.description || ({ 'Temperature': 'Temperature Sensor', 'Humidity': 'Humidity Sensor', 'Pressure': 'Pressure Gauge', 'Differential Pressure': 'Differential Pressure Gauge', 'Weight': 'Balance', 'Timer': 'Timer', 'RPM': 'RPM', 'Air Velocity': 'Air Velocity', 'Steam Quality': 'Steam Quality Test', 'Filter Integrity': 'Filter Integrity Test' })[st.ty || kind8(st.code)] || kind8(st.code) || 'Item', dept: (p.items[p.items.length - 1] || {}).dept || '', src: 'sub-item' }); if (p._nm) { it.machineId = p._nm; it.dept = (p.machines || []).filter(function (x) { return x.id === p._nm; }).map(function (x) { return x.dept; })[0] || it.dept; } delete p._nm; p.items.push(it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
           else if (isNew) { if (!m) { var f0 = (gr.items[0].old && gr.items[0].old.fields) || {}; m = { id: uid(), name: gr.items[0].description || f0.description || 'Machine', code: (gr.items[0].code || '').replace(/[\/\-][^\/\-]*$/, ''), dept: gr.items[0].dept || (p.depts || [])[0] || '' }; p.machines = p.machines || []; p.machines.push(m); gr.items.forEach(function (x) { x.machineId = m.id; }); }
             var after = gr.items[gr.items.length - 1]; it = newItem({ machineId: m.id, code: st.code, description: st.description || ({ 'Temperature': 'Temperature Sensor', 'Humidity': 'Humidity Sensor', 'Pressure': 'Pressure Gauge', 'Differential Pressure': 'Differential Pressure Gauge', 'Weight': 'Balance', 'Timer': 'Timer', 'RPM': 'RPM', 'Air Velocity': 'Air Velocity', 'Steam Quality': 'Steam Quality Test', 'Filter Integrity': 'Filter Integrity Test' })[st.ty || kind8(st.code)] || 'Item', dept: after.dept || '', src: 'sub-item' }); p.items.splice(p.items.indexOf(after) + 1, 0, it); if (!st.code) startManual(it); it.resFrom = 'kind'; }
           /* a new item with a code: last year's certificate is searched after adding – the values filled from the type are kept aside and used only where last year's certificate has nothing, so its data is never blocked or lost */
