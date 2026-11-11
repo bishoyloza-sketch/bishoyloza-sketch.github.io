@@ -850,3 +850,15 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .hfoot{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin:18px 0 30px}.hfoot .btn{flex:none}
 @media (max-width:800px){.hwork{grid-template-columns:1fr 1fr}.hchart{grid-column:1 / -1;height:100px}.htwo{grid-template-columns:1fr}.hhi{font-size:20px}.hjp{width:90px}}
 @media (max-width:600px){.hbh{flex-wrap:wrap}.hbh .pvseg{width:100%;display:flex}.hbh .pvseg button{flex:1}}
+.hopen{margin-bottom:12px}
+.hstats{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px}
+.hblk.hsm{padding:12px 14px}.hblk.hsm .hbh{margin-bottom:6px}.hblk.hsm .hbh>b{font-size:13.5px}
+.hblk .hbh>b{font-size:14.5px}
+.hnums{display:flex;gap:22px}.hnums b{display:block;font-size:22px;color:#13294B;line-height:1.1}.hnums small{font-size:12px;color:var(--muted)}
+.hchart.sm{height:54px;margin-top:8px;gap:4px}.hchart.sm .hcol small{font-size:10px}
+.htop2{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:4px 0;font-size:13px}.htop2 b{color:#13294B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}.htop2 span{color:#45556B;font-weight:700;font-size:12.5px}.htop2 .hpbar{grid-column:1 / -1;margin-top:0;height:5px}
+.hjob{padding:8px 4px}
+.ppt{max-width:420px;margin:0 auto;border:1px solid #DCE3EC;border-radius:12px;overflow:hidden;background:#fff}
+.ppt-t{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#13294B;color:#fff}.ppt-t b{font-size:20px}
+.ppt-r{display:flex;justify-content:space-between;padding:10px 16px;border-top:1px solid #EDF1F5;font-size:14.5px}.ppt-r b{color:#13294B}
+@media (max-width:800px){.hstats{grid-template-columns:1fr}}
