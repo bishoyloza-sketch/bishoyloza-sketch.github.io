@@ -862,3 +862,6 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .ppt-t{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#13294B;color:#fff}.ppt-t b{font-size:20px}
 .ppt-r{display:flex;justify-content:space-between;padding:10px 16px;border-top:1px solid #EDF1F5;font-size:14.5px}.ppt-r b{color:#13294B}
 @media (max-width:800px){.hstats{grid-template-columns:1fr}}
+
+.gapbar{margin:6px 0 8px;padding:8px 12px;border-radius:10px;background:#FFF4E0;border:1px solid #F0C27A;color:#7A4B00;font-size:13.5px}.gapbar span{color:#9A6A1E;font-size:12.5px}
+.gapnote{margin:0 0 10px;font-size:13px;line-height:1.5}.gapnote>div{margin-top:2px}
