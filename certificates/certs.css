@@ -867,3 +867,6 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .gapnote{margin:0 0 10px;font-size:13px;line-height:1.5}.gapnote>div{margin-top:2px}
 
 .gapbar .gpest{color:#1F4E86}.gapbar .gpest span{color:#4A6E99}.gapbar>div+div{margin-top:4px}
+.gapbar .gpacc{color:#3C4A5C}.gapbar .gpacc.ok{color:#17663A}.gapbar .gpacc.no{color:#9A3412}.gapbar .gpacc span{font-size:12.5px}.gapbar .lnk{border:0;background:none;color:#1F6FB5;font:inherit;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0 4px}
+.gapbar{background:#F6F8FB;border-color:#DDE3EA;color:#3C4A5C}.gapbar>div:not(.gpacc):not(.gpest){color:#9A5B00}
+.gapbar .gpacc span{color:#4B5A6E}
