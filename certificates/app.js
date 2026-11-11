@@ -190,6 +190,17 @@ function backFab() { var b = document.getElementById('backFab'); if (!b) { b = d
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) doBack(); }); }
   b.className = (S.cur || sheetFn) && S.session !== false ? 'on' : ''; }
 setInterval(function () { try { backFab(); } catch (e) {} }, 400);
+/* phones: Back · Cover · Machine · Undo sit in one fixed row at the bottom (with the main buttons) instead of floating over the certificate */
+function mobSync() { var f = document.querySelector('.wiz-foot'), mob = window.matchMedia && window.matchMedia('(max-width: 760px)').matches, mt = document.getElementById('mtools');
+  if (!f || !mob) { if (mt) mt.remove(); document.body.classList.remove('mt'); return; }
+  if (!mt || mt.parentNode !== f) { if (mt) mt.remove(); mt = document.createElement('div'); mt.id = 'mtools';
+    mt.innerHTML = '<button type="button" data-mt="back">‹ Back</button><button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button><button type="button" data-mt="undo">↶ Undo</button>';
+    f.insertBefore(mt, f.firstChild); mt.onclick = function (e) { var b = e.target.closest('[data-mt]'); if (!b) return; var k = b.dataset.mt;
+      if (k === 'back') doBack(); else if (k === 'undo') doUndo(); else { var t = document.getElementById(k === 'cov' ? 'cTab' : 'mTab'); if (t) t.click(); } }; }
+  document.body.classList.add('mt'); var has = function (id) { return !!document.getElementById(id); }, uf = document.getElementById('undoFab');
+  mt.querySelector('[data-mt="cov"]').style.display = has('cTab') ? '' : 'none'; mt.querySelector('[data-mt="mach"]').style.display = has('mTab') ? '' : 'none';
+  mt.querySelector('[data-mt="undo"]').disabled = !(uf && uf.classList.contains('on')); }
+setInterval(function () { try { mobSync(); } catch (e) {} }, 300); window.addEventListener('resize', function () { try { mobSync(); } catch (e) {} });
 function undoFab() { var b = document.getElementById('undoFab'); if (!b) { b = document.createElement('button'); b.id = 'undoFab'; b.type = 'button'; b.title = 'Undo (Ctrl+Z)'; b.innerHTML = '↶ Undo'; b.onclick = doUndo; document.body.appendChild(b); }
   b.className = UNDO.st.length && S.session ? 'on' : ''; }
 function doUndo() { if (!UNDO.st.length) return toast('Nothing to undo'); var prev = UNDO.st.pop(); UNDO.busy = true;
