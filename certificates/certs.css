@@ -737,3 +737,19 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 td.shc{background:#FFFBEA!important}
 @media (max-width:700px){.shwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.shf{max-width:none}}
 @media (max-width:999px){.machtab{left:auto;right:0;border-radius:12px 0 0 12px;bottom:150px}}
+.machtab.cov{top:calc(44% - 112px);background:#2C4E7E}
+.shf{height:auto!important}
+@media (max-width:999px){.machtab.cov{top:auto;bottom:206px}}
+.sopw{position:relative}.sopbtn{display:block;width:100%;text-align:left;cursor:pointer;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2345556B' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>") no-repeat right 12px center;padding-right:30px;font:inherit;color:#13294B}
+.paper.wl .sopbtn{background-color:transparent;border:0;padding:2px 22px 2px 0}
+.sopov{position:fixed;inset:0;z-index:300;background:rgba(10,20,40,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.sopbx{background:#fff;border-radius:16px;width:100%;max-width:460px;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden}
+.sophd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #E6EBF1}.sophd b{font-size:16px;color:#13294B}
+.sopx{border:0;background:#F1F4F8;border-radius:8px;width:32px;height:32px;cursor:pointer;color:#45556B}
+.sopl{overflow:auto;padding:6px}
+.sopi{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;border:0;background:none;padding:12px;border-radius:10px;cursor:pointer;text-align:left;font:inherit}
+.sopi b{font-size:15px;color:#13294B}.sopi small{font-size:12px;color:#6B7B90;background:#F1F4F8;border-radius:20px;padding:3px 9px;white-space:nowrap}
+.sopi:hover{background:#F3F8FD}.sopi.on{background:#EAF3FC}.sopi.on b{color:#1F6FB5}
+.sopo{border-top:1px solid #E6EBF1;padding:12px 14px 14px}.sopo>small{display:block;font-size:12px;font-weight:700;color:#45556B;margin-bottom:6px}
+.sopor{display:flex;gap:8px}.sopor .inp{flex:1;height:44px}.sopor .btn{flex:none;height:44px}
+@media (max-width:600px){.sopov{align-items:flex-end;padding:0}.sopbx{max-width:none;border-radius:18px 18px 0 0;max-height:80vh}.sopi{padding:14px 12px}}
