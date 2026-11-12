@@ -978,3 +978,4 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .phseg button.on{background:var(--office);color:#fff}
 .issbox .isr input.inp{width:130px!important;flex:0 0 130px}
 .phseg button{white-space:nowrap}
+.phbox .phall{align-items:center}.phbox .phall b{font-size:13px;color:#6A4300}
