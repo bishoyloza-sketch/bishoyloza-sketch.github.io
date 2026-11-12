@@ -908,3 +908,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .mpt b{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}.mpt .mpcn{color:var(--blue,#0B5CAD);font-weight:800;letter-spacing:.2px}.mpt .mpcn.none{color:var(--danger,#C2362B);font-weight:600;font-size:.9em}.mpt .mpcd{font-weight:800;color:#13233F}.mpt .mpcd::before{content:'·';margin-right:10px;color:#9AA6B6;font-weight:400}.mpt .mpds{font-weight:600;color:#2C3A50}.mpt .mpds::before{content:'·';margin-right:10px;color:#9AA6B6;font-weight:400}
 
 .wiz-foot:has(#cf:empty){display:none}
+
+.ltbl tr[draggable] .grip{display:inline-block;color:#9AA6B6;cursor:grab;margin-right:6px;font-size:12px;letter-spacing:-2px;user-select:none}.ltbl tr.dging{opacity:.4}.ltbl tr.dgb td{box-shadow:inset 0 3px 0 var(--blue,#0B5CAD)}.ltbl tr.dga td{box-shadow:inset 0 -3px 0 var(--blue,#0B5CAD)}
