@@ -2516,14 +2516,8 @@ function tRefs(p) { p.info = p.info || {}; var ds = labDevices(), byId = {}; ds.
     $('#rrs').onclick = function () { var v = $('#rrv').value.trim(); $('#dlg-root').innerHTML = ''; if (!isNum(v)) return toast('Resolution must be a number', true); if (numv(v) === numv(was)) return;
       dialog('Are you sure?', 'The reference resolution changes from <b>' + esc(was) + '</b> to <b>' + esc(v) + '</b>.', 'Yes, I\'m sure').then(function (y) { if (!y) return; p.info.refRes[id] = v; memo[id] = v; LS.set('refRes', memo); saveProjects(); tRefs(p); }); }; }; });
 }
-function pickRef(p, it, done) { var q = '';
-  openSheet(function () { var L = labDevices().filter(function (d) { return !q || norm(d.manufacturer + d.description + d.model + d.serial + d.category).indexOf(norm(q)) >= 0; });
-    return { title: 'Reference for ' + esc(it.code || it.description), body: '<div class="search">' + I.search + '<input id="pq" placeholder="Search lab devices" value="' + esc(q) + '"></div><div class="list">' + L.slice(0, 80).map(function (d) { var on = (it.refs || []).indexOf(d.id) >= 0, ex = refExpired(d, p.info);
-      return '<button class="row' + (on ? ' sel' : '') + '" data-pk="' + d.id + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(d.manufacturer + ' ' + d.description) + '</b><small>' + esc([d.model, 'S/N ' + d.serial, d.range].filter(Boolean).join(' · ')) + '</small></span>' + (ex ? '<span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">Expired</span>' : '') + '</button>'; }).join('') + '</div>',
-      foot: '<button class="btn" id="pkD">Done</button>',
-      mount: function () { var i = $('#pq'); i.oninput = function () { q = i.value; var pos = i.selectionStart; renderSheet(); var n = $('#pq'); n.focus(); n.setSelectionRange(pos, pos); };
-        $$('[data-pk]').forEach(function (b) { b.onclick = function () { var id = b.dataset.pk, a = it.refs || (it.refs = []), k = a.indexOf(id); if (k >= 0) a.splice(k, 1); else a.push(id); it.refAuto = false; saveProjects(); renderSheet(); }; });
-        $('#pkD').onclick = function () { closeSheet(); done(); }; } }; }); }
+/* the same standard picker everywhere: the devices that fit this item first, by category, search, Show all */
+function pickRef(p, it, done) { stdPick(p, it); window.__srDone = function () { closeSheet(); done && done(); }; }
 /* ================= v2: home tiles · phase rail · last-year search · certificate editor ================= */
 FLOW = [['company', 'Company'], ['date', 'Cal. date'], ['dept', 'Department'], ['type', 'Order type'], ['order', 'Order'], ['items', 'Codes'], ['certs', 'Old certs'], ['refs', 'References'], ['det', 'Details'], ['cert', 'Certificates'], ['gen', 'Files']];
 FIDX = {}; FLOW.forEach(function (f, i) { FIDX[f[0]] = i; });
