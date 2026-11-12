@@ -984,3 +984,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .phdone a{color:inherit;font-weight:700;margin-left:6px}
 .phbox.phok{border-color:#cfe6d8;background:var(--office-soft)}.phbox.phok .phdone{border-top:0}
 #undoFab small{display:inline-block;min-width:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.22);font-size:11px;line-height:18px;text-align:center}
+.gapnote2 .gsrc{font-size:11.5px;color:#5c6577;max-width:260px;white-space:normal;margin-bottom:6px;text-align:left}.gapnote2 .gsrc a{color:var(--office)}
+.gapnote2 .gin{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.gapnote2 .gin label{display:flex;flex-direction:column;font-size:11px;color:#5c6577}.gapnote2 .gin input{width:92px;height:34px;padding:4px 8px;font-size:13px}
