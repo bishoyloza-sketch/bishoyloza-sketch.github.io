@@ -917,3 +917,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 @media (max-width:560px){.stt th:nth-child(6),.stt td:nth-child(6){display:none}}
 
 .stdchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}.stdchip{display:inline-flex;align-items:center;gap:6px;background:var(--blue-soft,#E8F1FB);border:1px solid #BCD3EE;border-radius:999px;padding:4px 6px 4px 12px;font-size:13px}.stdchip small{color:var(--muted)}.stdchip button{border:0;background:#fff;color:var(--danger,#C2362B);border-radius:999px;width:22px;height:22px;cursor:pointer;font-size:12px}
+
+.top.tc{padding:6px 14px}.top.tc .homebtn{width:30px;height:30px}.top.tc .tclogo{height:18px}.top.tc .crumb b{font-size:15px}.top.tc .tct small{font-size:11px}
