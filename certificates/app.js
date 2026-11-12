@@ -3099,7 +3099,7 @@ var REF_RES = [
   [/tc\s*200/i, { '°C': 0.1 }],
   [/hc2/i, { '°C': 0.01, '%RH': 0.01 }],                               // Rotronic HC2-SH
   [/tp\s*425|ut\s*33|testo\s*400|\b625\b/i, { '°C': 0.1, '%RH': 0.1 }],
-  [/tach\s*20|\bct\s*6\b/i, { rpm: 0.1 }],
+  [/tach\s*20/i, { rpm: 1 }],
   [/hs-?80|hs-?3v|lct\s*055|stop\s*watch/i, { s: 0.01 }],
   [/caliper/i, { mm: 0.01 }]];
 function refSpecRes(id, unit) { var d = labDevices().filter(function (x) { return x.id === id; })[0]; if (!d) return null; var t = [d.manufacturer, d.description, d.model, d.serial].join(' ');
