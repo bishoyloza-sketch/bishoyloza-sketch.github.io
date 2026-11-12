@@ -948,3 +948,14 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .stdtabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}.stdtabs button{border:1.5px solid #D3DBE5;background:#fff;border-radius:999px;height:32px;padding:0 12px;font:inherit;font-weight:600;font-size:12.5px;color:#45556B;cursor:pointer}.stdtabs button span{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:#E7ECF2;color:#45556B;font-size:11px}.stdtabs button.on{border-color:#1F6FB5;background:#EEF6FE;color:#1F6FB5}.stdtabs button.warn span{background:#FBE3DF;color:#C0392B}
 .stdr.exp{background:#FFF8F7}.exb,.ofb,.fxb{font-style:normal;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 6px;margin-left:4px}.exb{background:#FBE3DF;color:#C0392B}.ofb{background:#E7ECF2;color:#45556B}.fxb{background:#E6F4EA;color:#1E7A46}.exd{color:#C0392B;font-weight:700}.stded{border:1px solid #D3DBE5;background:#fff;border-radius:8px;width:28px;height:28px;cursor:pointer;color:#45556B;flex:0 0 auto;margin-left:6px}
 .rtab td{vertical-align:middle}.rtab td small{display:block;color:var(--muted);font-size:11.5px}.rtab tr.rbad td{background:#FFF8F7}.rst{font-size:12px;font-weight:700;border-radius:6px;padding:2px 8px;display:inline-block}.rst.ok{background:#E6F4EA;color:#1E7A46}.rst.bad{background:#FBE3DF;color:#C0392B;white-space:normal}.rexp{color:#C0392B!important;font-weight:700}.rsw{height:34px;min-width:200px;font-size:12.5px}.rper{margin-top:14px}.rper summary{cursor:pointer;font-weight:700;color:var(--navy);padding:6px 2px}
+.gapnote2{margin:0 0 10px;border:1px solid #f1c6c6;background:#fff6f6;border-radius:12px;font-size:13px}
+.gapnote2>summary{padding:10px 12px;cursor:pointer;color:#8a1c1c;line-height:1.45}
+.gapnote2 .gpw{max-height:260px;overflow:auto;border-top:1px solid #f1d4d4}
+.gapnote2 .gpt{width:100%;border-collapse:collapse}
+.gapnote2 .gpt td{padding:7px 10px;border-bottom:1px solid #f6e2e2;vertical-align:top;background:#fff}
+.gapnote2 .gpc{white-space:nowrap;font-weight:700;color:#1d2b44;width:1%}
+.gapnote2 .gpk{display:inline-block;font-size:10px;font-weight:700;background:#e8eef7;color:#33507a;border-radius:6px;padding:1px 6px;margin-right:6px}
+.gapnote2 .gpt td div+div{margin-top:4px}
+.gapnote2 .gpt b{color:#8a1c1c}.gapnote2 .gpt small{display:block;color:#5c6577;font-size:12px}
+.gapnote2 .gpt td:last-child{width:1%;white-space:nowrap;text-align:right}
+@media(max-width:600px){.gapnote2 .gpc{white-space:normal}}
