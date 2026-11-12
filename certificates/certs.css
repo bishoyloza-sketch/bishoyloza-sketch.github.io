@@ -904,3 +904,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .sqsub{font-size:11.5px;color:#6B7A90;margin-top:3px}
 .sqr{font-size:12.5px;font-weight:700;padding:2px 9px;border-radius:8px;background:#EEF2F7;color:#5A6B82}.sqr.ok{background:#E8F6EE;color:#17663A}.sqr.no{background:#FDECEC;color:#B42318}
 .sqavg{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #DDE3EA;margin-top:8px;padding-top:6px;font-weight:700;color:#13294B;font-size:13.5px}
+
+.mpt b{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}.mpt .mpcn{color:var(--blue,#0B5CAD);font-weight:800;letter-spacing:.2px}.mpt .mpcn.none{color:var(--danger,#C2362B);font-weight:600;font-size:.9em}.mpt .mpcd{font-weight:800;color:#13233F}.mpt .mpcd::before{content:'·';margin-right:10px;color:#9AA6B6;font-weight:400}.mpt .mpds{font-weight:600;color:#2C3A50}.mpt .mpds::before{content:'·';margin-right:10px;color:#9AA6B6;font-weight:400}
