@@ -915,3 +915,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 
 .stt{width:100%;border-collapse:collapse;font-size:14px}.stt th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line)}.stt td{padding:6px;border-bottom:1px solid var(--line)}.stt td .inp{min-width:70px;width:100%;background:#FFF6CC}
 @media (max-width:560px){.stt th:nth-child(6),.stt td:nth-child(6){display:none}}
+
+.stdchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}.stdchip{display:inline-flex;align-items:center;gap:6px;background:var(--blue-soft,#E8F1FB);border:1px solid #BCD3EE;border-radius:999px;padding:4px 6px 4px 12px;font-size:13px}.stdchip small{color:var(--muted)}.stdchip button{border:0;background:#fff;color:var(--danger,#C2362B);border-radius:999px;width:22px;height:22px;cursor:pointer;font-size:12px}
