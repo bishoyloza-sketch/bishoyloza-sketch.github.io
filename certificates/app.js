@@ -1205,6 +1205,22 @@ function stdTbl(it, bi) { var b = it.old.gen.blocks[bi], rows = b.rows || [], nv
     out.push({ r: r, kR: kR, kU: kU, point: pad(orf), ref: pad(rf), uut: pad(uu), tR: tR, tU: tU, dev: dev == null ? '' : (Math.abs(dev) < 1e-12 ? 0 : dev).toFixed(d), live: tR && tU, lim: lim == null ? '' : '±' + lim + (u ? ' ' + u : ''), bad: dev != null && lim != null && Math.abs(dev) > lim + 1e-9 }); }
   return { u: u, rows: out }; }
 function stdTblHead(u) { var w = function (t) { return t + '\n' + (u ? '(' + u + ')' : ''); }; return ['No.', w('Point'), w('Reference'), w('UUT Reading'), w('Deviation'), w('Limits'), 'Status']; }
+
+/* "Edit table" of a temperature & humidity (copied) certificate: the whole table in a sheet, like the normal certificates */
+function stdEditSheet(p, it, bi0) { var L = stdGenBlocks(it); if (L.indexOf(bi0) < 0) bi0 = L[0];
+  openSheet(function () { var b = it.old.gen.blocks[bi0], T = stdTbl(it, bi0) || { rows: [], u: '' };
+    return { title: esc(stdGenTitle(b)) + ' – ' + esc(it.code || ''), wide: 1,
+      body: (L.length > 1 ? '<div class="seg sm" style="margin-bottom:10px">' + L.map(function (bj) { return '<button class="' + (bj === bi0 ? 'on' : '') + '" data-stb="' + bj + '">' + esc(stdGenTitle(it.old.gen.blocks[bj]).replace(/^Calibration Results\s*–\s*/i, '')) + '</button>'; }).join('') + '</div>' : '') +
+        '<div class="small" style="margin-bottom:8px">Type the reference and the reading – grey = last year. Deviation and status are worked out.</div><table class="stt"><thead><tr><th>No.</th><th>Point (' + esc(T.u) + ')</th><th>Reference</th><th>UUT Reading</th><th>Deviation</th><th>Limits</th><th>Status</th></tr></thead><tbody>' +
+        T.rows.map(function (q, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(q.point) + '</td><td><input class="inp" inputmode="decimal" data-stk="' + q.kR + '" value="' + (q.tR ? esc(q.ref) : '') + '" placeholder="' + esc(q.point) + '"></td><td><input class="inp" inputmode="decimal" data-stk="' + q.kU + '" value="' + (q.tU ? esc(q.uut) : '') + '" placeholder="' + esc(q.uut) + '"></td><td data-std="' + i + '">' + (q.live ? esc(q.dev) : '') + '</td><td>' + esc(q.lim) + '</td><td data-sts="' + i + '">' + (q.live ? (q.bad ? '<b style="color:var(--danger)">OUT</b>' : 'Accepted') : '') + '</td></tr>'; }).join('') + '</tbody></table>',
+      foot: '<button class="btn ghost" id="stClr">Clear new readings</button><button class="btn" id="stOk">Done</button>',
+      mount: function () { $$('[data-stb]').forEach(function (x) { x.onclick = function () { bi0 = +x.dataset.stb; renderSheet(); }; });
+        var upd = function () { var T2 = stdTbl(it, bi0); (T2 ? T2.rows : []).forEach(function (q, i) { var d = $('[data-std="' + i + '"]'), st = $('[data-sts="' + i + '"]'); if (d) d.textContent = q.live ? q.dev : ''; if (st) st.innerHTML = q.live ? (q.bad ? '<b style="color:var(--danger)">OUT</b>' : 'Accepted') : ''; }); };
+        $$('[data-stk]').forEach(function (inp) { inp.oninput = function () { var v = inp.value.replace(',', '.').trim(); it.ngen = it.ngen || {}; if (v) it.ngen[inp.dataset.stk] = v; else delete it.ngen[inp.dataset.stk]; it.saved = 0; saveProjects(); upd(); };
+          inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); var all = $$('[data-stk]'), k = all.indexOf(inp); if (all[k + 1]) all[k + 1].focus(); } }; });
+        var f0 = $('[data-stk]'); if (f0) try { f0.focus(); } catch (e) {}
+        $('#stClr').onclick = function () { var T3 = stdTbl(it, bi0); (T3 ? T3.rows : []).forEach(function (q) { delete (it.ngen || {})[q.kR]; delete (it.ngen || {})[q.kU]; }); saveProjects(); renderSheet(); };
+        $('#stOk').onclick = function () { closeSheet(); window.__keepY = window.scrollY; render(); }; } }; }); }
 function genHtml(p, it, newPage, opt) { genSyncStd(p, it); var g = it.old.gen, h = '', sn = opt && opt.n0 || 1;
   g.blocks.forEach(function (b, bi) { if (opt && opt.only && opt.only.indexOf(bi) < 0) return; if (b.pb && bi && !(opt && opt.std)) h += newPage(); if (opt && opt.std) h += '<h4>' + (sn++) + ' - ' + esc(stdGenTitle(b)) + '</h4>'; else if (b.h) h += '<h4>' + esc(b.h) + '</h4>';
     if (b.kind === 'text') { h += String(genText(it, bi)).split(/\n+/).filter(function (x) { return x.trim(); }).map(function (x) { return '<p class="nt">' + esc(x.trim()) + '</p>'; }).join(''); return; }
@@ -2828,7 +2844,7 @@ function tSheet(p, L, it, nav0, to) { it.nv = it.nv || {}; try { if (isSteam(it)
     Array.prototype.forEach.call(dd.querySelectorAll('section.pg[data-it="' + it.id + '"] h4'), function (h) { var tx = h.textContent, act = null, lb = '✎ Edit';
       if (/Data of item/i.test(tx) || /Uncertainty/i.test(tx)) act = function () { itemSheet(p, gi, it); };
       else if (/Calibration Results/i.test(tx) && !genOn(it)) { act = function () { readingsSheet(p, it); }; lb = '✎ Edit table'; }
-      else if (/Calibration Results/i.test(tx) && isStdGen(it)) { act = (function (h0) { return function () { var t0 = h0.nextElementSibling, s0 = t0 && t0.querySelector('span.gv.gy'); if (s0) { s0.focus(); try { var rg = document.createRange(); rg.selectNodeContents(s0); var sl = h0.getRootNode().getSelection ? h0.getRootNode().getSelection() : getSelection(); sl.removeAllRanges(); sl.addRange(rg); } catch (e) {} } }; })(h); lb = '✎ Edit table'; }
+      else if (/Calibration Results/i.test(tx) && isStdGen(it)) { act = (function (k0) { return function () { stdEditSheet(p, it, stdGenBlocks(it)[k0]); }; })(Array.prototype.filter.call(h.getRootNode().querySelectorAll('h4'), function (x) { return /Calibration Results/i.test(x.textContent); }).indexOf(h)); lb = '✎ Edit table'; }
       else if (/Standard/i.test(tx)) { act = function () { refChangeHere(p, it); }; lb = '✎ Change'; }
       else if (/Repeatability|Eccentricity/i.test(tx) || genOn(it) && !/Remarks/i.test(tx)) { act = function () { xtSheet(p, it); }; lb = '✎ Readings'; }
       else if (/Remarks/i.test(tx)) { act = function () { remarksSheet(p, it); }; }

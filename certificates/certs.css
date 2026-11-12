@@ -912,3 +912,6 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .ltbl tr[draggable] .grip{display:inline-block;color:#9AA6B6;cursor:grab;margin-right:6px;font-size:12px;letter-spacing:-2px;user-select:none}.ltbl tr.dging{opacity:.4}.ltbl tr.dgb td{box-shadow:inset 0 3px 0 var(--blue,#0B5CAD)}.ltbl tr.dga td{box-shadow:inset 0 -3px 0 var(--blue,#0B5CAD)}
 
 .dndbar{display:flex;align-items:center;gap:10px;width:100%;flex-wrap:wrap}.dndbar span{flex:1;min-width:200px;font-size:13px;color:var(--ink,#13233F)}.dndbar b{color:var(--blue,#0B5CAD)}
+
+.stt{width:100%;border-collapse:collapse;font-size:14px}.stt th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line)}.stt td{padding:6px;border-bottom:1px solid var(--line)}.stt td .inp{min-width:70px;width:100%;background:#FFF6CC}
+@media (max-width:560px){.stt th:nth-child(6),.stt td:nth-child(6){display:none}}
