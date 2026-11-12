@@ -91,7 +91,7 @@ var CL_DRIVE = 'b!-PWHJdIcZ0-gKkia4j9odEgetIygwXxKmFhm4bIxj5SHSByxhJikSrSa5YHlcu
 var DATA_SHEET_ID = '17Ge4w5MyfBuqUSXEo3GDcwcSRbi0wrrXCJzzdnBWdUc'; /* Akhnaton Device Tracker – Data */
 function clErr(e) { var c = e && e.code;
   return new Error(({ needs_reauth: 'Reconnect ' + (e.server || 'the connector') + ' in claude.ai → Settings → Connectors', server_not_connected: 'Add the ' + (e.server || '') + ' connector in claude.ai → Settings → Connectors', approval_required: 'Allow the app to use ' + (e.server || 'the connector') + ' (claude.ai asks once)', not_in_manifest: 'This connector is not allowed for the app – allow it in claude.ai', blocked_by_policy: 'Blocked by your organization', server_unavailable: (e.server || 'The server') + ' is not answering – try again', not_granted: 'Open the app inside Claude' })[c] || (e && (e.message || e.code)) || String(e)); }
-function clCall(server, tool, input) { return CL.ready.then(function () { if (!CL.mcp) throw new Error('Open the app inside Claude to reach SharePoint');
+function clCall(server, tool, input) { if (!CL.on && LOC.on && server === M365) return LOC.call(tool, input); return CL.ready.then(function () { if (!CL.mcp) throw new Error('Open the app inside Claude to reach SharePoint');
   return CL.mcp.callTool(server, tool, input).catch(function (e) { if (e && e.retryable) return new Promise(function (r) { setTimeout(r, (e.retryAfterMs || 1500) + 500); }).then(function () { return CL.mcp.callTool(server, tool, input); }); throw e; }).catch(function (e) { throw clErr(e); }); }); }
 function clText(r) { var t = (r.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('\n'); if (t) return t; return typeof r.payload === 'string' ? r.payload : (r.payload ? JSON.stringify(r.payload) : ''); }
 function clObjs(r) { if (Array.isArray(r.payload)) return r.payload; var out = [];
@@ -99,6 +99,116 @@ function clObjs(r) { if (Array.isArray(r.payload)) return r.payload; var out = [
     for (var i = 0; i < s.length; i++) { var c = s[i]; if (ins) { if (es) es = false; else if (c === '\\') es = true; else if (c === '"') ins = false; continue; }
       if (c === '"') ins = true; else if (c === '{') { if (!d) st = i; d++; } else if (c === '}') { d--; if (!d && st >= 0) { try { out.push(JSON.parse(s.slice(st, i + 1))); } catch (e) {} st = -1; } } } });
   if (!out.length && r.payload && typeof r.payload === 'object') out.push(r.payload); return out; }
+/* ===== SharePoint through the folder OneDrive keeps in sync on this computer (no IT permission needed) =====
+   The app reads and writes the synced folder directly; OneDrive uploads every change to SharePoint by itself.
+   It answers the same calls the Claude connector answers (search, read, list, create folder, upload), so every
+   feature (old certificates, letters, prices, saving the Word files) works the same way. Chrome / Edge on a computer. */
+var LOC = { h: null, on: false, need: false, files: [], byId: {}, txt: {}, scanning: false, tDone: 0, tAll: 0, err: '', when: 0 };
+LOC.can = function () { return typeof window.showDirectoryPicker === 'function'; };
+LOC.db = function () { if (LOC._db) return LOC._db; LOC._db = new Promise(function (res, rej) { var r = indexedDB.open('akh-loc', 1); r.onupgradeneeded = function () { var d = r.result; d.createObjectStore('kv'); d.createObjectStore('txt'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); return LOC._db; };
+LOC.kv = function (store, k, v) { return LOC.db().then(function (db) { return new Promise(function (res) { var t = db.transaction(store, v === undefined ? 'readonly' : 'readwrite'), s = t.objectStore(store), q = v === undefined ? s.get(k) : s.put(v, k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { res(null); }; }); }).catch(function () { return null; }); };
+LOC.allTxt = function () { return LOC.db().then(function (db) { return new Promise(function (res) { var out = {}, q = db.transaction('txt').objectStore('txt').openCursor(); q.onsuccess = function () { var c = q.result; if (!c) return res(out); out[c.key] = c.value; c.continue(); }; q.onerror = function () { res(out); }; }); }).catch(function () { return {}; }); };
+/* 34 letters/digits, like SharePoint item ids, so every part of the app takes them */
+function locId(path) { var seeds = [0x811c9dc5, 0x01000193, 0x5bd1e995, 0x27d4eb2f], s = 'LOCAL'; seeds.forEach(function (h) { for (var i = 0; i < path.length; i++) h = Math.imul(h ^ path.charCodeAt(i), 16777619) >>> 0; s += ('0000000' + h.toString(36).toUpperCase()).slice(-7); }); return (s + '0').slice(0, 34); }
+LOC.url = function (path) { return 'https://local.folder/' + path.split('/').map(encodeURIComponent).join('/'); };
+LOC.init = function () { if (CL.on || DEMO || !LOC.can()) return Promise.resolve();
+  return LOC.kv('kv', 'root').then(function (h) { if (!h) return; LOC.h = h; return LOC.kv('kv', 'index').then(function (ix) { if (ix && ix.files) { LOC.setFiles(ix.files); LOC.when = ix.when || 0; } return h.queryPermission({ mode: 'readwrite' }); }).then(function (st) { if (st === 'granted') LOC.start(); else LOC.need = true; }); }).catch(function (e) { LOC.err = e.message; }); };
+LOC.setFiles = function (L) { LOC.files = L; LOC.byId = {}; L.forEach(function (f) { LOC.byId[f.id] = f; }); };
+LOC.start = function () { LOC.on = true; LOC.need = false; LOC.allTxt().then(function (t) { LOC.txt = t || {}; }); LOC.scan(); try { render(); } catch (e) {} };
+LOC.link = function () { return window.showDirectoryPicker({ id: 'akh-sharepoint', mode: 'readwrite' }).then(function (h) { LOC.h = h; LOC.files = []; LOC.byId = {}; return LOC.kv('kv', 'root', h).then(function () { LOC.start(); toast('Linked: ' + h.name + ' – reading the folder…'); }); }).catch(function (e) { if (e && e.name !== 'AbortError') toast(e.message, true); }); };
+LOC.allow = function () { if (!LOC.h) return LOC.link(); return LOC.h.requestPermission({ mode: 'readwrite' }).then(function (st) { if (st === 'granted') LOC.start(); else toast('Access to the folder was not allowed', true); }); };
+LOC.unlink = function () { LOC.h = null; LOC.on = false; LOC.files = []; LOC.byId = {}; LOC.txt = {}; return Promise.all([LOC.kv('kv', 'root', null), LOC.kv('kv', 'index', null)]).then(function () { try { render(); } catch (e) {} }); };
+/* walk the whole folder: names only (fast); texts of Word / PDF files are read after, in the background */
+LOC.scan = function () { if (LOC.scanning || !LOC.h) return; LOC.scanning = true; var out = [], root = LOC.h.name;
+  var walk = function (dh, path, depth) { var it = dh.entries(), next = function () { return it.next().then(function (r) { if (r.done) return; var name = r.value[0], h = r.value[1]; if (/^(~\$|\.)/.test(name) || /^(desktop\.ini|thumbs\.db)$/i.test(name)) return next();
+        var p2 = path + '/' + name; if (h.kind === 'directory') { out.push({ id: locId(p2), name: name, path: p2, dir: 1 }); return (depth < 12 ? walk(h, p2, depth + 1) : Promise.resolve()).then(next); }
+        out.push({ id: locId(p2), name: name, path: p2 }); return next(); }); }; return next(); };
+  return walk(LOC.h, root, 0).then(function () { LOC.setFiles(out); LOC.when = Date.now(); LOC.scanning = false; LOC.kv('kv', 'index', { files: out, when: LOC.when }); try { if (!sheetFn) render(); } catch (e) {} LOC.texts(); })
+    .catch(function (e) { LOC.scanning = false; LOC.err = e.message; try { render(); } catch (e2) {} }); };
+LOC.handle = function (path) { var seg = path.split('/').slice(1), dh = LOC.h; if (!dh) return Promise.reject(new Error('The SharePoint folder is not linked'));
+  var step = function (i) { if (i === seg.length - 1) return dh.getFileHandle(seg[i]).catch(function () { return dh.getDirectoryHandle(seg[i]); }); return dh.getDirectoryHandle(seg[i]).then(function (d) { dh = d; return step(i + 1); }); };
+  return seg.length ? step(0) : Promise.resolve(LOC.h); };
+LOC.dirOf = function (path) { var seg = path.split('/').slice(1), dh = LOC.h; return seg.reduce(function (pr, s) { return pr.then(function (d) { return d.getDirectoryHandle(s); }); }, Promise.resolve(dh)); };
+/* Word file → pages of lines (tables: cells joined with " | ", like the PDF reader) */
+LOC.docx = function (buf) { var u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), td = new TextDecoder(), eocd = -1;
+  for (var i = u8.length - 22; i >= Math.max(0, u8.length - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } if (eocd < 0) return Promise.reject(new Error('Not a Word file'));
+  var n = dv.getUint16(eocd + 10, true), off = dv.getUint32(eocd + 16, true), ent = null;
+  for (var k = 0; k < n; k++) { var m = dv.getUint16(off + 10, true), cs = dv.getUint32(off + 20, true), nl = dv.getUint16(off + 28, true), el = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true), lo = dv.getUint32(off + 42, true), name = td.decode(u8.subarray(off + 46, off + 46 + nl));
+    if (name === 'word/document.xml') { var ds = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true); ent = { m: m, d: u8.subarray(ds, ds + cs) }; } off += 46 + nl + el + cl; }
+  if (!ent) return Promise.reject(new Error('Not a Word file'));
+  return (ent.m === 0 ? Promise.resolve(td.decode(ent.d)) : new Response(new Blob([ent.d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text()).then(function (xml) {
+    var doc = new DOMParser().parseFromString(xml, 'application/xml'), W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', pages = [[]], cur = pages[0];
+    var ptext = function (p) { var s = ''; Array.prototype.forEach.call(p.getElementsByTagNameNS(W, '*'), function (e) { var ln = e.localName; if (ln === 't') s += e.textContent; else if (ln === 'tab') s += ' '; else if (ln === 'br' && e.getAttributeNS(W, 'type') !== 'page') s += ' '; }); return s.replace(/\s+/g, ' ').trim(); };
+    var brk = function (el) { return el.getElementsByTagNameNS(W, 'br').length && Array.prototype.some.call(el.getElementsByTagNameNS(W, 'br'), function (b) { return b.getAttributeNS(W, 'type') === 'page'; }) || el.getElementsByTagNameNS(W, 'pageBreakBefore').length; };
+    var newPage = function () { if (cur.length) { cur = []; pages.push(cur); } };
+    var body = doc.getElementsByTagNameNS(W, 'body')[0]; if (!body) return [];
+    Array.prototype.forEach.call(body.childNodes, function (el) { if (el.nodeType !== 1) return;
+      if (el.localName === 'p') { if (el.getElementsByTagNameNS(W, 'pageBreakBefore').length) newPage(); var t = ptext(el); if (t) cur.push(t); if (brk(el) && !el.getElementsByTagNameNS(W, 'pageBreakBefore').length) newPage(); if (el.getElementsByTagNameNS(W, 'sectPr').length) newPage(); }
+      else if (el.localName === 'tbl') { Array.prototype.forEach.call(el.getElementsByTagNameNS(W, 'tr'), function (tr) { if (tr.parentNode !== el) return; var cells = Array.prototype.filter.call(tr.childNodes, function (c) { return c.localName === 'tc'; }).map(function (tc) { return Array.prototype.filter.call(tc.getElementsByTagNameNS(W, 'p'), function () { return true; }).map(ptext).filter(Boolean).join(' '); }).filter(function (c) { return c !== ''; }); if (cells.length) cur.push(cells.join(' | ')); }); } });
+    return pages.filter(function (p) { return p.length; }); }); };
+LOC.pdf = function (buf) { return needPdf().then(function () { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (doc) { var out = [], chain = Promise.resolve();
+  for (var i = 1; i <= Math.min(doc.numPages, 150); i++) (function (n) { chain = chain.then(function () { return doc.getPage(n).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
+    var rows = []; tc.items.forEach(function (t) { if (!t.str || !t.str.trim()) return; var x = t.transform[4], y = t.transform[5], row = rows.filter(function (r) { return Math.abs(r.y - y) < 3; })[0]; if (!row) { row = { y: y, it: [] }; rows.push(row); } row.it.push({ x: x, w: t.width, s: t.str }); });
+    rows.sort(function (a, b) { return b.y - a.y; }); out.push(rows.map(function (r) { r.it.sort(function (a, b) { return a.x - b.x; }); var s = '', end = null; r.it.forEach(function (t) { if (end != null) s += (t.x - end > 6 ? ' | ' : (t.x - end > 1 ? ' ' : '')); s += t.s; end = t.x + t.w; }); return s.replace(/\s+/g, ' ').trim(); })); }); }); })(i);
+  return chain.then(function () { return out; }); }); };
+LOC.file = function (id) { var f = LOC.byId[id]; if (!f) return Promise.reject(new Error('File not found in the SharePoint folder')); return LOC.handle(f.path).then(function (h) { return h.getFile(); }); };
+LOC.pages = function (id) { id = String(id).split('/').pop(); var f = LOC.byId[id]; if (!f) return Promise.reject(new Error('File not found in the SharePoint folder'));
+  return LOC.file(id).then(function (file) { f.mod = file.lastModified; f.size = file.size; return file.arrayBuffer().then(function (buf) {
+    if (/\.docx$/i.test(f.name)) return LOC.docx(buf); if (/\.pdf$/i.test(f.name)) return LOC.pdf(buf);
+    if (/\.xlsx$/i.test(f.name)) return readXlsx(buf).then(function (wb) { return Object.keys(wb).map(function (sn) { return ['## ' + sn].concat((wb[sn] || []).map(function (r) { return r.map(function (c) { return c == null ? '' : String(c); }).join('\t'); })); }); });
+    return [new TextDecoder().decode(buf).split(/\r?\n/)]; }); }); };
+/* texts of the Word / PDF files, kept on this computer so a code can be found inside them like SharePoint search does */
+LOC.texts = function () { if (LOC.tBusy) return; var L = LOC.files.filter(function (f) { return !f.dir && /\.(docx|pdf)$/i.test(f.name); }); LOC.tAll = L.length; LOC.tDone = 0; LOC.tBusy = true;
+  L.sort(function (a, b) { return (/\.docx$/i.test(a.name) ? 0 : 1) - (/\.docx$/i.test(b.name) ? 0 : 1) || String(b.path).localeCompare(String(a.path)); });
+  var k = 0, tick = 0, one = function () { if (!LOC.on) { LOC.tBusy = false; return; } if (k >= L.length) { LOC.tBusy = false; try { if (!sheetFn) render(); } catch (e) {} return; } var f = L[k++];
+    return LOC.handle(f.path).then(function (h) { return h.getFile(); }).then(function (file) { f.mod = file.lastModified; f.size = file.size; var c = LOC.txt[f.id]; if (c && c.m === file.lastModified) return;
+        return file.arrayBuffer().then(function (buf) { return /\.docx$/i.test(f.name) ? LOC.docx(buf) : LOC.pdf(buf); }).then(function (pg) { var t = pg.map(function (p) { return p.join('\n'); }).join('\n').replace(/\s+/g, ' ').toLowerCase(); LOC.txt[f.id] = { m: file.lastModified, t: t }; return LOC.kv('txt', f.id, LOC.txt[f.id]); }); })
+      .catch(function () {}).then(function () { LOC.tDone = k; if (++tick % 40 === 0) { try { if (!sheetFn && $('#locSt')) $('#locSt').textContent = LOC.stText(); } catch (e) {} } return new Promise(function (r) { setTimeout(r, 0); }).then(one); }); };
+  one(); };
+LOC.stText = function () { var nf = LOC.files.filter(function (f) { return !f.dir; }).length; return LOC.scanning ? 'reading the folder…' : nf + ' files' + (LOC.tBusy ? ' · reading their text ' + LOC.tDone + ' / ' + LOC.tAll : ''); };
+/* search like SharePoint: words and "phrases" (all of them), filename:"x" / filename:x*, path:"…" */
+LOC.search = function (q, limit, offset) { var toks = [], re = /(\w+):("[^"]*"|\S+)|"([^"]*)"|(\S+)/g, m;
+  while ((m = re.exec(String(q || '')))) { if (m[1]) toks.push({ f: m[1].toLowerCase(), v: m[2].replace(/^"|"$/g, '') }); else if (m[3] != null) toks.push({ v: m[3] }); else if (!/^(AND|OR)$/.test(m[4])) toks.push({ v: m[4] }); }
+  var norm = function (s) { return String(s || '').toLowerCase().replace(/\s+/g, ' '); }, wild = function (v) { return new RegExp('(^|[^a-z0-9])' + norm(v).replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*'), 'i'); };
+  var hits = LOC.files.filter(function (f) { if (f.dir) return false; var nm = norm(f.name), pa = norm(f.path), tx = (LOC.txt[f.id] || {}).t || '', score = 0;
+    for (var i = 0; i < toks.length; i++) { var t = toks[i], v = norm(t.v); if (!v) continue;
+      if (t.f === 'filename') { if (!(v.indexOf('*') >= 0 ? wild(v).test(nm) : nm.indexOf(v) >= 0)) return false; score += 3; continue; }
+      if (t.f === 'path') { var tail = decodeURIComponent(t.v).replace(/\/+$/, '').split('/').slice(-2).join('/').toLowerCase(); if (pa.indexOf(tail) < 0 && pa.indexOf(tail.split('/').pop()) < 0) return false; continue; }
+      if (t.f) continue;
+      if (v.indexOf('*') >= 0) { var w = wild(v); if (w.test(nm)) score += 3; else if (w.test(pa) || w.test(tx)) score += 1; else return false; continue; }
+      if (nm.indexOf(v) >= 0) score += 3; else if (pa.indexOf(v) >= 0) score += 2; else if (tx.indexOf(v) >= 0) score += 1; else return false; }
+    f._s = score; return true; });
+  hits.sort(function (a, b) { return b._s - a._s || (b.mod || 0) - (a.mod || 0) || String(b.path).localeCompare(String(a.path)); });
+  return hits.slice(offset || 0, (offset || 0) + (limit || 25)).map(LOC.obj); };
+LOC.obj = function (f) { var tx = (LOC.txt[f.id] || {}).t || ''; return { id: f.id, name: f.name, uri: 'file:///' + CL_DRIVE + '/' + f.id, driveId: CL_DRIVE, webUrl: LOC.url(f.path), lastModifiedDateTime: f.mod ? new Date(f.mod).toISOString() : '', summary: tx.slice(0, 160), path: f.path }; };
+LOC.certDir = function () { var d = LOC.files.filter(function (f) { return f.dir && /^certificates$/i.test(f.name); }).sort(function (a, b) { return a.path.length - b.path.length; })[0]; return d ? d.path : LOC.h.name; };
+LOC.pathOfId = function (id) { if (id === CL_CERT_FOLDER) return LOC.certDir(); var f = LOC.byId[id]; return f ? f.path : null; };
+LOC.res = function (objs, text) { return { payload: objs, content: [{ type: 'text', text: text != null ? text : JSON.stringify(objs) }] }; };
+LOC.call = function (tool, a) { a = a || {};
+  if (tool === 'sharepoint_search') return Promise.resolve(LOC.res(LOC.search(a.query, a.limit, a.offset)));
+  if (tool === 'sharepoint_folder_search') { var nm = String(a.name || '').toLowerCase(); return Promise.resolve(LOC.res(LOC.files.filter(function (f) { return f.dir && f.name.toLowerCase() === nm; }).slice(0, a.limit || 50).map(LOC.obj))); }
+  if (tool === 'read_resource') { var id = String(a.uri || '').split('/').pop(), path = LOC.pathOfId(id); if (!path) return Promise.reject(new Error('Not found in the SharePoint folder'));
+    var ent = LOC.byId[id]; if (id === CL_CERT_FOLDER || (ent && ent.dir)) { var kids = LOC.files.filter(function (f) { return f.path.slice(0, path.length + 1) === path + '/' && f.path.slice(path.length + 1).indexOf('/') < 0; });
+      return Promise.resolve(LOC.res(kids.map(LOC.obj), kids.map(function (f) { return f.name + ' (' + (f.dir ? 'folder' : 'file') + ', ' + (f.size || 0) + ' bytes) file:///' + CL_DRIVE + '/' + f.id; }).join('\n'))); }
+    return LOC.pages(id).then(function (pg) { var t = pg.map(function (p) { return p.join('\n'); }).join('\n\n'); return LOC.res([], t); }); }
+  if (tool === 'sharepoint_create_folder') { var pp = LOC.pathOfId(a.parentItemId); if (!pp) return Promise.reject(new Error('Folder not found'));
+    return LOC.dirOf(pp).then(function (d) { return d.getDirectoryHandle(a.name, { create: true }); }).then(function () { var p2 = pp + '/' + a.name, id2 = locId(p2); if (!LOC.byId[id2]) { var e = { id: id2, name: a.name, path: p2, dir: 1 }; LOC.files.push(e); LOC.byId[id2] = e; } return LOC.res([LOC.obj(LOC.byId[id2])]); }); }
+  if (tool === 'sharepoint_upload_file') { var pu = LOC.pathOfId(a.parentItemId); if (!pu) return Promise.reject(new Error('Folder not found'));
+    return LOC.dirOf(pu).then(function (d) { var fn = a.filename, tryName = function (nm, k) { if (a.conflictBehavior !== 'rename') return Promise.resolve(nm); return d.getFileHandle(nm).then(function () { var b = a.filename.replace(/(\.[^.]+)?$/, ''), ext = (a.filename.match(/\.[^.]+$/) || [''])[0]; return tryName(b + ' (' + (k + 1) + ')' + ext, k + 1); }).catch(function () { return nm; }); };
+      return tryName(fn, 0).then(function (nm) { return d.getFileHandle(nm, { create: true }).then(function (fh) { return fh.createWritable(); }).then(function (w) { var bin = atob(a.contentBase64 || ''), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return w.write(u8).then(function () { return w.close(); }); })
+        .then(function () { var p3 = pu + '/' + nm, id3 = locId(p3); if (!LOC.byId[id3]) { var e3 = { id: id3, name: nm, path: p3, mod: Date.now() }; LOC.files.push(e3); LOC.byId[id3] = e3; } LOC.kv('kv', 'index', { files: LOC.files, when: LOC.when }); return LOC.res([LOC.obj(LOC.byId[id3])]); }); }); }); }
+  return Promise.reject(new Error('Not available with the local SharePoint folder: ' + tool)); };
+/* links to files in the folder open the file itself */
+document.addEventListener('click', function (e) { var a = e.target.closest && e.target.closest('a[href^="https://local.folder/"]'); if (!a) return; e.preventDefault(); var path = a.getAttribute('href').slice('https://local.folder/'.length).split('/').map(decodeURIComponent).join('/'), f = LOC.files.filter(function (x) { return x.path === path; })[0]; if (!f) return toast('Not in the linked folder', true);
+  LOC.file(f.id).then(function (file) { var u = URL.createObjectURL(file), w = window.open(u, '_blank'); if (!w) { var l = document.createElement('a'); l.href = u; l.download = f.name; l.click(); } setTimeout(function () { URL.revokeObjectURL(u); }, 60000); }).catch(function (er) { toast(er.message, true); }); }, true);
+function locCard() {
+  if (!LOC.can()) return '<div class="note"><b>SharePoint on this phone:</b> linking the SharePoint folder works on the laptop (Chrome or Edge, with OneDrive syncing the folder). On the phone you can still make certificates; to bring last year\'s certificate, drop its file on the certificate.</div>';
+  if (!LOC.h) return '<div class="card locc"><h3>📁 Link the SharePoint folder</h3><div class="meta">One time only. Choose the SharePoint folder that OneDrive keeps on this laptop – the one that has <b>Certificates</b> and <b>Reports</b> inside it (in File Explorer it is under your company name, e.g. “Akhnaton …”). The app then finds last year\'s certificates and letters in it and saves the new files into it; OneDrive puts them on SharePoint by itself.</div><div class="cf"><button class="btn" id="locL">Choose the folder</button></div></div>';
+  if (LOC.need) return '<div class="card locc"><h3>📁 ' + esc(LOC.h.name) + '</h3><div class="meta">Allow the app to open the SharePoint folder again (the browser asks once each time the app is opened).</div><div class="cf"><button class="btn" id="locA">Allow access</button><button class="btn ghost sm" id="locX">Choose another folder</button></div></div>';
+  return '<div class="okline">📁 SharePoint folder: <b>' + esc(LOC.h.name) + '</b> · <span id="locSt">' + esc(LOC.stText()) + '</span> · <a href="#" id="locR">refresh</a> · <a href="#" id="locX">change</a></div>' + (LOC.err ? '<div class="note warnbox">' + esc(LOC.err) + '</div>' : ''); }
+function locBind() { var b; if ((b = $('#locL'))) b.onclick = function () { LOC.link(); }; if ((b = $('#locA'))) b.onclick = function () { LOC.allow(); };
+  if ((b = $('#locR'))) b.onclick = function (e) { e.preventDefault(); LOC.scan(); render(); }; if ((b = $('#locX'))) b.onclick = function (e) { e.preventDefault(); LOC.unlink().then(function () { LOC.link(); }); }; }
+
 /* people, companies, lab devices – read from the Akhnaton Devices data sheet (same list as the devices app) */
 var CL_DB = null;
 function clData() { if (CL_DB) return Promise.resolve(CL_DB);
@@ -247,7 +357,7 @@ function graph(method, path, body) { return msToken().then(function (tk) {
     .then(function (r) { if (r.status === 403) throw new Error('SharePoint said no access (403). Your company may need to allow this app.'); if (!r.ok) return r.text().then(function (t) { throw new Error('SharePoint error ' + r.status + ': ' + t.slice(0, 160)); }); return r.json(); }); }); }
 var FILES = { ok: null, err: '' };
 var useFiles = function () { return !!CFG.FILES_URL; };
-var spOn = function () { if (DEMO) return true; if (CL.on) return true; return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
+var spOn = function () { if (DEMO) return true; if (CL.on || LOC.on) return true; return useFiles() ? FILES.ok !== false : !!(MS.app && MS.account); };
 function fcall(action, payload) { if (!CFG.FILES_URL) return Promise.reject(new Error('The files server is not set up yet'));
   return fetch(CFG.FILES_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }), redirect: 'follow' })
     .then(function (r) { if (!r.ok) throw new Error('The files server did not answer (' + r.status + ')'); return r.json(); })
@@ -261,7 +371,7 @@ function demoSearch(q) { var phr = [], fn = [], s0 = String(q || '').replace(/\(
     .map(function (f) { return { id: f.id, driveId: 'demo', name: f.name, webUrl: f.webUrl, mod: '2025-02-20T10:00:00Z', path: f.path, summary: f.text.slice(0, 220) }; })); }, 250); }); }
 function spSearch(q, size, off) {
   if (DEMO) return off ? Promise.resolve([]) : demoSearch(q);
-  if (CL.on) return clSearch(q, size, off);
+  if (CL.on || LOC.on) return clSearch(q, size, off);
   if (useFiles()) return fcall('search', { q: q, limit: size || 25 }).then(function (l) { return l.map(function (f) { return { id: f.id, driveId: '', name: f.name, webUrl: f.webUrl, mod: f.mod, path: f.path, summary: '' }; }); });
   return graph('POST', '/search/query', { requests: [{ entityTypes: ['driveItem'], query: { queryString: q }, from: off || 0, size: size || 25 }] }).then(function (r) {
     var out = []; ((r.value || [])[0] || { hitsContainers: [] }).hitsContainers.forEach(function (c) { (c.hits || []).forEach(function (h) { var x = h.resource || {};
@@ -276,7 +386,7 @@ function ordersFrom(v, fname) { var hd = (v[0] || []).map(function (x) { return 
   return v.slice(1).filter(function (row) { return row[cC]; }).map(function (row) { return { customer: String(row[cC]).trim(), number: String(row[cN] == null ? '' : row[cN]).trim(), value: row[cV], date: row[cD], job: cJ >= 0 ? row[cJ] : '', file: fname }; }); }
 function calibrationOrders() { /* rows of "Calibration Orders.xlsx" → Main Dashboard */
   if (ORDERS_CACHE) return Promise.resolve(ORDERS_CACHE);
-  if (CL.on) return clOrders().then(function (o) { ORDERS_CACHE = o; return o; });
+  if (CL.on || LOC.on) return clOrders().then(function (o) { ORDERS_CACHE = o; return o; });
   if (useFiles()) return fcall('sheet', { name: 'Calibration Orders.xlsx', tab: 'Main Dashboard' }).then(function (r) { ORDERS_CACHE = ordersFrom(r.values || [], r.file || 'Calibration Orders.xlsx'); return ORDERS_CACHE; });
   return spSearch('filename:"Calibration Orders.xlsx"', 10).then(function (fs) {
     var f = fs.filter(function (x) { return /^Calibration Orders\.xlsx$/i.test(x.name); }).sort(function (a, b) { return String(b.mod).localeCompare(String(a.mod)); })[0];
@@ -337,11 +447,12 @@ function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.
   if (p.stage !== 'done') return renderWizard(p);
   return renderOverview(p);
 }
-function boot() { undoInit(); render(); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
+function boot() { undoInit(); render(); LOC.init().then(function () { if (!sheetFn) render(); }); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
 
 /* ================= home ================= */
 function msCard() {
   if (CL.on) return CL.mcp ? '<div class="okline">' + I.ok.replace(/28/g, '20') + ' SharePoint connected through your Claude account</div>' : '<div class="okline"><span class="spin dark"></span> Connecting…</div>';
+  if (!DEMO && !useFiles() && !(MS.app && MS.account)) return locCard();
   if (useFiles()) { if (FILES.ok === null) return '<div class="okline"><span class="spin dark"></span> Checking the SharePoint copy…</div>';
     if (FILES.ok && !FILES.err) return '<div class="okline">' + I.ok.replace(/28/g, '20') + ' SharePoint files connected (copy on Google Drive)</div>';
     return '<div class="note warnbox"><b>SharePoint files are not reachable yet.</b><br>' + esc(FILES.err) + '</div>'; }
@@ -384,7 +495,7 @@ function renderHome() { var HM = HOME, now = new Date(), Y = HM.yr || now.getFul
   $$('[data-pd]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0]; if (!p) return;
     dialog('Delete this job?', '<b>' + esc(coName(p)) + '</b> – ' + certsOf(p).length + ' certificates. You can bring it back from the Recycle bin.', 'Delete').then(function (y) { if (!y) return; S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); }); }; });
   $('#paperB').onclick = function () { paperSheet(ev, Y); }; $('#instB').onclick = installSheet;
-  $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn; }
+  $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn; locBind(); }
 /* ================= wizard ================= */
 var STAGES = ['company', 'date', 'dept', 'type', 'order', 'items'];
 var STAGE_T = { company: ['Company', 'Which company is this work for?'], date: ['Calibration date', 'One date for all the items – you can change it for one item later'], dept: ['Department', 'Which department(s)?'], type: ['Order type', 'What is the work based on?'], order: ['Order document', 'Choose it from SharePoint'], items: ['Codes', 'What will be calibrated?'] };
@@ -593,7 +704,7 @@ var SITE = null;
 function siteDrive() { if (SITE) return Promise.resolve(SITE); var u = new URL(CFG.SP_SITE_URL);
   return graph('GET', '/sites/' + u.hostname + ':' + u.pathname + '?$select=id').then(function (s) { return graph('GET', '/sites/' + s.id + '/drive?$select=id'); }).then(function (d) { SITE = d.id; return SITE; }); }
 function uploadOrder(p, file) {
-  if (CL.on) return clUpload(p, file);
+  if (CL.on || LOC.on) return clUpload(p, file);
   if (useFiles()) return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1]); }; r.readAsDataURL(file); })
     .then(function (b64) { return fcall('upload', { name: file.name, mime: file.type, base64: b64, company: p.company.name }); });
   return uploadOrderSP(p, file); }
@@ -1018,6 +1129,7 @@ function needPdf() { return window.pdfjsLib ? Promise.resolve() : loadScript(PDF
 function pdfPages(driveId, id) { /* SharePoint converts the Word file to PDF; we read its text line by line */
   if (DEMO) { var df = DEMO.files.filter(function (f) { return f.id === id; })[0]; return new Promise(function (res, rej) { setTimeout(function () { df ? res(df.pages.map(function (pg) { return pg.slice(); })) : rej(new Error('Not in the trial files')); }, 300); }); }
   if (CL.on) return clPages(id);
+  if (LOC.on) return LOC.pages(id);
   if (useFiles()) return fcall('text', { id: id }).then(function (r) { return r.pages || []; });
   return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + driveId + '/items/' + id + '/content?format=pdf', { headers: { Authorization: 'Bearer ' + r[1] } }); })
     .then(function (res) { if (!res.ok) throw new Error('Could not open the file (' + res.status + ')'); return res.arrayBuffer(); })
@@ -2705,7 +2817,7 @@ function renderHomeOld415473() {
   $$('[data-sg]').forEach(function (b) { b.onclick = function () { var a = b.dataset.sg.split('|').map(Number), mo = SUG.months[a[0]], x = mo.list[a[1]], co = ((S.data && S.data.companies) || []).filter(function (c) { return c.id === x.coId; })[0];
     if (!co) return toast('This company is not in the list – add it in Akhnaton Devices', true); newProject(co, { y: mo.y, m: mo.m }); }; });
   var sg = $('#sugGo'); if (sg) sg.onclick = sugScan;
-  $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn;
+  $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn; locBind();
 }
 
 /* ---------- codes: search last year by month / code / certificate number ---------- */
@@ -3640,7 +3752,7 @@ function refDec(p, it) { var id = (it.refs || [])[0], r = id && refResOf(p, id, 
 var REFQ = {};
 function needOcr() { return window.Tesseract ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'); }
 function fileText(f) { /* text of a PDF in SharePoint; scanned pages are read with OCR (website only) */
-  if (CL.on || useFiles()) return pdfPages(f.driveId, f.id).then(function (pg) { return (pg || []).map(function (x) { return Array.isArray(x) ? x.join(' | ') : String(x); }).join('\n'); });
+  if (CL.on || LOC.on || useFiles()) return pdfPages(f.driveId, f.id).then(function (pg) { return (pg || []).map(function (x) { return Array.isArray(x) ? x.join(' | ') : String(x); }).join('\n'); });
   return Promise.all([needPdf(), msToken()]).then(function (r) { return fetch('https://graph.microsoft.com/v1.0/drives/' + f.driveId + '/items/' + f.id + '/content' + (/\.pdf$/i.test(f.name) ? '' : '?format=pdf'), { headers: { Authorization: 'Bearer ' + r[1] } }); })
     .then(function (res) { if (!res.ok) throw new Error('open ' + res.status); return res.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; })
     .then(function (doc) { var n = Math.min(doc.numPages, 4), txt = [], ch = Promise.resolve();
@@ -4434,7 +4546,7 @@ function certFolderName(p) { var it = certList(p).filter(function (x) { return x
 function saveWordSP(p) { var g = genDefaults(p); if (!String(g.start).trim()) return toast('Write the first certificate number', true);
   if (!p._prOk) return pricesThen(p, function () { p._prOk = 1; try { saveWordSP(p); } finally { delete p._prOk; } });
   var all = buildAll(p), yr = (s2d(p.info.cal) || new Date()).getFullYear(), folder = certFolderName(p), st = { d: 0, n: all.files.length, done: [], err: '' };
-  if (!CL.on) { toast('Saving to SharePoint works in the Claude version for now – the Word files are downloaded instead', true); return dlZip(all.files, (p.company.name + ' ' + monYear(p.info.cal) + ' certificates').trim() + '.zip'); }
+  if (!CL.on && !LOC.on) { toast('Saving to SharePoint needs the SharePoint folder linked (laptop) or the Claude version – the Word files are downloaded instead', true); return dlZip(all.files, (p.company.name + ' ' + monYear(p.info.cal) + ' certificates').trim() + '.zip'); }
   openSheet(function () { return { title: 'Saving to SharePoint', body: '<div class="note">Certificates › Cert ' + yr + ' › <b>' + esc(folder) + '</b><br>Receipt letter › Reports ' + yr + ' › <b>Letters by program › ' + esc(p.company.name) + '</b> – alone, and added at the end of “' + esc(p.company.name) + ' ' + yr + ' - all letters”' + (p._sub ? '<br><b>' + certList(p).length + ' certificates</b> (your choice)' : '') + '</div>' +
       (st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : '') + '<div class="list">' + all.files.map(function (f, i) { var dn = st.done[i]; return '<div class="row"><span class="t"><b>' + esc(f.name) + '</b><small>' + (dn ? (dn.webUrl ? '<a href="' + esc(dn.webUrl) + '" target="_blank" rel="noopener">Saved ✓ open</a>' : 'Saved ✓') + (dn.book ? ' · <a href="' + esc(dn.book) + '" target="_blank" rel="noopener">all letters (' + dn.n + ')</a>' : '') : i === st.d && !st.err ? 'Saving…' : i > st.d ? 'Waiting' : 'Not saved') + '</small></span></div>'; }).join('') + '</div>',
     foot: '<button class="btn" id="svX"' + (st.d < st.n && !st.err ? ' disabled' : '') + '>' + (st.d < st.n && !st.err ? 'Saving ' + st.d + ' / ' + st.n + '…' : 'Done') + '</button>', mount: function () { $('#svX').onclick = closeSheet; } }; });
