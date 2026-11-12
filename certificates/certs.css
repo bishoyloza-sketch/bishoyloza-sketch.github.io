@@ -939,3 +939,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .fchip.on{border-color:#9FC2E6;background-color:#EEF6FE;color:#1F6FB5}.efhint{margin-left:auto;font-size:12px;color:var(--muted)}
 .cart.slim{padding:8px 12px}
 .tmbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 10px;background:#F4F8FC;border:1px solid #DCE6F1;border-radius:10px;margin:0 0 8px}.tmbar .fchip{height:28px;font-size:12.5px}.tmu{font-size:12px;color:#45556B;margin-left:-4px}.tmh{font-size:12px;color:var(--muted);margin-left:auto}.shbar .tmbar{margin:0}
+.afil{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;margin-top:10px;padding-top:10px;border-top:1px dashed #DCE6F1}.afld{display:flex;flex-direction:column;gap:3px}.afld span{font-size:11.5px;font-weight:700;color:#6B7B90;text-transform:uppercase;letter-spacing:.3px}.afld .inp{height:36px}.ahint{grid-column:1/-1;font-size:12px;color:var(--muted)}@media (max-width:560px){.afil{grid-template-columns:1fr}}
+.fchip.nob{background-image:none;padding:0 12px}
