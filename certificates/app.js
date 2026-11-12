@@ -2647,7 +2647,9 @@ function oldBind(p, it, rr) { var o = it.old;
 /* the cover stays on top while you flip through its certificates */
 /* PowerPoint-like: every page of the job on the left (cover, then its certificates), the chosen page on the right */
 function railSeq(p, L) { var seq = []; coverGroups(p).forEach(function (gr, gi) { gr.items.forEach(function (x) { var i = L.indexOf(x); if (i >= 0) seq.push({ t: 'i', ci: i, gi: gi }); }); }); return seq; }
-function railHtml(p, L, sel) { var gs = coverGroups(p), gen = {}; genGroups(p).forEach(function (g2) { g2.items.forEach(function (x) { gen[x.id] = g2; }); });
+function railHtml(p, L, sel) { return ''; /* the side / top list of all certificates was removed on request – ‹ › on the certificate bar and Back to the job are enough */
+}
+function railHtml0(p, L, sel) { var gs = coverGroups(p), gen = {}; genGroups(p).forEach(function (g2) { g2.items.forEach(function (x) { gen[x.id] = g2; }); });
   return '<nav class="prail"><div class="rlhead"><button id="rlAll" class="rlbk">‹ Whole job</button><span>' + savedN(p) + ' / ' + L.length + ' saved</span></div><div class="rllist">' + gs.map(function (gr, gi) { var m = gr.machine, g0 = gen[gr.items[0].id], dn = gr.items.filter(function (x) { return x.saved; }).length, title = m ? m.name : (gr.items[0].description || 'Units');
       return '<div class="rlgrp"><div class="rlgh"><b>' + esc(title) + '</b><span>' + dn + '/' + gr.items.length + '</span></div>' +
         gr.items.map(function (x, k) { var i = L.indexOf(x); if (i < 0) return ''; var stt = x.saved ? 'ok' : cState(x) === 'none' ? 'bad' : cState(x) === 'progress' ? 'mid' : ''; return '<button class="rl crt ' + stt + (sel.ci === i ? ' on' : '') + '" data-ri="' + i + '"><span class="rn">' + (gi + 1) + '.' + (k + 1) + '</span><span class="rlt"><b>' + esc(x.code || '—') + '</b><small>' + esc(x.certNo || x.description || '') + '</small></span><i class="dot"></i></button>'; }).join('') + '</div>'; }).join('') + '</div><button class="rladd" id="rlAdd">+ Add item</button></nav>'; }
