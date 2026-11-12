@@ -518,7 +518,7 @@ td.rbt{width:1%;padding:3px 4px!important;white-space:nowrap}
 .lst{white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--muted)}
 .lst i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#C9D3E0;margin-right:6px;vertical-align:middle}
 .lst.ok{color:#1F8A5B}.lst.ok i{background:#1F8A5B}.lst.bad{color:#C0392B}.lst.bad i{background:#C0392B}.lst.mid{color:#1F6FB5}.lst.mid i{background:#1F6FB5}
-@media (max-width:700px){.ltbl th:nth-child(5),.ltbl td:nth-child(5){display:none}.ltbl{font-size:12.5px}.ltbl td,.ltbl th{padding:8px 6px}.hbtns .btn{height:30px;font-size:12px}}
+@media (max-width:700px){.ltbl th:nth-child(5),.ltbl td:nth-child(5),.ltbl th:nth-child(6),.ltbl td:nth-child(6){display:none}.ltbl{font-size:12.5px}.ltbl td,.ltbl th{padding:8px 6px}.hbtns .btn{height:30px;font-size:12px}}
 @media (min-width:1000px){.shell:has(.ltbw){max-width:1320px}}
 .lmob{display:none}
 @media (max-width:700px){.ltbl th:nth-child(3),.ltbl td:nth-child(3),.ltbl th:nth-child(4),.ltbl td:nth-child(4){display:none}.lmob{display:block;font-weight:500;font-size:12px;color:var(--muted);white-space:normal;margin-top:2px}.lmob b{color:var(--navy)}}
@@ -922,5 +922,8 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 
 .dropz{border:2px dashed #9DB7D6;border-radius:14px;padding:22px 14px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center;background:#F6F9FD}.dropz.on{background:#E8F1FB;border-color:var(--blue,#0B5CAD)}.dropz small{color:var(--muted)}
 
-.ltbl tr.lgh td{background:#EEF3F9;border-top:2px solid #D5DFEB;padding:7px 12px;font-size:13px;color:var(--navy)}.ltbl tr.lgh:hover td{background:#E3ECF6}.lghi{color:#6B7B90;margin-right:7px}.lghc{margin-left:8px;color:#45556B;font-weight:600;background:#fff;border:1px solid #D5DFEB;border-radius:6px;padding:1px 7px;font-size:12px}.lghn{float:right;color:var(--muted);font-size:12px}.ltbl tr.lgh+tr.lit td{border-top:0}
 .ltbl td.lst,.ltbl .lsm{white-space:nowrap}
+/* job list: all columns fit the width */
+.ltbl td.lmc{max-width:170px;line-height:1.25}.ltbl td.lmc b{display:block;color:var(--navy);font-weight:600;font-size:13px}.ltbl td.lmc small{display:block;color:var(--muted);font-size:11.5px;margin-top:1px}
+.ltbl td.lcd{white-space:nowrap}.ltbl td.lds{line-height:1.25;max-width:200px}
+@media (max-width:1100px){.ltbl{font-size:12.5px}.ltbl td,.ltbl th{padding:8px 7px}.ltbl th{font-size:10.5px;letter-spacing:.2px}.ltbl td.lsm{white-space:normal;max-width:150px;font-size:12px;line-height:1.25}.ltbl td.lmc b{font-size:12.5px}.ltbl tr.lit .ln{padding-left:8px}.ltbl .grip{margin-right:3px!important}}
