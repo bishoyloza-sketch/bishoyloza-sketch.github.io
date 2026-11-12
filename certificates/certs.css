@@ -986,3 +986,4 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 #undoFab small{display:inline-block;min-width:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.22);font-size:11px;line-height:18px;text-align:center}
 .gapnote2 .gsrc{font-size:11.5px;color:#5c6577;max-width:260px;white-space:normal;margin-bottom:6px;text-align:left}.gapnote2 .gsrc a{color:var(--office)}
 .gapnote2 .gin{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.gapnote2 .gin label{display:flex;flex-direction:column;font-size:11px;color:#5c6577}.gapnote2 .gin input{width:92px;height:34px;padding:4px 8px;font-size:13px}
+.pvpart{background:#FFF4DC;border:1px solid #f0dcae;color:#6A4300;border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:13px;line-height:1.5}.pvpart .btn{margin-left:6px}
