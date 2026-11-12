@@ -708,7 +708,7 @@ function wItems(p) {
   $$('[data-mx]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); delMachine(p, b.dataset.mx, render); }; });
   $$('[data-mt]').forEach(function (h) { h.onclick = function (e) { if (e.target.closest('button')) return; var id = h.dataset.mt; p.itOpen = p.itOpen || {}; var cur = p.itOpen[id] != null ? p.itOpen[id] : p.items.length <= 12; p.itOpen[id] = !cur; saveProjects(); var y = window.scrollY; render(); window.scrollTo(0, y); }; });
   var iq = $('#iq'); if (iq) iq.oninput = function () { p.itQ = iq.value; var pos = iq.selectionStart, y = window.scrollY; render(); window.scrollTo(0, y); var n2 = $('#iq'); if (n2) { n2.focus(); n2.setSelectionRange(pos, pos); } };
-  foot(p, 'Next: Certificates ›', p.items.length > 0, function () { toHub(p); });
+  foot(p, 'Next: Certificates (' + p.items.length + ') ›', p.items.length > 0, function () { toHub(p); });
 }
 function delItem(p, id, done) { var it = p.items.filter(function (x) { return x.id === id; })[0]; if (!it) return;
   var nm = it.code || it.description || 'this item', warn = it.saved ? '<br><b>Its certificate is already saved</b> – the readings will be lost.' : (it.nv && Object.keys(it.nv).length ? '<br>The readings you typed will be lost.' : '');
@@ -2412,8 +2412,8 @@ function lySearch(p, mode, opt) { opt = opt || {};
         '<div class="list">' + st.batches.map(function (f) { var on = !!st.bon[f.id]; return '<button class="row' + (on ? ' sel' : '') + '" data-bb="' + esc(f.id) + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(f.descs.slice(0, 3).join(' · ') || f.base) + (f.descs.length > 3 ? ' …' : '') + '</b><small>' + esc(f.base) + '</small></span></button>'; }).join('') + '</div>'
         : '<div class="empty"><b>Nothing in ' + MFULL[st.m] + ' ' + st.y + '</b>Try the month before.</div>'; }
     var nAdd = st.rows ? st.rows.filter(function (r, i) { return st.on[i] && !(r.code && h[norm(r.code)]); }).length : 0, nIn = p.items.length;
-    var cont = '<button class="btn blue" id="lgoOn"' + (nIn ? '' : ' disabled') + '>Continue with ' + nIn + ' ›</button>';
-    var foot = st.rows && nAdd ? '<button class="btn" id="ladd">Add ' + nAdd + (nAdd === 1 ? ' code' : ' codes') + '</button>'
+    var cont = '<button class="btn ghost" id="lclose">Close</button>';
+    var foot = st.rows && nAdd ? '<button class="btn ghost" id="lclose">Close</button><button class="btn blue" id="ladd">Add ' + nAdd + (nAdd === 1 ? ' certificate' : ' certificates') + ' · job ' + nIn + ' → ' + (nIn + nAdd) + '</button>'
       : st.batches && !st.rows && !st.prog && st.batches.some(function (f) { return st.bon[f.id]; }) ? '<button class="btn" id="lshow">Show codes</button>' + cont
       : (st.rows && st.mode === 'month' && !st.prog ? '<button class="btn ghost" id="lbk">Batches</button>' : '') + cont;
     return { title: 'Search last year', body: cart() + tabs + form + res, foot: foot,
@@ -2433,7 +2433,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
         $$('[data-sn]').forEach(function (b) { b.onclick = function () { if (b.dataset.sn === 'b') st.bon = {}; else st.on = {}; renderSheet(); }; });
         var sh = $('#lshow'); if (sh) sh.onclick = showCodes; var bk = $('#lbk'); if (bk) bk.onclick = function () { st.rows = null; st.on = {}; renderSheet(); };
         var ad = $('#ladd'); if (ad) ad.onclick = add;
-        var go2 = $('#lgoOn'); if (go2) go2.onclick = function () { closeSheet(); toHub(p); };
+        var lc = $('#lclose'); if (lc) lc.onclick = function () { st.stop = true; closeSheet(); render(); };
         $$('[data-rm]').forEach(function (b) { b.onclick = function () { var it = p.items.filter(function (x) { return x.id === b.dataset.rm; })[0]; p.items = p.items.filter(function (x) { return x.id !== b.dataset.rm; }); saveProjects(); toast((it && (it.code || it.description)) + ' removed'); renderSheet(); }; });
         if (st.mode === 'month' && !st.batches && !st.busy && !st.err && !st.auto0) { st.auto0 = 1; searchMonth(); } } }; }); }
 
@@ -3386,7 +3386,7 @@ function wlHead(p, no, title) { var inf = p.info || {};
 function topC(title, sub, co) {
   return (DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top tc"><div class="top-row"><button class="homebtn" id="goHome2" title="All jobs"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><img class="tclogo" data-home src="logo-en-light.png" alt="Akhnaton" title="Home – all jobs"><div class="tct"><nav class="crumb"><button data-home>All jobs</button><span>›</span>' + (co ? '<button id="crCo">' + co + '</button><span>›</span>' : '') + '<b>' + title + '</b></nav><small>' + sub + '</small></div>' +
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span></div></div>'; }
-document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; var ov = document.querySelector('.sopov'); if (ov) { ov.remove(); e.preventDefault(); return; } var he = document.getElementById('hEdit2'); if (he && !document.querySelector('.sheet.open, .sheetbg.open, .dlg')) { e.preventDefault(); he.click(); } });
+document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; var ov = document.querySelector('.sopov'); if (ov) { ov.remove(); e.preventDefault(); return; } if (typeof sheetFn !== 'undefined' && sheetFn && !document.querySelector('.dlg, .dialog')) { e.preventDefault(); closeSheet(); try { render(); } catch (x) {} return; } var he = document.getElementById('hEdit2'); if (he && !document.querySelector('.dlg')) { e.preventDefault(); he.click(); } });
 function hubAddBind(p) { var he = $('#hEdit2'); if (he) he.onclick = function () { p.hubEdit = false; p.hubSel = {}; saveProjects(); render(); };
   var hd = $('#hDelSel'); if (hd) hd.onclick = function () { var ids = Object.keys(p.hubSel || {}).filter(function (k) { return p.hubSel[k]; }); if (!ids.length) return; dialog('Remove ' + ids.length + ' certificate' + (ids.length > 1 ? 's' : '') + '?', 'They leave this job; ↶ Undo or the Recycle bin brings them back.', 'Remove').then(function (y) { if (!y) return; p.items = p.items.filter(function (z) { return ids.indexOf(z.id) < 0; }); p.hubSel = {}; saveProjects(); toast('Removed – ↶ Undo brings them back'); render(); }); }; $$('[data-lx]').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); var x = p.items.filter(function (y) { return y.id === b.dataset.lx; })[0]; if (!x) return;
     dialog('Remove this certificate?', '<b>' + esc(x.certNo || x.code || 'Item') + '</b>' + (x.code ? ' · ' + esc(x.code) : '') + (x.description ? ' · ' + esc(x.description) : '') + '<br>It leaves this job and its cover; the numbers after it move up. You can bring it back with ↶ Undo or from the Recycle bin.', 'Remove').then(function (y) { if (!y) return; p.items = p.items.filter(function (z) { return z !== x; }); saveProjects(); toast('Removed – ↶ Undo brings it back'); render(); }); }, true); });
