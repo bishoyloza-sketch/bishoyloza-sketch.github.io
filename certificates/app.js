@@ -1687,12 +1687,29 @@ function fmtAcc(v, u) { return (Math.round(v * 1e6) / 1e6) + ' ' + u; }
 /* the CMC in the item's own unit (an estimated uncertainty never goes below it) */
 function accCmcIn(it) { var p = accProj(it); if (!p) return null; var r; try { r = accCheck(p, Object.assign({}, it, { unc: '', accOff: 0 })); } catch (e) { return null; } if (!r || !r.cmc) return null; var one = accConv(1, it.uncUnit || it.resUnit || r.unit, r.base, true); return one ? r.cmc / one : null; }
 /* expanded uncertainty: the value typed for the item; if none, a sensible estimate from the kind, resolution and range (marked as an estimate on screen until it is edited) */
+/* reference accuracy from the makers' datasheets: [match, % of reading, absolute (in unit), % of full scale of the reference, unit] */
+var REF_ACC = [
+  [/5825|5815|9565/, 1, 1, 0, 'Pa'],                 // TSI DP-Calc: ±1 % rdg ±1 Pa
+  [/dpi\s*104/i, 0, 0, 0.05], [/dpi\s*610/i, 0, 0, 0.025], [/dpi\s*800/i, 0, 0, 0.05], [/cpt\s*6000/i, 0, 0, 0.025],
+  [/\b1521\b/, 0, 0.025, 0, '°C'], [/dti\s*050/i, 0, 0.02, 0, '°C'], [/hc2/i, 0, 0.1, 0, '°C', 0.5, '%RH'],
+  [/tc\s*200/i, 0, 1, 0, '°C'], [/tp\s*425|ut\s*33|testo\s*400|\b625\b/i, 0, 0.5, 0, '°C', 3, '%RH'],
+  [/tach\s*20/i, 0.02, 1, 0, 'rpm'], [/hs-?80|hs-?3v|lct\s*055/i, 0.0005, 0, 0, 's']];
+function refAccAt(id, x, unit) { var d = labDevices().filter(function (q) { return q.id === id; })[0]; if (!d) return null; var t = [d.manufacturer, d.description, d.model, d.serial].join(' '), uk = unitKey(unit || '');
+  for (var i = 0; i < REF_ACC.length; i++) { var a = REF_ACC[i]; if (!a[0].test(t)) continue;
+    if (a[3]) { var rg = rngNums(d.range || ''), fsr = rg ? Math.max(Math.abs(rg.lo), Math.abs(rg.hi)) : null; if (!fsr) return null; var ru = unitKey(rg.u || uk), c0 = UCAT[ru], c1 = UCAT[uk]; var v = a[3] / 100 * fsr; return c0 && c1 && c0[0] === c1[0] && c0[0] !== 'Temperature' ? v * c0[2] / c1[2] : v; }
+    var abs = a[2], au = unitKey(a[4] || uk); if (a[6] && unitKey(a[6]) === uk) { abs = a[5]; au = uk; }
+    var cA = UCAT[au], cB = UCAT[uk]; if (cA && cB && cA[0] === cB[0] && cA[0] !== 'Temperature' && au !== uk) abs = abs * cA[2] / cB[2];
+    return a[1] / 100 * Math.abs(x) + abs; }
+  return null; }
 function uncEst(it) { var f = (it.old && it.old.fields) || {}, rs = isNum(it.res) ? +it.res : parseFloat((tidy(f.resolution || '').match(/\d*\.?\d+/) || [])[0]); if (!(rs > 0)) return null;
-  var k = itKind(it), fs = limFS(it) || 0, r2 = rs * 2 / Math.sqrt(3), u;
-  if (k === 'Weight') u = Math.max(r2, 0.00001 * fs); else if (k === 'Temperature') u = Math.max(r2, 0.3); else if (k === 'RH') u = Math.max(r2, 1.5);
-  else if (k === 'Pressure' || k === 'Differential pressure') u = Math.max(r2, 0.0025 * fs); else if (k === 'Timer') u = Math.max(rs, 0.5); else if (k === 'RPM') u = Math.max(r2, 0.001 * fs);
-  else { var l = it.lim && isNum(it.lim.val) && it.lim.type === 'abs' ? +it.lim.val / 4 : 0; u = Math.max(r2, l); }
-  var cm = accCmcIn(it); if (cm && u < cm) u = cm; var d = Math.max(0, decOf(isNum(it.res) ? it.res : String(rs))), m = Math.pow(10, d); u = Math.ceil(u * m - 1e-9) / m; return u.toFixed(d); }
+  var k = itKind(it), fs = limFS(it) || 0, top = isNum(it.cMax) ? Math.abs(numv(it.cMax)) : fs, p0 = null, id = (it.refs || [])[0]; try { p0 = accProj(it); } catch (e) {}
+  var un = it.unit || it.resUnit || '', acc = id ? refAccAt(id, top, un) : null, rr = id && p0 ? refResOf(p0, id, un) : null, rrv = isNum(rr) ? +rr : 0;
+  if (acc == null) { /* reference not in the datasheet list: a sensible floor by kind */
+    acc = k === 'Weight' ? 0.00001 * fs : k === 'Temperature' ? 0.3 : k === 'RH' ? 1.5 : (k === 'Pressure' || k === 'Differential pressure') ? 0.0025 * fs : k === 'Timer' ? 0.5 : k === 'RPM' ? 0.001 * fs : (it.lim && isNum(it.lim.val) && it.lim.type === 'abs' ? +it.lim.val / 4 : 0); }
+  var u = 2 * Math.sqrt(Math.pow(acc / Math.sqrt(3), 2) + Math.pow(rrv / Math.sqrt(12), 2) + 2 * Math.pow(rs / Math.sqrt(12), 2));
+  var cm = accCmcIn(it); if (cm && u < cm) u = cm;
+  /* round UP to two significant figures, at most one decimal finer than the resolution */
+  var d0 = Math.max(0, decOf(isNum(it.res) ? it.res : String(rs))), sig = u > 0 ? Math.max(0, 1 - Math.floor(Math.log10(u))) : d0, d = Math.min(Math.max(d0, sig), d0 + 1), m = Math.pow(10, d); u = Math.ceil(u * m - 1e-9) / m; return u.toFixed(d); }
 function uncText(it) { var un = it.uncUnit || it.resUnit || it.unit || ''; if (isNum(it.unc)) return '± ' + it.unc + ' ' + un; var e = uncEst(it); return e ? '± ' + e + ' ' + un : ''; }
 function envText(p) { var inf = ensureInfo(p); return (inf.eLoc ? inf.eLoc + '  ' : '') + inf.eT + ' °C & ' + inf.eH + ' %R.H.'; }
 function dataRows(p, it, out) { var f = (it.old && it.old.fields) || {};
@@ -3061,14 +3078,38 @@ function autoStart(p, done) { var g = genDefaults(p); if (String(g.start).trim()
 function degFix(t) { if (t == null) return t; var s = String(t); if (!/[º˚]|deg|\d\s*0\s*[CF]\b|\)\s*[CF](?![A-Za-z])|\bo\s*C\b/i.test(s)) return s;
   return s.replace(/\s*[º˚]\s*([CF])\b/g, ' °$1').replace(/(\d)\s*°\s*([CF])\b/g, '$1 °$2').replace(/\bdeg(?:ree)?s?\.?\s*([CF])\b/gi, '°$1').replace(/(\d)\s+0\s*([CF])\b/g, '$1 °$2').replace(/(\d)\s*\bo\s*C\b/g, '$1 °C').replace(/\)\s*([CF])(?![A-Za-z])/g, ') °$1').replace(/\(\s*°/g, '(°').replace(/ {2,}/g, ' '); }
 /* every typed value carries the full resolution: points like the column, references like the reference resolution, readings like the item resolution (10 → 10.0 / 10.00) */
-function itemDecs(p, it) { var o = it.old || { points: [] }, dR = resDec(it), ids = (it.refs && it.refs.length ? it.refs : (p.info && p.info.refs) || []), rr = ids.map(function (id) { return refResOf(p, id); }).filter(isNum);
+function itemDecs(p, it) { var o = it.old || { points: [] }, dR = resDec(it), ids = (it.refs && it.refs.length ? it.refs : (p.info && p.info.refs) || []), rr = ids.map(function (id) { return refResOf(p, id, it.unit); }).filter(isNum);
   var colDec = function (key) { var c = {}; o.points.forEach(function (q) { if (isNum(q[key])) { var k = decOf(q[key]); c[k] = (c[k] || 0) + 1; } }); var best = null, n = 0; Object.keys(c).forEach(function (k) { if (c[k] > n || (c[k] === n && +k > best)) { n = c[k]; best = +k; } }); return best; };
   var dRef = rr.length ? Math.max.apply(null, rr.map(decOf)) : (colDec('ref') != null ? colDec('ref') : dR), dPt = colDec('point'); if (dPt == null) dPt = dRef != null ? dRef : dR; return { dR: dR, dRef: dRef, dPt: dPt }; }
 function normItem(p, it) { var o = it.old; if (!o || !(o.points || []).length || genOn(it)) return; var D = itemDecs(p, it), dR = D.dR, dRef = D.dRef, dPt = D.dPt;
   o.points.forEach(function (q, i) { if (dPt != null && isNum(q.point)) q.point = padTo(q.point, dPt); [i, i + 'd'].forEach(function (k) { var v = it.nv && it.nv[k]; if (!v) return; if (dRef != null && isNum(v.ref)) v.ref = padTo(v.ref, dRef); if (dR != null && isNum(v.reading)) v.reading = padTo(v.reading, dR); }); }); }
 function padTo(v, d) { if (d == null || !isNum(v)) return v; var s = String(v).trim().replace(',', '.'); return decOf(s) < d ? numv(s).toFixed(d) : s; }
-function refResOf(p, id) { var r = p && p.info && p.info.refRes && p.info.refRes[id]; if (isNum(r)) return r; r = LS.get('refRes', {})[id]; if (isNum(r)) return r; var d = labDevices().filter(function (x) { return x.id === id; })[0], m = d && String(d.resolution || '').replace(',', '.').match(/\d*\.?\d+/); return m && isNum(m[0]) && +m[0] > 0 ? m[0] : null; }
-function refDec(p, it) { var id = (it.refs || [])[0], r = id && refResOf(p, id); return isNum(r) ? decOf(r) : null; }
+/* datasheet resolutions of the lab references (looked up once from the makers' specifications; the reference's own resolution, not the unit under test) */
+var REF_RES = [
+  [/5825|5815|9565/, { Pa: 0.1 }],                                   // TSI DP-Calc 5825 / 9565-P: 0.1 Pa (0.001 inH2O)
+  [/dpi\s*800/i, { mbar: 0.001 }],                                   // Druck DPI 800, 70 mbar range, 99999 counts
+  [/dpi\s*104.*(2472097)|2472097/, { bar: 0.0001 }],                 // Druck DPI 104 0-7 bar: 0.1 mbar
+  [/dpi\s*104.*(2807149)|2807149/, { bar: 0.01 }],                   // Druck DPI 104 0-700 bar
+  [/dpi\s*104/i, { bar: 0.001 }],                                    // Druck DPI 104 0-20 bar (5 digits)
+  [/2705371/, { bar: 0.01 }], [/2699188/, { bar: 0.0001 }], [/dpi\s*610/i, { bar: 0.001 }], // Druck DPI 610 + modules (5 digits)
+  [/cpt\s*6000/i, { bar: 0.0001 }],                                  // WIKA CPT6000
+  [/\b1521\b|\b1522\b/, { '°C': 0.001 }],                            // Hart 1521: 0.001 °C
+  [/dti\s*050/i, { '°C': 0.001 }],                                   // Ametek DTI050
+  [/\b91(40|03)\b|pegasus/i, { '°C': 0.1 }],                         // dry blocks
+  [/tc\s*200/i, { '°C': 0.1 }],
+  [/hc2/i, { '°C': 0.01, '%RH': 0.01 }],                               // Rotronic HC2-SH
+  [/tp\s*425|ut\s*33|testo\s*400|\b625\b/i, { '°C': 0.1, '%RH': 0.1 }],
+  [/tach\s*20|\bct\s*6\b/i, { rpm: 0.1 }],
+  [/hs-?80|hs-?3v|lct\s*055|stop\s*watch/i, { s: 0.01 }],
+  [/caliper/i, { mm: 0.01 }]];
+function refSpecRes(id, unit) { var d = labDevices().filter(function (x) { return x.id === id; })[0]; if (!d) return null; var t = [d.manufacturer, d.description, d.model, d.serial].join(' ');
+  for (var i = 0; i < REF_RES.length; i++) if (REF_RES[i][0].test(t)) { var m = REF_RES[i][1], uk = unitKey(unit || ''), ks = Object.keys(m);
+    if (m[uk] != null) return String(m[uk]); var c0 = UCAT[uk]; for (var j = 0; j < ks.length; j++) { var c1 = UCAT[ks[j]]; if (c0 && c1 && c0[0] === c1[0] && c0[0] !== 'Temperature') return String(+((m[ks[j]] * c1[2] / c0[2]).toPrecision(6))); }
+    return ks.length === 1 && !uk ? String(m[ks[0]]) : null; }
+  return null; }
+function refResOf(p, id, unit) { var sp = refSpecRes(id, unit), r0 = refResOf0(p, id); if (isNum(sp) && (!isNum(r0) || decOf(r0) < decOf(sp))) return sp; return r0; }
+function refResOf0(p, id) { var r = p && p.info && p.info.refRes && p.info.refRes[id]; if (isNum(r)) return r; r = LS.get('refRes', {})[id]; if (isNum(r)) return r; var d = labDevices().filter(function (x) { return x.id === id; })[0], m = d && String(d.resolution || '').replace(',', '.').match(/\d*\.?\d+/); return m && isNum(m[0]) && +m[0] > 0 ? m[0] : null; }
+function refDec(p, it) { var id = (it.refs || [])[0], r = id && refResOf(p, id, it.unit); return isNum(r) ? decOf(r) : null; }
 var REFQ = {};
 function needOcr() { return window.Tesseract ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'); }
 function fileText(f) { /* text of a PDF in SharePoint; scanned pages are read with OCR (website only) */
