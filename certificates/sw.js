@@ -1,5 +1,5 @@
 /* Akhnaton Certificates – offline shell. Bump VERSION with every upload. Shares the origin with Akhnaton Devices, so only its own caches are touched. */
-var VERSION = 'akh-certs-v137';
+var VERSION = 'akh-certs-v138';
 var SHELL = ['./', './index.html', './app.css', './certs.css', './app.js', './config.js', './manifest.webmanifest', './demo.html', './demo-data.js', './manifest-demo.webmanifest', './logo-en-light.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener('activate', function (e) { e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k.indexOf('akh-certs-') === 0 && k !== VERSION; }).map(function (k) { return caches.delete(k); })); }).then(function () { return self.clients.claim(); })); });
