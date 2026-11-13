@@ -1014,3 +1014,12 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .hdata .hdl b{display:block;font-size:15px;color:#14213d}.hdata .hdl small{display:block;color:#5c6577;font-size:12.5px;margin-top:2px}
 .hdata .hdb{display:flex;align-items:center;gap:10px}.hdata .hdold{font-size:12px;color:#8a5a00;background:#FFF4DC;border-radius:8px;padding:3px 8px}.hdata .hdok{font-size:12px;color:#14603C}
 .colib .clr b.mut{color:#9AA6B5;font-weight:500}
+.dltab{margin-bottom:10px}.dltab small{font-weight:500;opacity:.7;margin-left:4px}
+.dlq{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line,#DCE3EC);border-radius:10px;font:15px var(--font);margin-bottom:10px}
+.dll{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.dlr{background:#fff;border:1px solid var(--line,#DCE3EC);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.dlr>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.dlr>div b{color:var(--navy);font-size:15px}.dlr>div span{font-size:12.5px;color:var(--muted);text-align:right}
+.dlr small{font-size:13px;color:#45556B;line-height:1.35}.dlr i{font-style:normal;font-size:11.5px;color:#9AA6B5}
+.dlr .dlok{color:#1E7B4B!important;font-weight:600}.dlr.dlno{background:#F7F9FC}.dlh{font:600 12px var(--font);color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:8px 2px 0}
+.dlin{font:500 11px var(--font);color:#9AA6B5;font-style:normal;margin-left:4px}
+.dlbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}.dlbar .dlq{margin:0;flex:1}.dlbar .btn{white-space:nowrap;flex:none}
