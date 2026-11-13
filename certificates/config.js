@@ -8,5 +8,8 @@ window.APP_CONFIG = {
   MS_TENANT: 'organizations',
   /* Where the calibration files live */
   SP_SITE_URL: 'https://evapharma.sharepoint.com/sites/CalibrationValidationTeam2',
-  CERT_PATH: 'General/Certificates'
+  CERT_PATH: 'General/Certificates',
+  /* Online datasheet search (Google Apps Script + Gemini with Google Search) – see server/Datasheets.gs */
+  DS_URL: '',
+  DS_KEY: ''
 };

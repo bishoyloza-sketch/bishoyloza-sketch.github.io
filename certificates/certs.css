@@ -1008,3 +1008,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .dsbad{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:#C2362B;color:#fff;font-size:11px;line-height:18px;text-align:center;margin-left:4px}
 .dstab td{vertical-align:top}.dstab td small{display:block;color:#6b7280;font-size:12px;margin-top:2px}.dstab .dsold{color:#8a1c1c;text-decoration:line-through}
 .dstab .dsact{white-space:nowrap;text-align:right}.dstab .dsact .btn{margin-left:4px}
+.dsrem{border-left:4px solid #E0A100}.dssteps{margin:0 0 12px 18px;padding:0;line-height:1.7;font-size:14px}.dssteps li{margin-bottom:6px}
+.colib{border-left:4px solid var(--office)}.colib .clr{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px dashed #e3e8ef;font-size:13px}.colib .clr span{width:90px;color:#6b7280;flex:0 0 90px}.colib .clr b{flex:1;font-weight:600}.colib .clr i{color:#14603C;font-style:normal;font-size:12px;white-space:nowrap}
