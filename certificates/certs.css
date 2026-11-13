@@ -1010,3 +1010,6 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .dstab .dsact{white-space:nowrap;text-align:right}.dstab .dsact .btn{margin-left:4px}
 .dsrem{border-left:4px solid #E0A100}.dssteps{margin:0 0 12px 18px;padding:0;line-height:1.7;font-size:14px}.dssteps li{margin-bottom:6px}
 .colib{border-left:4px solid var(--office)}.colib .clr{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px dashed #e3e8ef;font-size:13px}.colib .clr span{width:90px;color:#6b7280;flex:0 0 90px}.colib .clr b{flex:1;font-weight:600}.colib .clr i{color:#14603C;font-style:normal;font-size:12px;white-space:nowrap}
+.hdata{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px}
+.hdata .hdl b{display:block;font-size:15px;color:#14213d}.hdata .hdl small{display:block;color:#5c6577;font-size:12.5px;margin-top:2px}
+.hdata .hdb{display:flex;align-items:center;gap:10px}.hdata .hdold{font-size:12px;color:#8a5a00;background:#FFF4DC;border-radius:8px;padding:3px 8px}.hdata .hdok{font-size:12px;color:#14603C}
