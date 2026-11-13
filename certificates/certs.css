@@ -1013,3 +1013,4 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .hdata{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px}
 .hdata .hdl b{display:block;font-size:15px;color:#14213d}.hdata .hdl small{display:block;color:#5c6577;font-size:12.5px;margin-top:2px}
 .hdata .hdb{display:flex;align-items:center;gap:10px}.hdata .hdold{font-size:12px;color:#8a5a00;background:#FFF4DC;border-radius:8px;padding:3px 8px}.hdata .hdok{font-size:12px;color:#14603C}
+.colib .clr b.mut{color:#9AA6B5;font-weight:500}
