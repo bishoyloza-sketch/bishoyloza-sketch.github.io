@@ -994,3 +994,13 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .acbox button b{font-weight:600;color:#0d3d75}
 .acbox small{font-size:10px;color:#8a94a6;border:1px solid #d9dfe8;border-radius:5px;padding:0 4px}
 @media(hover:none){.acbox small{display:none}.acbox button{min-height:42px}}
+.dsbox .dsi{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px dashed #e3e8ef;font-size:13px}
+.dsbox .dsi small{display:block;color:#6b7280;font-size:12px}
+.dsbox .dsn{font-size:12.5px;color:#5c6577;padding:6px 0}
+.dsbox .dsp{padding:8px 10px;background:#F2F6FC;border-radius:10px;margin:6px 0;font-size:13px}.dsbox .dsp small{display:block;color:#47546b;margin-top:2px;line-height:1.5}
+.dsbox .dsok{color:#14603C;font-weight:600;padding:6px 0}
+.dsbox .dsi{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px dashed #e3e8ef;font-size:13px}
+.dsbox .dsi small{display:block;color:#6b7280;font-size:12px}
+.dsbox .dsn{font-size:12.5px;color:#5c6577;padding:6px 0}
+.dsbox .dsp{padding:8px 10px;background:#F2F6FC;border-radius:10px;margin:6px 0;font-size:13px}.dsbox .dsp small{display:block;color:#47546b;margin-top:2px;line-height:1.5}
+.dsbox .dsok{color:#14603C;font-weight:600;padding:6px 0}
