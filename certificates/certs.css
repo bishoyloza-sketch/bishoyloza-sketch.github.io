@@ -988,3 +988,9 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .gapnote2 .gin{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.gapnote2 .gin label{display:flex;flex-direction:column;font-size:11px;color:#5c6577}.gapnote2 .gin input{width:92px;height:34px;padding:4px 8px;font-size:13px}
 .pvpart{background:#FFF4DC;border:1px solid #f0dcae;color:#6A4300;border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:13px;line-height:1.5}.pvpart .btn{margin-left:6px}
 .locc h3{margin:0 0 6px}.locc .meta{line-height:1.55}
+.acbox{position:fixed;z-index:9999;display:none;flex-direction:column;gap:2px;padding:4px;background:#fff;border:1px solid #cfd8e6;border-radius:12px;box-shadow:0 10px 28px rgba(15,30,60,.18);max-width:420px;max-height:260px;overflow:auto}
+.acbox button{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:8px;font:inherit;font-size:14px;color:#14213d;cursor:pointer;min-height:36px}
+.acbox button:hover,.acbox button.on{background:#E8F1FB}
+.acbox button b{font-weight:600;color:#0d3d75}
+.acbox small{font-size:10px;color:#8a94a6;border:1px solid #d9dfe8;border-radius:5px;padding:0 4px}
+@media(hover:none){.acbox small{display:none}.acbox button{min-height:42px}}
