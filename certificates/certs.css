@@ -1106,3 +1106,26 @@ body.mt #redoFab{display:none!important}
 #libPop .lpu{color:#55606f;margin-bottom:10px;display:flex;align-items:center;gap:6px}#libPop .lpu .spin{width:14px;height:14px;border-width:2px}
 #libPop .lpb{display:flex;gap:8px}#libPop .lpb .btn{flex:1}
 @media (max-width:760px){#libFab{bottom:132px}}
+/* ===== test certificates (HEPA / particle count / compressed air / LAF) ===== */
+.tpdrow{display:flex;justify-content:center;align-items:flex-start;gap:18px;flex-wrap:wrap;margin:4px 0 6px}
+.tpdw{display:inline-block;text-align:center;margin:2px auto}
+.tpcap{font-size:9.5px;color:#444;margin-top:3px}
+table.tpkv2 td.b{width:26%;background:#F2F4F7}
+table.tpkv2 td{text-align:left;white-space:pre-line}
+.tpsh{display:flex;flex-direction:column;gap:12px}
+.tpg{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 12px;background:var(--card,#fff);border:1px solid var(--line,#E3E7ED);border-radius:12px;padding:12px}
+.tpo{display:flex;flex-direction:column;gap:4px;font-size:12px}.tpo>span{color:var(--muted,#6B7280);font-weight:600}
+.tpo.w2{grid-column:span 2}.tpo textarea{resize:vertical;font:inherit}
+.tpwrap{overflow-x:auto;border:1px solid var(--line,#E3E7ED);border-radius:12px}
+.tptbl{border-collapse:collapse;width:100%;font-size:13px}
+.tptbl th{background:#EEF3F9;color:#13294B;font-weight:700;padding:6px;text-align:center;border-bottom:1px solid #D5DDE8;white-space:nowrap}
+.tptbl th small{display:block;font-weight:500;color:#6B7280;font-size:10.5px}
+.tptbl td{padding:4px 5px;border-bottom:1px solid #EEF1F5;text-align:center}
+.tptbl td .inp{min-width:64px;width:100%;text-align:center;padding:6px}
+.tptbl td .inp::placeholder{color:#B8C0CC}
+.tptbl tr.tpavg td{background:#F7F9FC;font-weight:600}
+.tpfh{display:flex;gap:4px;justify-content:center;margin-top:4px}.tpfh select{max-width:120px}
+.tpauto{font-weight:700;color:#13294B}
+.tpst{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:#EEF1F5;color:#6B7280}
+.tpst.ok{background:#E6F4EA;color:#1A7F37}.tpst.no{background:#FCE8E6;color:#C2362B}
+.tphint{font-size:12px;color:#6B7280;margin:0}
