@@ -172,7 +172,7 @@ LOC.pages = function (id) { id = String(id).split('/').pop(); var f = LOC.byId[i
     if (/\.xlsx$/i.test(f.name)) return readXlsx(buf).then(function (wb) { return Object.keys(wb).map(function (sn) { return ['## ' + sn].concat((wb[sn] || []).map(function (r) { return r.map(function (c) { return c == null ? '' : String(c); }).join('\t'); })); }); });
     return [new TextDecoder().decode(buf).split(/\r?\n/)]; }); }); };
 /* texts of the Word / PDF files, kept on this computer so a code can be found inside them like SharePoint search does */
-LOC.texts = function () { if (LOC.tBusy) return; var L = LOC.files.filter(function (f) { return !f.dir && /\.(docx|pdf)$/i.test(f.name); }); LOC.tAll = L.length; LOC.tDone = 0; LOC.tBusy = true;
+LOC.texts = function () { if (LOC.tBusy) return; var cd0 = LOC.certDir() + '/'; var L = LOC.files.filter(function (f) { return !f.dir && /\.(docx|pdf)$/i.test(f.name) && f.path.indexOf(cd0) === 0; }); LOC.tAll = L.length; LOC.tDone = 0; LOC.tBusy = true;
   L.sort(function (a, b) { return (/\.docx$/i.test(a.name) ? 0 : 1) - (/\.docx$/i.test(b.name) ? 0 : 1) || String(b.path).localeCompare(String(a.path)); });
   var k = 0, tick = 0, one = function () { if (!LOC.on) { LOC.tBusy = false; return; } if (k >= L.length) { LOC.tBusy = false; try { if (!sheetFn) render(); } catch (e) {} return; } var f = L[k++];
     return LOC.handle(f.path).then(function (h) { return h.getFile(); }).then(function (file) { f.mod = file.lastModified; f.size = file.size; var c = LOC.txt[f.id]; if (c && c.m === file.lastModified) return;
