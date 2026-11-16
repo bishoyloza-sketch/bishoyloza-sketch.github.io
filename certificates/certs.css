@@ -1079,3 +1079,16 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .tmseg button{border:0;background:transparent;padding:6px 12px;font:600 13px var(--font,inherit);color:#1b2d52;cursor:pointer;border-right:1px solid #e1e8f3}
 .tmseg button:last-child{border-right:0}.tmseg button.on{background:#1b2d52;color:#fff}
 .tmbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.dlt2{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1px solid #dbe4f2;border-radius:12px;overflow:hidden;font-size:14px;margin:6px 0}
+.dlt2 th{background:#EEF3FA;color:#1b2d52;font-weight:600;text-align:left;padding:10px 12px;font-size:12.5px;text-transform:uppercase;letter-spacing:.02em;border-bottom:1px solid #dbe4f2}
+.dlt2 td{padding:10px 12px;border-bottom:1px solid #eef2f8;vertical-align:middle}
+.dlt2 tr.dlr{cursor:pointer}.dlt2 tr.dlr:hover td{background:#F6F9FE}.dlt2 tr.dlr.open td{background:#EEF4FC}
+.dlt2 td.n{width:40px;color:#7a8597;font-weight:600;text-align:center}.dlt2 td.b{font-weight:600;color:#1b2d52}.dlt2 td.a{width:96px;text-align:right}.dlt2 td.nw{white-space:nowrap}
+.dlt2 tr.dlx{display:none}.dlt2 tr.dlr.open+tr.dlx{display:table-row}.dlt2 tr.dlx td{background:#F8FAFD}
+.dlt2 .dld{display:block!important}.dlt2 .dlmiss,.dlt2 td.dlmiss{color:#B7791F}.dled{font-style:normal;font-size:10.5px;background:#E6F4EA;color:#1E7B34;border-radius:8px;padding:1px 6px;margin-left:4px}
+.dlt2 tr.dlr{display:table-row;padding:0;border:0;margin:0;background:none}.dlt2 tr.dlr.open+tr.dlx{display:table-row}
+#redoFab{position:fixed;left:16px;bottom:44px;z-index:60;display:none;align-items:center;gap:6px;padding:9px 15px;border-radius:999px;border:1px solid #c9d6ea;background:#fff;color:var(--navy,#13294B);font:600 14px/1 Barlow,system-ui,sans-serif;box-shadow:0 4px 14px rgba(19,41,75,.18);cursor:pointer}
+#redoFab.on{display:inline-flex}#redoFab small{display:inline-block;min-width:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:#EEF3FA;font-size:11px;line-height:18px;text-align:center}
+body.mt #redoFab{display:none!important}
+.homebtn.hb2{display:inline-flex;align-items:center;gap:6px;width:auto!important;padding:0 12px!important;border-radius:999px!important;font:600 13px var(--font,inherit)}
+.top .brand,.top .tclogo{cursor:pointer}
