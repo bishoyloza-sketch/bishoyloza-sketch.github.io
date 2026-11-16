@@ -1075,3 +1075,7 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .cit .inp{height:38px;border-radius:6px;font-size:14px;width:100%;min-width:110px}.cit td.ca{white-space:nowrap;width:120px}
 .fld span.dpick{display:flex;flex-direction:row;align-items:center;font-size:inherit;color:inherit;margin:0;font-weight:inherit}
 .fld span.dpick.big{min-height:48px}
+.tmseg{display:inline-flex;border:1px solid #c9d6ea;border-radius:10px;overflow:hidden;background:#fff}
+.tmseg button{border:0;background:transparent;padding:6px 12px;font:600 13px var(--font,inherit);color:#1b2d52;cursor:pointer;border-right:1px solid #e1e8f3}
+.tmseg button:last-child{border-right:0}.tmseg button.on{background:#1b2d52;color:#fff}
+.tmbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
