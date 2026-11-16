@@ -444,12 +444,14 @@ var SCOPES = ['User.Read', 'Files.ReadWrite.All', 'Sites.Read.All'];
 var MS = { app: null, account: null, ready: null, error: '' };
 MS.ready = (function () {
   if (!CFG.MS_CLIENT_ID) { MS.error = 'not-configured'; return Promise.resolve(); }
-  if (!window.msal) { MS.error = 'Microsoft sign-in did not load. Check the internet.'; return Promise.resolve(); }
+  if (!window.msal) return loadScript('https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js').then(function () { return MS.init(); }, function () { MS.error = 'Microsoft sign-in did not load. Check the internet.'; });
+  return Promise.resolve().then(function () { return MS.init(); });
+})();
+MS.init = function () { if (!window.msal) return Promise.resolve();
   MS.app = new msal.PublicClientApplication({ auth: { clientId: CFG.MS_CLIENT_ID, authority: 'https://login.microsoftonline.com/' + (CFG.MS_TENANT || 'organizations'), redirectUri: location.origin + location.pathname.replace(/index\.html$/, '') },
     cache: { cacheLocation: 'localStorage' } });
   return MS.app.handleRedirectPromise().then(function (r) { if (r && r.account) MS.account = r.account; if (!MS.account) MS.account = MS.app.getAllAccounts()[0] || null; })
-    .catch(function (e) { MS.error = e.message || String(e); });
-})();
+    .catch(function (e) { MS.error = e.message || String(e); }); };
 function msSignIn() { if (!MS.app) return toast(MS.error === 'not-configured' ? 'SharePoint is not set up yet (config.js)' : MS.error, true); MS.app.loginRedirect({ scopes: SCOPES, prompt: 'select_account' }); }
 function msToken() { return MS.ready.then(function () {
   if (!MS.app || !MS.account) throw new Error('Sign in to SharePoint first');
