@@ -1055,3 +1055,5 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .srow .t3>span{display:flex;flex-direction:column;min-width:0}.srow .t3 small{font-size:11px;color:#7a8597;text-transform:uppercase;letter-spacing:.02em}
 .srow .t3 b{font-weight:600;overflow-wrap:anywhere}
 @media (max-width:700px){.srow .t3,.lvr{grid-template-columns:1fr 1fr}}
+.sheet-bg.still,.sheet-bg.still .sheet{animation:none!important}
+.sheet-bg.still .lvr{animation:none}
