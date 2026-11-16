@@ -11,7 +11,7 @@ window.APP_CONFIG = {
   CERT_PATH: 'General/Certificates',
   /* Online datasheet search (Google Apps Script + Gemini with Google Search) – see server/Datasheets.gs */
   /* Shared jobs (Google Apps Script – see server/Jobs.gs): every job open for the whole team, with its history */
-  JOBS_URL: '',
+  JOBS_URL: 'https://script.google.com/macros/s/AKfycbwAWqCIdzkfieM2Qd_H4ilI6ZFh1bY5LdND5J6Dh5LnZOAjosB1ZrjBgonkWYsQfdM33w/exec',
   JOBS_KEY: 'akhnaton-jobs-2026',
   DS_URL: 'https://script.google.com/macros/s/AKfycbxpCz8VLbiu3Dy7K3nS0GrB3CwqzbpXcsjq_vFMII1qnzciErBnXGa4CgNtz4rNj-ydYg/exec',
   DS_KEY: 'akhnaton2026'
