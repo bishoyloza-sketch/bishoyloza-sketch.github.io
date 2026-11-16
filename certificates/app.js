@@ -1175,6 +1175,8 @@ var isWork = function (d) { return d.getDay() <= 4; }; /* Sun–Thu */
 function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function prevWork(d) { var x = new Date(d); while (!isWork(x)) x = addDays(x, -1); return x; }
 function addWork(d, n) { var x = new Date(d), c = 0; while (c < n) { x = addDays(x, 1); if (isWork(x)) c++; } return x; }
+/* a click anywhere on the date box opens the calendar (Edge / Chrome only open it from their own small icon otherwise) */
+document.addEventListener('click', function (ev) { var w = ev.target && ev.target.closest && ev.target.closest('.dpick'); if (!w) return; var inp = w.querySelector('input[type=date]'); if (!inp || inp.disabled) return; if (ev.target !== inp) inp.focus(); try { if (inp.showPicker) inp.showPicker(); } catch (e) {} }, true);
 function dpSync(e) { var w = e && e.closest && e.closest('.dpick'); if (w) w.querySelector('b').textContent = e.value ? fmtD(e.value) : 'choose date'; }
 document.addEventListener('input', function (ev) { if (ev.target && ev.target.closest && ev.target.closest('.dpick')) dpSync(ev.target); }, true); document.addEventListener('change', function (ev) { if (ev.target && ev.target.closest && ev.target.closest('.dpick')) dpSync(ev.target); }, true);
 function fmtD(s) { var d = s2d(s); if (!d) return '—'; return (d.getDate() < 10 ? '0' : '') + d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()] + ' ' + d.getFullYear(); }
@@ -1979,7 +1981,8 @@ function wHeader(title) { return W.p(W.r(title || 'Calibration Certificate', { b
   W.p([W.r('ISSUED BY  ', { sz: FS }), W.r(LAB.name + ' ', { b: true, sz: FS }), W.r(LAB.sub + '   ' + LAB.lab, { sz: FS })], { jc: 'center', after: 0 }) + W.p(W.r(LAB.addr + '   ' + LAB.tel + '   ' + LAB.mail, { sz: FS }), { jc: 'center', after: 60 })); }
 /* the info lines of a cover: empty address / phone lines are left out */
 function coverInfo(p) { var g = genDefaults(p), inf = p.info, tel = [g.tel, g.fax].filter(Boolean).join(' / '), L = [['DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code || ''], ['CUSTOMER:', p.company.official || p.company.name]];
-  if (g.addr && tel) L.push(['ADDRESS:', g.addr, 'Tel / Fax:', tel]); else if (g.addr) L.push(['ADDRESS:', g.addr]); else if (tel) L.push(['Tel / Fax:', tel]);
+  /* a long address gets the whole line, Tel / Fax goes to the next line – they never run into each other */
+  if (g.addr && tel && String(g.addr).length <= 38) L.push(['ADDRESS:', g.addr, 'Tel / Fax:', tel]); else { if (g.addr) L.push(['ADDRESS:', g.addr]); if (tel) L.push(['Tel / Fax:', tel]); }
   L.push(['DATE RECEIVED:', fmtD(inf.rec), 'WORK ORDER No.:', woNo(inf)]); return L; }
 function wCertNo(no, cont) { return W.p([W.r((cont ? 'CONTINUE CERTIFICATE NO.:  ' : 'CERTIFICATE NO.:  '), { b: true, sz: 22, c: '13294B' }), W.r(no || '', { b: true, sz: 22 })], { jc: 'center', after: 100 }); }
 function wFooter(form, pageOfN) { return W.p(W.r('This report shall not be duplicated except in full or with written approval from this laboratory', { sz: FS, i: true }), { jc: 'center', after: 0 }) +
