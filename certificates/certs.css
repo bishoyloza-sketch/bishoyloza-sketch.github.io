@@ -1034,3 +1034,4 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .dlr.open>small{display:none}
 .dlt span .dlch{font-style:normal;display:inline-block;margin-left:6px;font-size:18px!important;color:var(--muted)}
 .crpt{display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px}
+.rfbtn{margin-left:10px;background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:8px;width:32px;height:30px;font-size:17px;line-height:1;cursor:pointer;flex:none}.rfbtn:hover{background:rgba(255,255,255,.12)}.rfbtn.spin1{animation:rfs .8s linear infinite}@keyframes rfs{to{transform:rotate(360deg)}}
