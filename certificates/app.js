@@ -162,6 +162,42 @@ LOC.docx = function (buf) { var u8 = new Uint8Array(buf), dv = new DataView(u8.b
       if (el.localName === 'p') { if (el.getElementsByTagNameNS(W, 'pageBreakBefore').length) newPage(); var t = ptext(el); if (t) cur.push(t); if (brk(el) && !el.getElementsByTagNameNS(W, 'pageBreakBefore').length) newPage(); if (el.getElementsByTagNameNS(W, 'sectPr').length) newPage(); }
       else if (el.localName === 'tbl') { Array.prototype.forEach.call(el.getElementsByTagNameNS(W, 'tr'), function (tr) { if (tr.parentNode !== el) return; var cells = Array.prototype.filter.call(tr.childNodes, function (c) { return c.localName === 'tc'; }).map(function (tc) { return Array.prototype.filter.call(tc.getElementsByTagNameNS(W, 'p'), function () { return true; }).map(ptext).filter(Boolean).join(' '); }).filter(function (c) { return c !== ''; }); if (cells.length) cur.push(cells.join(' | ')); }); } });
     return pages.filter(function (p) { return p.length; }); }); };
+/* old Office files (.doc / .xls): read the compound file, then the Word piece table */
+LOC.cfb = function (buf) { var u8 = new Uint8Array(buf), dv = new DataView(buf); if (dv.getUint32(0, true) !== 0xE011CFD0) throw new Error('Not an old Office file');
+  var ss = 1 << dv.getUint16(30, true), mss = 1 << dv.getUint16(32, true), dirStart = dv.getInt32(48, true), cutoff = dv.getUint32(56, true), mfStart = dv.getInt32(60, true), difStart = dv.getInt32(68, true), nDif = dv.getUint32(72, true);
+  var sec = function (id) { return 512 > ss ? 0 : (id + 1) * ss; }, fatIds = [], i;
+  for (i = 0; i < 109; i++) { var v = dv.getInt32(76 + i * 4, true); if (v >= 0) fatIds.push(v); }
+  for (var d = difStart, g = 0; d >= 0 && g < nDif && g < 5000; g++) { var o = sec(d), per = ss / 4 - 1; for (i = 0; i < per; i++) { var w = dv.getInt32(o + i * 4, true); if (w >= 0) fatIds.push(w); } d = dv.getInt32(o + per * 4, true); }
+  var fat = []; fatIds.forEach(function (id) { var o = sec(id); for (var k = 0; k < ss / 4; k++) fat.push(o + k * 4 + 4 <= u8.length ? dv.getInt32(o + k * 4, true) : -1); });
+  var chain = function (st, tbl) { var out = [], c = st, n = 0; while (c >= 0 && n++ < 2000000 && c < tbl.length + 1) { out.push(c); c = tbl[c]; if (c === undefined) break; } return out; };
+  var read = function (st, size) { var ids = chain(st, fat), b = new Uint8Array(ids.length * ss); ids.forEach(function (id, k) { var o = sec(id); b.set(u8.subarray(o, Math.min(o + ss, u8.length)), k * ss); }); return size != null ? b.subarray(0, size) : b; };
+  var dir = read(dirStart), dd = new DataView(dir.buffer), ents = [];
+  for (var e = 0; e + 128 <= dir.length; e += 128) { var nl = dd.getUint16(e + 64, true), nm = ''; for (var c2 = 0; c2 < nl / 2 - 1 && c2 < 32; c2++) nm += String.fromCharCode(dd.getUint16(e + c2 * 2, true)); ents.push({ name: nm, type: dir[e + 66], start: dd.getInt32(e + 116, true), size: dd.getUint32(e + 120, true) }); }
+  var root = ents[0], mini = null, mfat = null;
+  var get = function (name) { var en = ents.filter(function (x) { return x.name === name && x.type === 2; })[0]; if (!en) return null;
+    if (en.size >= cutoff) return read(en.start, en.size);
+    if (!mini) { mini = read(root.start, root.size); var mf = read(mfStart), mdv = new DataView(mf.buffer); mfat = []; for (var k = 0; k + 4 <= mf.length; k += 4) mfat.push(mdv.getInt32(k, true)); }
+    var ids = chain(en.start, mfat), b = new Uint8Array(ids.length * mss); ids.forEach(function (id, k) { b.set(mini.subarray(id * mss, id * mss + mss), k * mss); }); return b.subarray(0, en.size); };
+  return { get: get, names: ents.map(function (x) { return x.name; }) }; };
+LOC.doc = function (buf) { return Promise.resolve().then(function () { var cf = LOC.cfb(buf), wd = cf.get('WordDocument'); if (!wd) throw new Error('Not a Word file'); var wv = new DataView(wd.buffer, wd.byteOffset, wd.byteLength);
+  var flags = wv.getUint16(0x0A, true), tbl = cf.get(flags & 0x0200 ? '1Table' : '0Table'); if (!tbl) throw new Error('Word table missing'); var tv = new DataView(tbl.buffer, tbl.byteOffset, tbl.byteLength);
+  var fcClx = wv.getUint32(0x1A2, true), lcbClx = wv.getUint32(0x1A6, true), p0 = fcClx, txt = '', cp1252 = new TextDecoder('windows-1252'), u16 = new TextDecoder('utf-16le');
+  while (p0 < fcClx + lcbClx && tbl[p0] === 1) p0 += 3 + tv.getUint16(p0 + 1, true);
+  if (tbl[p0] !== 2) throw new Error('Word text table not found'); var lcb = tv.getUint32(p0 + 1, true), pl = p0 + 5, n = (lcb - 4) / 12;
+  for (var k = 0; k < n; k++) { var c0 = tv.getUint32(pl + k * 4, true), c1 = tv.getUint32(pl + (k + 1) * 4, true), fc = tv.getUint32(pl + (n + 1) * 4 + k * 8 + 2, true), cnt = c1 - c0;
+    if (fc & 0x40000000) { var o = (fc & 0x3FFFFFFF) / 2; txt += cp1252.decode(wd.subarray(o, o + cnt)); } else txt += u16.decode(wd.subarray(fc, fc + cnt * 2)); }
+  txt = txt.replace(/\x13[^\x13\x14\x15]*\x14/g, '').replace(/[\x13\x14\x15]/g, '');
+  var pages = [[]], cur = pages[0], cells = [], para = '', prevCell = false, cl = function (x) { return x.replace(/\s+/g, ' ').trim(); };
+  for (var i = 0; i < txt.length; i++) { var ch = txt[i];
+    if (ch === '\x07') { if (prevCell) { var row = cells.filter(function (c) { return c !== ''; }); if (row.length) cur.push(row.join(' | ')); cells = []; prevCell = false; continue; } cells.push(cl(para)); para = ''; prevCell = true; continue; }
+    prevCell = false;
+    if (ch === '\r' || ch === '\x0c') { if (cells.length) para += ' '; else { var t = cl(para); if (t) cur.push(t); para = ''; } if (ch === '\x0c' && cur.length) { cur = []; pages.push(cur); } continue; }
+    if (ch === '\x0b' || ch === '\t') { para += ' '; continue; } if (ch < ' ') continue; para += ch; }
+  if (cells.length) cur.push(cells.filter(function (c) { return c !== ''; }).join(' | ')); if (cl(para)) cur.push(cl(para));
+  return pages.filter(function (p) { return p.length; }); }); };
+LOC.xls = function (buf) { return Promise.resolve().then(function () { var cf = LOC.cfb(buf), wb = cf.get('Workbook') || cf.get('Book'); if (!wb) throw new Error('Not an Excel file'); var out = [], cur = '';
+  for (var i = 0; i < wb.length; i++) { var b = wb[i]; if (b >= 32 && b < 127 || b >= 160) cur += String.fromCharCode(b); else if (b === 0 && cur && i + 1 < wb.length && wb[i + 1] >= 32) continue; else { if (cur.length >= 3) out.push(cur); cur = ''; } }
+  if (cur.length >= 3) out.push(cur); return [out]; }); };
 LOC.pdf = function (buf) { return needPdf().then(function () { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (doc) { var out = [], chain = Promise.resolve();
   for (var i = 1; i <= Math.min(doc.numPages, 150); i++) (function (n) { chain = chain.then(function () { return doc.getPage(n).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
     var rows = []; tc.items.forEach(function (t) { if (!t.str || !t.str.trim()) return; var x = t.transform[4], y = t.transform[5], row = rows.filter(function (r) { return Math.abs(r.y - y) < 3; })[0]; if (!row) { row = { y: y, it: [] }; rows.push(row); } row.it.push({ x: x, w: t.width, s: t.str }); });
@@ -170,18 +206,19 @@ LOC.pdf = function (buf) { return needPdf().then(function () { return pdfjsLib.g
 LOC.file = function (id) { var f = LOC.byId[id]; if (!f) return Promise.reject(new Error('File not found in the SharePoint folder')); return LOC.handle(f.path).then(function (h) { return h.getFile(); }); };
 LOC.pages = function (id) { id = String(id).split('/').pop(); var f = LOC.byId[id]; if (!f) return Promise.reject(new Error('File not found in the SharePoint folder'));
   return LOC.file(id).then(function (file) { f.mod = file.lastModified; f.size = file.size; return file.arrayBuffer().then(function (buf) {
-    if (/\.docx$/i.test(f.name)) return LOC.docx(buf); if (/\.pdf$/i.test(f.name)) return LOC.pdf(buf);
-    if (/\.xlsx$/i.test(f.name)) return readXlsx(buf).then(function (wb) { return Object.keys(wb).map(function (sn) { return ['## ' + sn].concat((wb[sn] || []).map(function (r) { return r.map(function (c) { return c == null ? '' : String(c); }).join('\t'); })); }); });
+    if (/\.(docx|docm|dotx)$/i.test(f.name)) return LOC.docx(buf); if (/\.pdf$/i.test(f.name)) return LOC.pdf(buf); if (/\.(doc|dot)$/i.test(f.name)) return LOC.doc(buf); if (/\.xls$/i.test(f.name)) return LOC.xls(buf);
+    if (/\.(xlsx|xlsm)$/i.test(f.name)) return readXlsx(buf).then(function (wb) { return Object.keys(wb).map(function (sn) { return ['## ' + sn].concat((wb[sn] || []).map(function (r) { return r.map(function (c) { return c == null ? '' : String(c); }).join('\t'); })); }); });
     return [new TextDecoder().decode(buf).split(/\r?\n/)]; }); }); };
 /* texts of the Word / PDF files, kept on this computer so a code can be found inside them like SharePoint search does */
-LOC.texts = function (dirs, done) { if (LOC.tBusy || !dirs || !dirs.length) return; var pre = dirs.map(function (d) { return d + '/'; }); var L = LOC.files.filter(function (f) { return !f.dir && /\.(docx|pdf)$/i.test(f.name) && pre.some(function (d) { return f.path.indexOf(d) === 0; }); }); LOC.tAll = L.length; LOC.tDone = 0; LOC.tBusy = true; LOC.tDoneFn = done;
+LOC.RD = /\.(docx|docm|doc|dot|pdf|xlsx|xlsm|xls)$/i;
+LOC.texts = function (dirs, done) { if (LOC.tBusy || !dirs || !dirs.length) return; var pre = dirs.map(function (d) { return d + '/'; }); var L = LOC.files.filter(function (f) { return !f.dir && LOC.RD.test(f.name) && pre.some(function (d) { return f.path.indexOf(d) === 0; }); }); LOC.tAll = L.length; LOC.tDone = 0; LOC.tBusy = true; LOC.tDoneFn = done;
   var yN = new Date().getFullYear(), cos = []; try { (S.projects || []).forEach(function (p) { var c = p && p.company && p.company.name; if (c) cos.push(String(c).toLowerCase().replace(/\s+/g, ' ').trim()); }); } catch (e) {}
   var pri = function (f) { var pa = String(f.path).toLowerCase(), r = 6; if (/\/reports?\s*\d{4}|\/r.?eports/i.test(pa)) r = 8; else if (pa.indexOf('cert ' + (yN - 1)) >= 0) r = 1; else if (pa.indexOf('cert ' + yN) >= 0) r = 2; else if (pa.indexOf('cert ' + (yN - 2)) >= 0) r = 4; if (r < 6 && cos.some(function (c) { return c && pa.indexOf('/' + c) >= 0; })) r -= 1; return r; };
   L.forEach(function (f) { f._p = pri(f); });
   L.sort(function (a, b) { return a._p - b._p || (/\.docx$/i.test(a.name) ? 0 : 1) - (/\.docx$/i.test(b.name) ? 0 : 1) || String(b.path).localeCompare(String(a.path)); });
   var k = 0, tick = 0, one = function () { if (!LOC.on) { LOC.tBusy = false; return; } if (k >= L.length) { LOC.tBusy = false; LOC.tDone = L.length; try { if (LOC.tDoneFn) LOC.tDoneFn(); } catch (e) {} lcbPaint(); try { if (!sheetFn) render(); } catch (e) {} return; } var f = L[k++];
     return LOC.handle(f.path).then(function (h) { return h.getFile(); }).then(function (file) { f.mod = file.lastModified; f.size = file.size; var c = LOC.txt[f.id]; if (c && c.m === file.lastModified) return;
-        return file.arrayBuffer().then(function (buf) { return /\.docx$/i.test(f.name) ? LOC.docx(buf) : LOC.pdf(buf); }).then(function (pg) { var t = pg.map(function (p) { return p.join('\n'); }).join('\n').replace(/\s+/g, ' ').toLowerCase(); LOC.txt[f.id] = { m: file.lastModified, t: t }; return LOC.kv('txt', f.id, LOC.txt[f.id]); }); })
+        return LOC.pages(f.id).then(function (pg) { var t = pg.map(function (p) { return p.join('\n'); }).join('\n').replace(/\s+/g, ' ').toLowerCase(); LOC.txt[f.id] = { m: file.lastModified, t: t }; return LOC.kv('txt', f.id, LOC.txt[f.id]); }); })
       .catch(function () {}).then(function () { LOC.tDone = k; if (++tick % 5 === 0) { lcbPaint(); try { if (!sheetFn && $('#locSt')) $('#locSt').textContent = LOC.stText(); } catch (e) {} } return new Promise(function (r) { setTimeout(r, 0); }).then(one); }); };
   one(); };
 LOC.stText = function () { var nf = LOC.files.filter(function (f) { return !f.dir; }).length; return LOC.scanning ? 'reading the folder…' : nf + ' files' + (LOC.tBusy ? ' · reading their text ' + LOC.tDone + ' / ' + LOC.tAll : ''); };
@@ -2964,7 +3001,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
   var showCodes = function () { var sel = st.batches.filter(function (f) { return st.bon[f.id]; }); if (!sel.length) return toast('Choose at least one batch', true);
     st.rows = []; st.prog = { d: 0, n: sel.length, fail: [] }; renderSheet();
     sel.reduce(function (pr, f) { return pr.then(function () { if (st.stop) return; return batchItems(f).then(function (r) { r.items.forEach(function (x) { if (x.code && st.rows.some(function (y) { return norm(y.code) === norm(x.code); })) return; st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? r.machine : '', machineCode: r.machineCode, from: f.base }); }); })
-      .catch(function () { st.prog.fail.push(f.base); }).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()).then(function () { var fl = st.prog.fail; st.prog = null; if (fl.length) toast('Could not read ' + fl.join(', '), true); renderSheet(); }); };
+      .catch(function () { st.prog.fail.push(f.base); }).then(function () { st.prog.d++; rsP(); }); }); }, Promise.resolve()).then(function () { var fl = st.prog.fail; st.prog = null; if (fl.length) toast('Could not read ' + fl.join(', '), true); renderSheet(); }); };
   var list = function () { return st.q.split(/[\n,;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 2; }); };
   var searchCodes = function () { var L = list(); if (!L.length) return; reset(); st.rows = []; st.prog = { d: 0, n: L.length, fail: [] }; renderSheet();
     L.reduce(function (pr, c) { return pr.then(function () { if (st.stop) return; return codeHits(p, c).then(function (fs) { fs = fs.filter(function (f) { return syOk(f.yr) && monOk(monOf(f.summary)); }); fs = fs.slice(0, st.per === 'all' ? 6 : 2); if (!fs.length) { st.prog.fail.push(c + perLabel()); return; }
@@ -2976,14 +3013,41 @@ function lySearch(p, mode, opt) { opt = opt || {};
           r.items.forEach(function (x) { if (st.rows.some(function (y) { return norm(y.code) === norm(x.code) && y.from === b0; })) return; var me = norm(x.code) === nc; if (me) { any = true; st.on[st.rows.length] = true; }
             st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? (r.machine || 'Machine') : '', machineCode: r.machineCode, from: b0, year: f0.yr, mon: monOf(f0.summary) }); });
           if (!any) plain(f0); }).catch(function () { plain(f0); }); })
-      .catch(function () { st.prog.fail.push(c); }).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
+      .catch(function () { st.prog.fail.push(c); }).then(function () { st.prog.d++; rsP(); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
   var searchCerts = function () { var L = list(); if (!L.length) return; reset(); st.rows = []; st.prog = { d: 0, n: L.length, fail: [] }; renderSheet();
     L.reduce(function (pr, c) { return pr.then(function () { if (st.stop) return; var nc = norm(c);
       return spSearch('"' + c + '"', 25).then(function (fs) { var f = fs.filter(function (x) { return (isCalCert(x.name, x) || isCover(x.name)) && syOk(yearOf(x)) && monOk(monOf(x.summary)); }).sort(function (a, b) { return (isCalCert(b.name, b) ? 1 : 0) - (isCalCert(a.name, a) ? 1 : 0); })[0]; if (!f) throw new Error('none');
         f.base = certBase(f.name); return batchItems(f).then(function (r) { var hit = r.items.filter(function (x) { return norm(x.certNo) === nc; });
           (r.items.length > 1 && r.machine ? r.items : hit.length ? hit : r.items).forEach(function (x) { if (hit.indexOf(x) >= 0) st.on[st.rows.length] = true; st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? r.machine : '', machineCode: r.machineCode, from: f.base, year: yearOf(f), mon: monOf('Calibration Date ' + (x.calDate || '')) || monOf(f.summary), exact: !!hit.length }); }); }); })
-      .catch(function () { st.prog.fail.push(c); }).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
-  var searchDesc = function () { var L = st.q.split(/[\n;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 3; }); if (!L.length) return; reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet();
+      .catch(function () { st.prog.fail.push(c); }).then(function () { st.prog.d++; rsP(); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
+  /* laptop (linked SharePoint folder): look inside every loaded file of the company – certificates, covers, reports (HDS…), any name, any Office type */
+  var rsP = function () { var el = document.querySelector('.sprog .t'); if (el && st.prog) { el.innerHTML = '<b>Searching… ' + st.prog.d + ' / ' + st.prog.n + '</b><small>' + (st.rows ? st.rows.length + (st.rows.length === 1 ? ' code' : ' codes') + ' found so far' : '') + '</small>'; return; } if (!rsP.t) rsP.t = setTimeout(function () { rsP.t = 0; renderSheet(); }, 400); };
+  var locRows = function (f, words) { return LOC.pages(f.id).then(function (pages) { var lines = [].concat.apply([], pages), all = lines.join('\n').toLowerCase(), base = certBase(f.name), yr = yearOf(f), mo = monOf(lines.join(' ')) || monOf(f.summary), out = [];
+      var hdr = null, rows = []; lines.forEach(function (ln) { var c = ln.split(' | ').map(function (x) { return x.trim(); }), lc = c.map(function (x) { return x.toLowerCase(); });
+        if (c.length >= 3 && lc.some(function (x) { return x === 'code' || /^code\b/.test(x); }) && lc.some(function (x) { return /description/.test(x); })) { hdr = /due\s*date|serial\s*number/.test(ln.toLowerCase()) ? null : { code: lc.findIndex(function (x) { return x === 'code' || /^code\b/.test(x); }), desc: lc.findIndex(function (x) { return /description/.test(x); }), man: lc.findIndex(function (x) { return /manufacturer/.test(x); }), n: c.length, k: 0 }; return; }
+        if (c.length >= 3 && lc.some(function (x) { return /description/.test(x); })) hdr = null;
+        if (hdr && ++hdr.k > 40) hdr = null;
+        if (hdr && c.length >= hdr.n - 2 && c.length <= hdr.n + 2 && /^\d{1,3}$/.test(c[0]) && /[A-Za-z]/.test(c[hdr.desc] || '') && /[A-Za-z0-9]/.test(c[hdr.code] || '')) rows.push({ code: c[hdr.code] || '', description: c[hdr.desc] || '', manufacturer: hdr.man >= 0 ? c[hdr.man] || '' : '' }); });
+      var hitRow = function (r) { var t = (r.description + ' ' + r.manufacturer + ' ' + r.code).toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); };
+      var inDoc = words.every(function (w) { return all.indexOf(w) >= 0; }); if (!inDoc) return out;
+      var hits = rows.filter(hitRow), use = hits.length ? hits : rows, mach = !hits.length;
+      var mline = mach ? (lines.filter(function (l) { var t = l.toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); })[0] || '') : '';
+      if (!use.length) { var cm = lines.join('\n').match(/\bcode\s*[:：]\s*([A-Za-z0-9][\w\-\/]*)/i); use = [{ code: cm ? cm[1] : '', description: (mline || base).replace(/\s+/g, ' ').slice(0, 90), manufacturer: '' }]; mach = false; }
+      use.forEach(function (x) { out.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: (base.match(/\d{1,3}\s*\/?\s*[A-Z]{1,5}-\d{2,6}-20\d\d/) || [''])[0].replace(/\s+/g, ''), machine: mach && mline ? mline.replace(/\s+/g, ' ').slice(0, 70) : '', machineCode: '', from: base, year: yr, mon: mo, exact: !mach, file: f.name }); });
+      return out; }); };
+  var locDesc = function (L) { var co = p.company.name, sv = LS.get(lcKey(co), null), dirs = sv ? lcDirs(sv) : [];
+    if (!(LCB.state[norm(co)] || LS.get('lcOk:' + norm(co), null) || {}).ok) { if (!sv) { toast('First press “Load ' + co + ' certificates” at the top and tick the company folders', true); return; }
+      if (!LOC.tBusy) lcbRun(co, sv); toast('Loading ' + co + ' certificates first – the search starts by itself when it is done'); var w0 = setInterval(function () { if (LOC.tBusy) return; clearInterval(w0); if (sheetFn) locDesc(L); }, 600); return; }
+    reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet();
+    L.reduce(function (pr, q) { return pr.then(function () { if (st.stop) return; var words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      var fs = LOC.search(words.map(function (w) { return '"' + w + '"'; }).join(' '), 400).filter(function (f) { return (!dirs.length || dirs.some(function (d) { return f.path.indexOf(d + '/') === 0; })) && !/^~\$/.test(f.name); })
+        .filter(function (f) { return syOk(yearOf(f)) && monOk(monOf(f.summary)); }).sort(function (a1, b1) { return yearOf(b1) - yearOf(a1); }).slice(0, 60);
+      st.prog.n += fs.length; rsP(); if (!fs.length) st.prog.fail.push(q);
+      var got0 = st.rows.length;
+      return fs.reduce(function (pr2, f) { return pr2.then(function () { if (st.stop) return; return locRows(f, words).then(function (rs) { rs.forEach(function (x) { if (st.rows.some(function (y) { return norm(y.code) === norm(x.code) && norm(y.from) === norm(x.from) && norm(y.description) === norm(x.description); })) return; if (x.exact) st.on[st.rows.length] = true; st.rows.push(x); }); })
+          .catch(function () {}).then(function () { st.prog.d++; rsP(); }); }); }, Promise.resolve()).then(function () { if (st.rows.length === got0 && st.prog.fail.indexOf(q) < 0) st.prog.fail.push(q); }); }); }, Promise.resolve())
+      .then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
+  var searchDesc = function () { var L = st.q.split(/[\n;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 3; }); if (!L.length) return; if (LOC.on && !CL.on) return locDesc(L); reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet();
     var pre = String(p.company.code || '').replace(/[^A-Za-z0-9]/g, '');
     L.reduce(function (pr, q) { return pr.then(function () { if (st.stop) return; var words = q.toLowerCase().split(/\s+/).filter(Boolean);
       var qq = '"' + q + '"' + (pre ? ' filename:' + pre + '*' : ' "' + companyTerms(p.company)[0] + '"') + ' (filename:cert OR filename:cover)', got = [];
@@ -2992,10 +3056,10 @@ function lySearch(p, mode, opt) { opt = opt || {};
       var cw1 = companyTerms(p.company)[0] || p.company.name, extra = [('"' + q + '" "' + cw1 + '"')].concat(pre ? ['"' + q + '" filename:' + pre.replace(/[A-Za-z]+$/, '') + '*'] : []);
       return Promise.all([page(0, 0)].concat(extra.map(function (x) { return spSearch(x, 50).catch(function () { return []; }); }))).then(function (rs) { var u0 = {}, fs = [].concat.apply([], rs).filter(function (f) { if (u0[f.id]) return false; u0[f.id] = 1; return true; }); var seen = {}, files = [];
         fs.forEach(function (f) { if (!(isCalCert(f.name, f) || isCover(f.name))) return; var y = yearOf(f); if (!syOk(y) || !monOk(monOf(f.summary))) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) { if (isCover(f.name)) seen[b].f = f; return; } f.base = certBase(f.name); f.yr = y; seen[b] = { f: f }; files.push(seen[b]); });
-        var ny0 = new Date().getFullYear(); files = files.map(function (x) { return x.f; }).filter(function (x) { return st.per !== 'all' || x.yr >= ny0 - 2; }).sort(function (a1, b1) { return b1.yr - a1.yr; }).slice(0, 15); st.prog.n += files.length; renderSheet(); if (!files.length) st.prog.fail.push(q);
+        var ny0 = new Date().getFullYear(); files = files.map(function (x) { return x.f; }).filter(function (x) { return st.per !== 'all' || x.yr >= ny0 - 2; }).sort(function (a1, b1) { return b1.yr - a1.yr; }).slice(0, 15); st.prog.n += files.length; rsP(); if (!files.length) st.prog.fail.push(q);
         return files.reduce(function (pr2, f) { return pr2.then(function () { if (st.stop) return; return batchItems(f).then(function (r) { var hit = r.items.filter(function (x) { var t = (x.description || '').toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); }), mach = words.every(function (w) { return (r.machine || '').toLowerCase().indexOf(w) >= 0; });
             (mach || (hit.length && r.items.length > 1 && r.machine) ? r.items : hit).forEach(function (x) { var mo3 = monOf('Calibration Date ' + (x.calDate || '')) || monOf(f.summary); if (!monOk(mo3)) return; if (st.rows.some(function (y) { return norm(y.code) === norm(x.code) && y.year === f.yr; })) return; if (!mach && hit.indexOf(x) >= 0) st.on[st.rows.length] = true; st.rows.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: x.certNo, machine: r.items.length > 1 ? r.machine : '', machineCode: r.machineCode, from: f.base, year: f.yr, mon: mo3 }); }); })
-          .catch(function () {}).then(function () { st.prog.d++; renderSheet(); }); }); }, Promise.resolve()); }).catch(function () { st.prog.fail.push(q); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
+          .catch(function () {}).then(function () { st.prog.d++; rsP(); }); }); }, Promise.resolve()); }).catch(function () { st.prog.fail.push(q); }); }); }, Promise.resolve()).then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
   var add = function () { var h = have(), n = 0; st.rows.forEach(function (r, i) { if (!st.on[i] || !r.code || h[norm(r.code)]) return; h[norm(r.code)] = 1; var mid = '';
       if (r.machine) { var mm = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine) && norm(x.code) === norm(r.machineCode); })[0]; if (!mm) { mm = { id: uid(), name: r.machine, code: r.machineCode || '', dept: p.depts[0] || '' }; p.machines.push(mm); } mid = mm.id; }
       if (opt.machineId) mid = opt.machineId; else if (opt.into) { var gi0 = p.items.filter(function (x) { return x.id === opt.into; })[0]; if (gi0 && gi0.machineId) mid = gi0.machineId; }
