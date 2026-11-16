@@ -1038,3 +1038,8 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .locdz{margin:12px 0 4px;border:3px dashed #1b2d52;border-radius:14px;padding:34px 18px;text-align:center;background:#f6f8fc;transition:.15s}
 .locdz b{display:block;font-size:22px;margin-bottom:6px}.locdz span b{display:inline;font-size:inherit}
 .locdz span{font-size:14px;color:#55606f}.locdz.on{background:#dfe9ff;border-color:#2a5bd7}
+.lcb{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:#eef3fb;border:1px solid #cdd9ee;border-radius:12px;padding:10px 12px;margin:0 0 12px}
+.lcb .lcbt{flex:1 1 260px;font-size:14px}.lcb .lnk{background:none;border:0;color:#2a5bd7;text-decoration:underline;cursor:pointer;font-size:13px}
+.lcbl{flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 12px;max-height:220px;overflow:auto;background:#fff;border-radius:8px;padding:8px;font-size:14px}
+.lcbl label{display:flex;gap:6px;align-items:center;cursor:pointer}.lcb .cf{flex-basis:100%;justify-content:flex-end}
+.lcbp{flex-basis:100%;height:6px;background:#d5dff0;border-radius:4px;overflow:hidden}.lcbp i{display:block;height:100%;background:#2a5bd7;transition:width .3s}
