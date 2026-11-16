@@ -10,6 +10,9 @@ window.APP_CONFIG = {
   SP_SITE_URL: 'https://evapharma.sharepoint.com/sites/CalibrationValidationTeam2',
   CERT_PATH: 'General/Certificates',
   /* Online datasheet search (Google Apps Script + Gemini with Google Search) – see server/Datasheets.gs */
+  /* Shared jobs (Google Apps Script – see server/Jobs.gs): every job open for the whole team, with its history */
+  JOBS_URL: '',
+  JOBS_KEY: 'akhnaton-jobs-2026',
   DS_URL: 'https://script.google.com/macros/s/AKfycbxpCz8VLbiu3Dy7K3nS0GrB3CwqzbpXcsjq_vFMII1qnzciErBnXGa4CgNtz4rNj-ydYg/exec',
   DS_KEY: 'akhnaton2026'
 };
