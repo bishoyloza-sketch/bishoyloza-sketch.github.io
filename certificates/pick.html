@@ -3,10 +3,14 @@
 <h2>Folder test</h2>
 <button id="b1" style="font-size:20px;padding:12px 24px">1 – Choose folder (view)</button>
 <button id="b2" style="font-size:20px;padding:12px 24px">2 – Choose folder (edit)</button>
+<div id="dz" style="margin-top:20px;border:3px dashed #1a2b4c;border-radius:12px;padding:40px;text-align:center;font-size:20px">3 – Drag a folder from File Explorer and drop it here</div>
 <pre id="o" style="margin-top:20px;font-size:16px;white-space:pre-wrap"></pre>
 <script>
 var o=document.getElementById('o');function log(t){o.textContent+=new Date().toLocaleTimeString()+'  '+t+'\n';}
 log('showDirectoryPicker: '+typeof window.showDirectoryPicker+' · '+navigator.userAgent);
 function go(m){log('opening, mode='+m);var t0=Date.now();window.showDirectoryPicker({mode:m}).then(function(h){log('OK: '+h.name+' ('+(Date.now()-t0)+' ms)');var n=0,it=h.entries();(function nx(){it.next().then(function(r){if(r.done||n>=5){log('first entries read: '+n);return;}n++;log('  - '+r.value[0]);nx();});})();}).catch(function(e){log('ERROR '+e.name+': '+e.message+' ('+(Date.now()-t0)+' ms)');});}
 document.getElementById('b1').onclick=function(){go('read');};document.getElementById('b2').onclick=function(){go('readwrite');};
+var dz=document.getElementById('dz');dz.ondragover=function(e){e.preventDefault();dz.style.background='#e8eefc';};dz.ondragleave=function(){dz.style.background='';};
+dz.ondrop=function(e){e.preventDefault();dz.style.background='';var it=e.dataTransfer.items[0];log('dropped, kind='+(it&&it.kind));if(!it||!it.getAsFileSystemHandle){log('no getAsFileSystemHandle');return;}
+it.getAsFileSystemHandle().then(function(h){log('handle: '+h.kind+' '+h.name);return h.requestPermission({mode:'readwrite'}).then(function(st){log('edit permission: '+st);var n=0,i2=h.entries();(function nx(){i2.next().then(function(r){if(r.done||n>=5){log('first entries read: '+n);return;}n++;log('  - '+r.value[0]);nx();}).catch(function(x){log('ERROR reading '+x.name+': '+x.message);});})();});}).catch(function(x){log('ERROR '+x.name+': '+x.message);});};
 </script></body></html>
