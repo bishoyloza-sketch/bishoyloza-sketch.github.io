@@ -179,7 +179,7 @@ LOC.stText = function () { var nf = LOC.files.filter(function (f) { return !f.di
 
 /* ---- load one company's certificates (last year + this year) from the linked SharePoint folder ---- */
 function lcYears() { var y = new Date().getFullYear(); return [y - 1, y]; }
-function lcYearDirs() { if (!LOC.on || !LOC.files) return []; var cd = LOC.certDir(); return lcYears().map(function (y) { var d = LOC.files.filter(function (f) { return f.dir && f.path.toLowerCase() === (cd + '/cert ' + y).toLowerCase(); })[0]; return d ? d.path : null; }).filter(Boolean); }
+function lcYearDirs() { if (!LOC.on || !LOC.files) return []; return lcYears().map(function (y) { var re = new RegExp('^cert\\s*' + y + '$', 'i'), d = LOC.files.filter(function (f) { return f.dir && re.test(String(f.name).trim()); }).sort(function (a, b) { var ga = /\/certificates\//i.test(a.path) ? 0 : 1, gb = /\/certificates\//i.test(b.path) ? 0 : 1; return ga - gb || a.path.length - b.path.length; })[0]; return d ? d.path : null; }).filter(Boolean); }
 function lcSubs() { var out = {}; lcYearDirs().forEach(function (yd) { LOC.files.forEach(function (f) { if (f.dir && f.path.indexOf(yd + '/') === 0 && f.path.slice(yd.length + 1).indexOf('/') < 0) out[f.name.toLowerCase()] = f.name; }); }); return Object.keys(out).map(function (k) { return out[k]; }).sort(function (a, b) { return a.localeCompare(b); }); }
 function lcKey(co) { return 'lcCo:' + norm(co); }
 function lcGuess(co, subs) { var w = String(co || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (x) { return x.length >= 3 && !/^(pharma|pharmaceutical|pharmaceuticals|company|co|group|the|for|and|egypt)$/.test(x); }); if (!w.length) w = [String(co || '').toLowerCase().split(/\s+/)[0]];
@@ -188,7 +188,7 @@ function lcDirs(names) { var ln = names.map(function (n) { return n.toLowerCase(
 var LCB = { co: '', pick: false, sel: {}, state: {} };
 function lcbHtml(co) { if (!LOC.on || !co) return ''; var yrs = lcYears().join(' + '), saved = LS.get(lcKey(co), null), st = LCB.state[norm(co)] || LS.get('lcOk:' + norm(co), null) || {}, h = '<div class="lcb" id="lcb" data-co="' + esc(co) + '">';
   if (LOC.scanning) return h + '<span class="lcbt">📁 Reading the SharePoint folder list…</span></div>';
-  if (LCB.pick && LCB.co === co) { var subs = lcSubs(); if (!subs.length) return h + '<span class="lcbt">No “Cert ' + lcYears()[0] + '” / “Cert ' + lcYears()[1] + '” folders found inside Certificates.</span></div>';
+  if (LCB.pick && LCB.co === co) { var subs = lcSubs(); if (!subs.length) return h + '<span class="lcbt">No “Cert ' + lcYears()[0] + '” / “Cert ' + lcYears()[1] + '” folders found. The linked folder is <b>' + esc(LOC.h ? LOC.h.name : '?') + '</b> (' + LOC.files.filter(function (f) { return f.dir; }).length + ' folders, ' + LOC.files.filter(function (f) { return !f.dir; }).length + ' files). Drag in “Calibration Validation Team - General” instead.</span><button class="lnk" data-lca="relink">link another folder</button></div>';
     return h + '<div class="lcbt"><b>Which folders are ' + esc(co) + '?</b> Tick them once – the app remembers.</div><div class="lcbl">' + subs.map(function (n) { return '<label><input type="checkbox" data-lcf="' + esc(n) + '"' + (LCB.sel[n] ? ' checked' : '') + '> ' + esc(n) + '</label>'; }).join('') + '</div><div class="cf"><button class="btn ghost sm" data-lca="cancel">Cancel</button><button class="btn sm" data-lca="go">Load the ticked folders</button></div></div>'; }
   if (LOC.tBusy && st.run) return h + '<span class="lcbt">⬇ Loading ' + esc(co) + ' certificates ' + yrs + ' … <b>' + LOC.tDone + ' / ' + LOC.tAll + '</b></span><div class="lcbp"><i style="width:' + (LOC.tAll ? Math.round(100 * LOC.tDone / LOC.tAll) : 0) + '%"></i></div></div>';
   if (st.ok) return h + '<span class="lcbt">✓ <b>' + esc(co) + '</b> certificates ' + yrs + ' are ready (' + st.n + ' files) – search away.</span><button class="btn ghost sm" data-lca="load">Load again</button><button class="lnk" data-lca="pick">change folders</button></div>';
@@ -200,6 +200,7 @@ document.addEventListener('click', function (e) { var b = e.target.closest && e.
   if (a === 'load') { var sv = LS.get(lcKey(co), null); if (sv && sv.length) return lcbRun(co, sv); a = 'pick'; }
   if (a === 'pick') { var subs = lcSubs(), sv2 = LS.get(lcKey(co), null); LCB.co = co; LCB.pick = true; LCB.sel = {}; (sv2 && sv2.length ? sv2 : lcGuess(co, subs)).forEach(function (n) { LCB.sel[n] = 1; }); return lcbPaint(); }
   if (a === 'cancel') { LCB.pick = false; return lcbPaint(); }
+  if (a === 'relink') { LCB.pick = false; LOC.unlink().then(function () { closeSheet && closeSheet(); }).catch(function () {}); return; }
   if (a === 'go') { var names = []; $$('[data-lcf]').forEach(function (c) { if (c.checked) names.push(c.dataset.lcf); }); if (!names.length) return toast('Tick at least one folder', true); return lcbRun(co, names); } });
 /* search like SharePoint: words and "phrases" (all of them), filename:"x" / filename:x*, path:"…" */
 LOC.search = function (q, limit, offset) { var toks = [], re = /(\w+):("[^"]*"|\S+)|"([^"]*)"|(\S+)/g, m;
