@@ -1092,3 +1092,7 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 body.mt #redoFab{display:none!important}
 .homebtn.hb2{display:inline-flex;align-items:center;gap:6px;width:auto!important;padding:0 12px!important;border-radius:999px!important;font:600 13px var(--font,inherit)}
 .top .brand,.top .tclogo{cursor:pointer}
+#updPill{position:fixed;right:18px;bottom:18px;z-index:70;display:none;align-items:center;gap:8px;max-width:360px;padding:8px 14px;border-radius:999px;background:#fff;border:1px solid #c9d6ea;box-shadow:0 6px 18px rgba(19,41,75,.18);font:500 13px var(--font,inherit);color:#1b2d52}
+#updPill.on{display:inline-flex}#updPill .spin{width:16px;height:16px;border-width:2px}
+.updrow{display:flex;align-items:center;gap:12px;justify-content:space-between;background:#fff;border:1px solid #dbe4f2;border-radius:12px;padding:8px 12px;margin:10px 0;font-size:13px;color:#55606f}
+.updrow .updt{flex:1;display:flex;align-items:center;gap:6px}.updrow .spin{width:15px;height:15px;border-width:2px}
