@@ -1057,3 +1057,14 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 @media (max-width:700px){.srow .t3,.lvr{grid-template-columns:1fr 1fr}}
 .sheet-bg.still,.sheet-bg.still .sheet{animation:none!important}
 .sheet-bg.still .lvr{animation:none}
+.sgrp.g2{display:flex;align-items:stretch;gap:0;padding:0;background:#f4f7fc;border:1px solid #dbe4f2;border-radius:12px;margin:8px 0 0;overflow:hidden}
+.sgrp.g2.open{border-radius:12px 12px 0 0;background:#eaf1fb}
+.sgrp .gck{flex:none;width:52px;border:0;border-right:1px solid #dbe4f2;background:transparent;font-size:18px;font-weight:700;color:#1F6FB5;cursor:pointer;display:grid;place-items:center}
+.sgrp .gck::before{content:'';position:absolute}.sgrp .gck{position:relative}
+.sgrp .gck:not(.all):not(.part){color:transparent}.sgrp .gck::after{content:'';position:absolute;width:22px;height:22px;border:2px solid #9fb2cf;border-radius:6px}
+.sgrp .gck.all::after,.sgrp .gck.part::after{border-color:#1F6FB5}
+.sgrp .gmain{flex:1;display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;min-width:0}
+.sgrp .garr{font-size:14px;color:#55606f;width:14px}.sgrp .gmain .t{flex:1;min-width:0}.sgrp .gmain .t b{display:block}
+.sgrp .gcnt{flex:none;min-width:46px;height:46px;border-radius:50%;background:#1b2d52;color:#fff;display:grid;place-items:center;font-weight:700;font-size:16px;line-height:1;padding:4px}
+.sgrp .gcnt small{display:block;font-size:9px;font-weight:500;opacity:.85}
+.gbody{border:1px solid #dbe4f2;border-top:0;border-radius:0 0 12px 12px;padding:4px 0 4px 26px;background:#fff}
