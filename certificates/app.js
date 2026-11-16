@@ -226,6 +226,8 @@ LOC.texts = function (dirs, done) { if (LOC.tBusy || !dirs || !dirs.length) retu
         return LOC.pages(f.id).then(function (pg) { var t = pg.map(function (p) { return p.join('\n'); }).join('\n').replace(/\s+/g, ' ').toLowerCase(); LOC.txt[f.id] = { m: file.lastModified, t: t }; return LOC.kv('txt', f.id, LOC.txt[f.id]); }); })
       .catch(function () {}).then(function () { LOC.tDone = k; if (++tick % 5 === 0) { lcbPaint(); try { if (!sheetFn && $('#locSt')) $('#locSt').textContent = LOC.stText(); } catch (e) {} } return new Promise(function (r) { setTimeout(r, 0); }).then(one); }); };
   one(); };
+LOC.readOne = function (f) { return LOC.handle(f.path).then(function (h) { return h.getFile(); }).then(function (file) { f.mod = file.lastModified; f.size = file.size; var c = LOC.txt[f.id]; if (c && c.m === file.lastModified) return c.t; if (file.size > 5e6) { f.big = 1; return null; }
+    return LOC.pages(f.id).then(function (pg) { var t = pg.map(function (p) { return p.join('\n'); }).join('\n').replace(/\s+/g, ' ').toLowerCase(); LOC.txt[f.id] = { m: file.lastModified, t: t }; LOC.kv('txt', f.id, LOC.txt[f.id]); return t; }); }).catch(function () { return null; }); };
 LOC.stText = function () { var nf = LOC.files.filter(function (f) { return !f.dir; }).length; return LOC.scanning ? 'reading the folder…' : nf + ' files' + (LOC.tBusy ? ' · reading their text ' + LOC.tDone + ' / ' + LOC.tAll : ''); };
 
 /* ---- load one company's certificates (last year + this year) from the linked SharePoint folder ---- */
@@ -242,8 +244,7 @@ function lcbHtml(co) { if (!LOC.on || !co) return ''; var yrs = lcYears().join('
   if (LCB.pick && LCB.co === co) { var subs = lcSubs(); if (!subs.length) return h + '<span class="lcbt">No “Cert ' + lcYears()[0] + '” / “Cert ' + lcYears()[1] + '” folders found. The linked folder is <b>' + esc(LOC.h ? LOC.h.name : '?') + '</b> (' + LOC.files.filter(function (f) { return f.dir; }).length + ' folders, ' + LOC.files.filter(function (f) { return !f.dir; }).length + ' files)' + (LOC.err ? ' – Windows said: <i>' + esc(LOC.err) + '</i>' : '') + '. Open “Calibration Validation Team - General”, press Ctrl + A and drag everything inside it into the box instead.</span><button class="lnk" data-lca="relink">link another folder</button></div>';
     return h + '<div class="lcbt"><b>Which folders are ' + esc(co) + '?</b> Tick them once – the app remembers.</div><input class="lcq" id="lcq" placeholder="Type to find a folder – e.g. ev" autocomplete="off"><div class="lcbl">' + subs.map(function (n) { return '<label data-lcn="' + esc(n.toLowerCase()) + '"><input type="checkbox" data-lcf="' + esc(n) + '"' + (LCB.sel[n] ? ' checked' : '') + '> ' + esc(n) + '</label>'; }).join('') + '</div><div class="cf"><button class="btn ghost sm" data-lca="cancel">Cancel</button><button class="btn sm" data-lca="go">Load the ticked folders</button></div></div>'; }
   if (LOC.tBusy && st.run) return h + '<span class="lcbt">⬇ Loading ' + esc(co) + ' certificates ' + yrs + ' … <b>' + LOC.tDone + ' / ' + LOC.tAll + '</b></span><div class="lcbp"><i style="width:' + (LOC.tAll ? Math.round(100 * LOC.tDone / LOC.tAll) : 0) + '%"></i></div></div>';
-  if (st.ok) return h + '<span class="lcbt">✓ <b>' + esc(co) + '</b> certificates ' + yrs + ' are ready (' + st.n + ' files) – search away.</span><button class="btn ghost sm" data-lca="load">Load again</button><button class="lnk" data-lca="pick">change folders</button></div>';
-  return h + '<span class="lcbt">' + (saved ? 'Folders: ' + esc(saved.join(', ')) : 'Search works after the company\'s certificates are loaded.') + '</span><button class="btn sm" data-lca="load">⬇ Load ' + esc(co) + ' certificates ' + yrs + '</button>' + (saved ? '<button class="lnk" data-lca="pick">change folders</button>' : '') + '</div>'; }
+  return h + '<span class="lcbt">📁 ' + esc(co) + ' folders: <b>' + esc(saved && saved.length ? saved.join(', ') : 'found by the name when you search') + '</b></span><button class="lnk" data-lca="pick">choose the folders</button></div>'; }
 function lcbPaint() { var el = document.getElementById('lcb'); if (!el) return; var t = document.createElement('div'); t.innerHTML = lcbHtml(el.dataset.co); if (t.firstChild && el.innerHTML !== t.firstChild.innerHTML) el.innerHTML = t.firstChild.innerHTML; }
 function lcbRun(co, names) { LS.set(lcKey(co), names); var dirs = lcDirs(names); var k = norm(co); LCB.pick = false; LCB.state[k] = { run: 1 }; if (LOC.tBusy) { toast('Still loading another company – wait a moment', true); lcbPaint(); return; }
   LOC.texts(dirs, function () { LCB.state[k] = { ok: 1, n: LOC.tAll }; LS.set('lcOk:' + k, LCB.state[k]); }); if (!LOC.tAll) { LOC.tBusy = false; LCB.state[k] = { ok: 1, n: 0 }; } lcbPaint(); }
@@ -3003,7 +3004,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
   var syOk = function (y) { return st.per === 'all' || y === st.y; }, monOk = function (mo2) { return st.per !== 'month' || !mo2 || (mo2.m === st.m && mo2.y === st.y); };
   var perLabel = function () { return st.per === 'all' ? '' : ' (' + (st.per === 'month' ? MON[st.m] + ' ' : '') + st.y + ')'; };
   var have = function () { var h = {}; p.items.forEach(function (i) { if (i.code) h[norm(i.code)] = 1; }); return h; };
-  var reset = function () { st.postSel = 0; st.pv = {}; st.stop = false; st.batches = null; st.bon = {}; st.rows = null; st.on = {}; st.err = ''; };
+  var reset = function () { st.partial = false; st.postSel = 0; st.pv = {}; st.stop = false; st.batches = null; st.bon = {}; st.rows = null; st.on = {}; st.err = ''; };
   var searchMonth = function () { reset(); st.busy = true; renderSheet(); certBatches(p, st.y, st.m).then(function (l) { st.batches = l; st.busy = false; renderSheet(); }).catch(function (e) { st.busy = false; st.err = e.message; renderSheet(); }); };
   var showCodes = function () { var sel = st.batches.filter(function (f) { return st.bon[f.id]; }); if (!sel.length) return toast('Choose at least one batch', true);
     st.rows = []; st.prog = { d: 0, n: sel.length, fail: [] }; renderSheet();
@@ -3042,22 +3043,28 @@ function lySearch(p, mode, opt) { opt = opt || {};
       if (!use.length) { var cm = lines.join('\n').match(/\bcode\s*[:：]\s*([A-Za-z0-9][\w\-\/]*)/i); use = [{ code: cm ? cm[1] : '', description: (mline || base).replace(/\s+/g, ' ').slice(0, 90), manufacturer: '' }]; mach = false; }
       use.forEach(function (x) { out.push({ code: x.code, description: x.description, manufacturer: x.manufacturer, certNo: (base.match(/\d{1,3}\s*\/?\s*[A-Z]{1,5}-\d{2,6}-20\d\d/) || [''])[0].replace(/\s+/g, ''), machine: mach && mline ? mline.replace(/\s+/g, ' ').slice(0, 70) : '', machineCode: '', from: base, year: yr, mon: mo, exact: !mach, file: f.name }); });
       return out; }); };
-  var locDesc = function (L) { var co = p.company.name, sv = LS.get(lcKey(co), null), dirs = sv ? lcDirs(sv) : [];
-    if (!(LCB.state[norm(co)] || LS.get('lcOk:' + norm(co), null) || {}).ok) { if (!sv || !sv.length) sv = lcGuess(co, lcSubs());
-      if (!sv.length) { st.rows = []; st.miss = [L.join(', ')]; st.prog = null; renderSheet(); return toast('No folder named like “' + co + '” inside Cert ' + lcYears().join(' / Cert '), true); }
-      reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet(); if (!LOC.tBusy) lcbRun(co, sv);
-      var w0 = setInterval(function () { var el = document.querySelector('.sprog .t'); if (el) el.innerHTML = '<b>Reading ' + esc(co) + ' files ' + LOC.tDone + ' / ' + LOC.tAll + '</b><small>first time only – then the search starts by itself</small>'; if (LOC.tBusy) return; clearInterval(w0); if (sheetFn) locDesc(L); }, 500); return; }
-    reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet();
-    L.reduce(function (pr, q) { return pr.then(function () { if (st.stop) return; var words = q.toLowerCase().split(/\s+/).filter(Boolean);
-      var fs = LOC.search(words.map(function (w) { return '"' + w + '"'; }).join(' '), 400).filter(function (f) { return (!dirs.length || dirs.some(function (d) { return f.path.indexOf(d + '/') === 0; })) && !/^~\$/.test(f.name); })
-        .filter(function (f) { return syOk(yearOf(f)) && monOk(monOf(f.summary)); }).sort(function (a1, b1) { return yearOf(b1) - yearOf(a1); }).slice(0, 60);
-      st.prog.n += fs.length; rsP(); if (!fs.length) st.prog.fail.push(q);
-      var got0 = st.rows.length;
-      return fs.reduce(function (pr2, f) { return pr2.then(function () { if (st.stop) return; var f0 = LOC.byId[f.id] || f;
-          if (!LOC.txt[f.id] && (!LOC.certLike(f0, dirs) || f0.big)) { var cm0 = (f.path.match(/\b([A-Z]{1,3}\d{0,2}-\d{2,4}[A-Z]?)\b/) || [])[1] || '', nm0 = f.name.replace(/\.[^.]+$/, ''); if (!st.rows.some(function (y) { return y.from === nm0 && y.unread; })) st.rows.push({ code: cm0, description: (f0.big ? 'Big file – not opened: ' : 'Mapping / report – not opened: ') + nm0, manufacturer: '', certNo: (nm0.match(/\d{1,3}\s*\/?\s*[A-Z]{1,5}-\d{2,6}-20\d\d/) || [''])[0], machine: '', machineCode: '', from: nm0, year: yearOf(f), mon: null, unread: 1, file: f.name }); st.prog.d++; rsP(); return; }
-          return locRows(f, words).then(function (rs) { rs.forEach(function (x) { if (st.rows.some(function (y) { return norm(y.code) === norm(x.code) && norm(y.from) === norm(x.from) && norm(y.description) === norm(x.description); })) return; if (x.exact) st.on[st.rows.length] = true; st.rows.push(x); }); })
-          .catch(function () {}).then(function () { st.prog.d++; rsP(); }); }); }, Promise.resolve()).then(function () { if (st.rows.length === got0 && st.prog.fail.indexOf(q) < 0) st.prog.fail.push(q); }); }); }, Promise.resolve())
-      .then(function () { st.miss = st.prog.fail; st.prog = null; renderSheet(); }); };
+  /* scan like a TV channel search: read the company's certificates of the chosen year one by one, show every code the moment it is found; Stop keeps what was found, Continue goes on */
+  var locDesc = function (L, cont) { var co = p.company.name, sv = LS.get(lcKey(co), null);
+    if (!sv || !sv.length) { sv = lcGuess(co, lcSubs()); if (sv.length) LS.set(lcKey(co), sv); }
+    if (!sv.length) { st.rows = []; st.miss = [L.join(', ')]; st.prog = null; renderSheet(); return toast('No folder named like “' + co + '” inside Cert ' + lcYears().join(' / Cert '), true); }
+    var dirs = lcDirs(sv), words = L.join(' ').toLowerCase().split(/\s+/).filter(Boolean), yN = new Date().getFullYear();
+    var inDir = function (f) { return dirs.some(function (d) { return f.path.indexOf(d + '/') === 0; }); };
+    var files = LOC.files.filter(function (f) { return !f.dir && inDir(f) && LOC.RD.test(f.name) && !/^~\$/.test(f.name) && syOk(yearOf(f)); });
+    var nameHit = function (f) { var t = f.path.toLowerCase(); return words.every(function (w) { return t.indexOf(w) >= 0; }); };
+    var toRead = files.filter(function (f) { return LOC.certLike(f, dirs); }).sort(function (a1, b1) { return (nameHit(b1) ? 1 : 0) - (nameHit(a1) ? 1 : 0) || Math.abs(yN - 1 - yearOf(a1)) - Math.abs(yN - 1 - yearOf(b1)) || String(b1.path).localeCompare(String(a1.path)); });
+    if (!cont) { reset(); st.rows = []; st.seen = {}; st.k = 0; }
+    st.stop = false; st.partial = false; st.prog = { d: st.k, n: toRead.length, fail: [], scan: 1 }; renderSheet();
+    var live = function (x) { var el = document.getElementById('lvf'); if (el) { var d0 = document.createElement('div'); d0.className = 'lvr'; d0.textContent = (x.code ? x.code + ' · ' : '') + x.description + (x.certNo ? ' · ' + x.certNo : '') + ' · ' + x.year; el.insertBefore(d0, el.firstChild); } };
+    var add1 = function (x) { var key = norm(x.code) + '|' + norm(x.from) + '|' + norm(x.description); if (st.seen[key]) return; st.seen[key] = 1; if (x.exact) st.on[st.rows.length] = true; st.rows.push(x); live(x); };
+    var paint = function () { var el = document.querySelector('.sprog .t b'); if (el) el.textContent = (st.stop ? 'Stopping… ' : 'Searching ' + co + ' files… ') + st.prog.d + ' / ' + st.prog.n; var e2 = document.querySelector('.sprog .t small'); if (e2) e2.textContent = st.rows.length + (st.rows.length === 1 ? ' code' : ' codes') + ' found so far'; };
+    /* files that are not opened (mapping, reports, big files): found by their name / folder only */
+    if (!cont) files.filter(function (f) { return nameHit(f) && (!LOC.certLike(f, dirs)); }).forEach(function (f) { var nm0 = f.name.replace(/\.[^.]+$/, ''); add1({ code: (f.path.match(/\b([A-Z]{1,3}\d{0,2}-\d{2,4}[A-Z]?)\b/) || [])[1] || '', description: 'Mapping / report – not opened: ' + nm0, manufacturer: '', certNo: (nm0.match(/\d{1,3}\s*\/?\s*[A-Z]{1,5}-\d{2,6}-20\d\d/) || [''])[0], machine: '', machineCode: '', from: nm0, year: yearOf(f), mon: null, unread: 1, file: f.name }); });
+    var step = function () { if (!sheetFn) return; if (st.stop || st.k >= toRead.length) { var done = st.k >= toRead.length; st.partial = !done; if (done && st.per === 'all') LS.set('lcOk:' + norm(co), { ok: 1, n: toRead.length }); st.miss = st.rows.length ? [] : [L.join(', ')]; st.prog = null; renderSheet(); return; }
+      var f = toRead[st.k++]; return LOC.readOne(f).then(function (t) { if (f.big) { if (nameHit(f)) add1({ code: '', description: 'Big file – not opened: ' + f.name, manufacturer: '', certNo: '', machine: '', machineCode: '', from: f.name, year: yearOf(f), mon: null, unread: 1 }); return; }
+          if (t == null) return; var hay = t + ' ' + f.path.toLowerCase(); if (!words.every(function (w) { return hay.indexOf(w) >= 0; })) return;
+          return locRows(f, words).then(function (rs) { rs.forEach(add1); }); })
+        .catch(function () {}).then(function () { st.prog.d = st.k; paint(); return new Promise(function (r) { setTimeout(r, 0); }).then(step); }); };
+    step(); };
   var searchDesc = function () { var L = st.q.split(/[\n;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 3; }); if (!L.length) return; if (LOC.on && !CL.on) return locDesc(L); reset(); st.rows = []; st.prog = { d: 0, n: 0, fail: [] }; renderSheet();
     var pre = String(p.company.code || '').replace(/[^A-Za-z0-9]/g, '');
     L.reduce(function (pr, q) { return pr.then(function () { if (st.stop) return; var words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -3103,7 +3110,8 @@ function lySearch(p, mode, opt) { opt = opt || {};
     var res = '';
     if (st.err) res = '<div class="note warnbox">' + esc(st.err) + '</div>';
     else if (st.busy) res = '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking at ' + MON[st.m] + ' ' + st.y + '…</b></div>';
-    if (st.prog) res = '<div class="sprog"><span class="spin dark"></span><span class="t"><b>' + (st.stop ? 'Stopping…' : (st.mode === 'month' ? 'Reading the cover pages' : 'Searching') + '… ' + st.prog.d + ' / ' + st.prog.n) + '</b><small>' + (st.rows ? st.rows.length + (st.rows.length === 1 ? ' code' : ' codes') + ' found so far – you can choose them now' : '') + '</small></span>' + (st.stop ? '' : '<button class="btn ghost sm" id="lstop">Stop</button>') + '</div>';
+    if (st.prog) res = '<div class="sprog"><span class="spin dark"></span><span class="t"><b>' + (st.stop ? 'Stopping…' : (st.mode === 'month' ? 'Reading the cover pages' : 'Searching') + '… ' + st.prog.d + ' / ' + st.prog.n) + '</b><small>' + (st.rows ? st.rows.length + (st.rows.length === 1 ? ' code' : ' codes') + ' found so far – you can choose them now' : '') + '</small></span>' + (st.stop ? '' : '<button class="btn ghost sm" id="lstop">Stop</button>') + '</div>' + (st.prog.scan ? '<div class="lvf" id="lvf">' + st.rows.slice().reverse().map(function (x) { return '<div class="lvr">' + esc((x.code ? x.code + ' · ' : '') + x.description + (x.certNo ? ' · ' + x.certNo : '') + ' · ' + x.year) + '</div>'; }).join('') + '</div>' : '');
+    if (!st.prog && st.partial) res = '<div class="note lcont"><span>Stopped – ' + (st.k || 0) + ' files read so far.</span><button class="btn sm" id="lcont">Continue searching</button></div>' + (res || '');
     if (st.err) {} else if (st.busy) {} else if (st.rows && (st.rows.length || !st.prog)) { var n = st.rows.length, on = st.rows.filter(function (r, i) { return st.on[i]; }).length;
       var pOk = function (r) { var P = st.post || {}, has = function (t, w) { var T = norm(t || ''); return String(w || '').toLowerCase().split(/\s+/).filter(Boolean).every(function (x) { return T.indexOf(norm(x)) >= 0; }); }; return (!P.mach || has((r.machine || '') + ' ' + (r.description || ''), P.mach)) && (!P.item || has(r.description, P.item)) && (!P.code || has(r.code, P.code)); };
       var PP = st.post || {}; if ((PP.mach || PP.item || PP.code) && !st.prog && !st.postSel) { st.postSel = 1; st.rows.forEach(function (r, i) { if (pOk(r) && !(r.code && h[norm(r.code)])) st.on[i] = true; }); }
@@ -3124,7 +3132,7 @@ function lySearch(p, mode, opt) { opt = opt || {};
     return { title: 'Search last year', body: lcbHtml(p.company && p.company.name) + cart() + tabs + form + res, foot: foot,
       mount: function () { $$('[data-md]').forEach(function (b) { b.onclick = function () { st.mode = b.dataset.md; st.q = ''; st.miss = null; reset(); renderSheet(); }; });
         var lq = $('#lq'); if (lq) { lq.oninput = function () { st.q = lq.value; }; if (!st.rows && !st.prog) lq.focus(); }
-        var ls = $('#lstop'); if (ls) ls.onclick = function () { st.stop = true; renderSheet(); };
+        var ls = $('#lstop'); if (ls) ls.onclick = function () { st.stop = true; if (st.prog && st.prog.scan) { ls.disabled = true; ls.textContent = 'Stopping…'; } else renderSheet(); }; var lc = $('#lcont'); if (lc) lc.onclick = function () { locDesc(st.q.split(/[\n;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 3; }), true); };
         $$('[data-pvw]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); openPv(+b.dataset.pvw); }; });
         var ct = $('#cartTg'); if (ct) ct.onclick = function () { st.cartOpen = !st.cartOpen; renderSheet(); };
         $$('[data-per]').forEach(function (b) { b.onclick = function () { var lq2 = $('#lq'); if (lq2) st.q = lq2.value; st.per = b.dataset.per; renderSheet(); }; });
