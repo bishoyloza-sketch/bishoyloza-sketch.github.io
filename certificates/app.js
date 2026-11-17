@@ -618,6 +618,7 @@ function closeSheet() { var gr = window.__gapRet, back = gr && gr.sheet && sheet
 /* ===== one toolbar fixed at the top of every screen (like Word): Akhnaton = home, the tools, undo/redo, library, SharePoint, the user ===== */
 var TB = { last: '', menu: false };
 function tbIco(n) { var P = {
+    tag: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M11 10h7M11 14h7"/>',
     home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>', back: '<path d="M15 18l-6-6 6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>',
     lib: '<path d="M4 19V5a2 2 0 0 1 2-2h4v18H6a2 2 0 0 1-2-2z"/><path d="M10 3h4v18h-4z"/><path d="M15 4l4 1-3 16-4-1"/>',
     bin: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/>', act: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -640,7 +641,7 @@ function tbarPaint() { var bar = document.getElementById('tbar');
   bar.classList.toggle('incr', !!S.cur); var h = '<div class="tbin">' + (canBack ? B('back', 'back', '', 'Back one step (Esc)', 'ic') : '') +
     '<button class="tbhome" data-tb="home" title="Home – all jobs"><img src="logo-en-light.png" alt="Akhnaton"><span>Certificates</span></button>' + tbCrumb() +
     '<div class="tbtools">' + (can('newjob') ? B('new', 'plus', 'New job') : '') + B('lib', 'lib', 'Library', L.t, 'lib-' + L.k) +
-    B('bin', 'bin', 'Recycle bin' + (nb ? ' <em>' + nb + '</em>' : ''), 'Recycle bin') + (SYNC.on() && actAllowed() ? B('act', 'act', 'Activity', 'Team activity', S.view === 'act' && !S.cur ? 'cur' : '') : '') + (certAdmin() ? B('users', 'users', 'Users') : '') + '</div>' +
+    B('lbl', 'tag', 'Labels', 'Calibration labels – from an Excel list') + B('bin', 'bin', 'Recycle bin' + (nb ? ' <em>' + nb + '</em>' : ''), 'Recycle bin') + (SYNC.on() && actAllowed() ? B('act', 'act', 'Activity', 'Team activity', S.view === 'act' && !S.cur ? 'cur' : '') : '') + (certAdmin() ? B('users', 'users', 'Users') : '') + '</div>' +
     (function () { var cp = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; return cp && cp.orderType === 'contract' && ctGet(cp) ? '<button class="tbb tbct" data-tb="ct" title="The price list of the contract (appendix)">' + tbIco('doc') + '<span>Price list</span></button>' : ''; })() +
     '<span class="tbsp"></span>' +
     '<button class="tbb ic" data-tb="undo" title="' + (UNDO.st.length ? 'Undo – ' + UNDO.st.length + ' step' + (UNDO.st.length > 1 ? 's' : '') + ' (Ctrl+Z)' : 'Nothing to undo') + '"' + (UNDO.st.length ? '' : ' data-off') + '>' + tbIco('undo') + '</button>' +
@@ -672,7 +673,7 @@ function tbClick(e) { var b = e.target.closest('[data-tb]'); if (!b) return; var
   if (k === 'home') return goHome(); if (k === 'back') return doBack(); if (k === 'crco') { var c = document.querySelector('#app #crCo'); if (c) c.click(); return; }
   if (k === 'new') return home(function () { var n = $('#newP'); if (n) n.click(); else newProject(); });
   if (k === 'lib') { libPop(); var p = document.getElementById('libPop'), r = b.getBoundingClientRect(); if (p) { p.style.top = (r.bottom + 8) + 'px'; p.style.left = Math.max(8, Math.min(r.left, innerWidth - p.offsetWidth - 8)) + 'px'; p.style.right = 'auto'; p.style.bottom = 'auto'; } return; }
-  if (TB.menu && b.closest('#tbMenu')) { TB.menu = false; TB.last = ''; tbarPaint(); } if (k === 'ct') { var cp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (cp) ctView(cp); return; } if (k === 'bin') return binSheet(); if (k === 'act') return actOpen(); if (k === 'users') return usersSheet();
+  if (TB.menu && b.closest('#tbMenu')) { TB.menu = false; TB.last = ''; tbarPaint(); } if (k === 'ct') { var cp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (cp) ctView(cp); return; } if (k === 'bin') return binSheet(); if (k === 'lbl') return lblManual(); if (k === 'act') return actOpen(); if (k === 'users') return usersSheet();
   if (k === 'undo') return doUndo(); if (k === 'redo') return doRedo();
   if (k === 'libst') { if (tbLib().k === 'later') { LS.del('libLater'); TB.last = ''; return tbarPaint(); } return b.parentNode.querySelector('[data-tb="lib"]') ? b.parentNode.querySelector('[data-tb="lib"]').click() : libPop(); }
   if (k === 'updnow') { TB.updSeen = 1; dataUpdateAll(); toast('Library update started – it goes on in the background'); TB.last = ''; return tbarPaint(); }
@@ -705,7 +706,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'akh-certs-v303';
+var APP_V = 'akh-certs-v304';
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v\d+/); if (!m || m[0] === APP_V) return;
       var busy = function () { var a = document.activeElement; return (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) || sheetFn || ($('#dlg-root') && $('#dlg-root').innerHTML.trim()); };
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} (navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : Promise.resolve()).then(function () { setTimeout(function () { location.reload(); }, 400); }); };
@@ -3427,10 +3428,36 @@ function lblHtml(L, start, test) { var c = lblCfg(), per = c.cols * c.rows, all 
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labels</title><style>' + css + '</style></head><body>';
   for (var pg = 0; pg < pages; pg++) { html += '<div class="sh">'; for (var i = 0; i < per; i++) { var d = all[pg * per + i]; if (d === undefined) break; var col = i % c.cols, rw = Math.floor(i / c.cols); html += '<div class="cell" style="left:' + (+c.left + +c.dx + col * c.w).toFixed(2) + 'mm;top:' + (+c.top + +c.dy + rw * c.h).toFixed(2) + 'mm">' + (test ? '<div class="lb" style="border:.2mm dotted #000;display:flex;align-items:center;justify-content:center;font-size:7pt">' + (pg * per + i + 1) + '</div>' : one(d)) + '</div>'; } html += '</div>'; }
   return html + '</body></html>'; }
+/* Labels without a job: an Excel list (Code · Cal. Date · Due Date · Cal. By), printed 1, 2, 3… in the same order */
+function lblXDate(v) { if (v == null || v === '') return ''; if (v instanceof Date) return v; var t = String(v).trim(); if (/^\d{5}(\.\d+)?$/.test(t)) { var d = new Date(Date.UTC(1899, 11, 30) + parseFloat(t) * 864e5); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); }
+  var m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/); if (m) { var y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2] - 1, +m[1]); }
+  m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = t.match(/^([A-Za-z]{3})[a-z]*\.?[\s\-\/]*(\d{1,2})?[\s\-\/,]*(\d{2,4})$/); if (m) { var mi = M3.map(function (x) { return x.toLowerCase(); }).indexOf(m[1].toLowerCase()); if (mi >= 0) { var yy = +m[3]; if (yy < 100) yy += 2000; return m[2] && String(m[3]).length === 4 ? new Date(yy, mi, +m[2]) : new Date(yy, mi, 1); } }
+  m = t.match(/^(\d{1,2})[\/\-.](\d{4})$/); if (m) return new Date(+m[2], +m[1] - 1, 1); return t; }
+function lblRows(rows) { rows = (rows || []).map(function (r) { return (r || []).map(function (c) { return c == null ? '' : c; }); }).filter(function (r) { return r.some(function (c) { return String(c).trim(); }); }); if (!rows.length) return [];
+  var h = rows[0].map(function (c) { return String(c).toLowerCase(); }), col = function (re, d) { for (var i = 0; i < h.length; i++) if (re.test(h[i])) return i; return d; }, hasH = h.some(function (c) { return /code|serial|s\/n|cal|due|by/.test(c); });
+  var cC = col(/code|serial|s\/n/, 0), cD = col(/cal.*date|^cal$|calibration date/, 1), cU = col(/due/, 2), cB = col(/by|calibrated|signat/, 3);
+  return (hasH ? rows.slice(1) : rows).map(function (r) { return { sn: String(r[cC] || '').trim(), cal: lblXDate(r[cD]), due: lblXDate(r[cU]), by: String(r[cB] || '').trim() }; }).filter(function (x) { return x.sn || x.cal || x.due; }); }
+function lblFromList(L, mode) { var f = function (v) { return v instanceof Date ? lblDate(v, mode) : mode === 'blank' ? '' : String(v || ''); }; return L.map(function (x) { return { sn: x.sn, cal: f(x.cal), due: f(x.due), by: mode === 'blank' ? '' : x.by }; }); }
+function lblManual() { var st = { L: (LS.get('lblList', []) || []).map(function (x) { return { sn: x.sn, cal: x.cal && /^\d{4}-\d\d-\d\d$/.test(x.cal) ? s2d(x.cal) : x.cal, due: x.due && /^\d{4}-\d\d-\d\d$/.test(x.due) ? s2d(x.due) : x.due, by: x.by }; }), busy: false, paste: false };
+  var keep = function () { LS.set('lblList', st.L.map(function (x) { var d = function (v) { return v instanceof Date ? v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0') : v; }; return { sn: x.sn, cal: d(x.cal), due: d(x.due), by: x.by }; })); };
+  var show = function (v) { return v instanceof Date ? lblDate(v, 'day') : esc(v || '—'); };
+  openSheet(function () { return { wide: 1, title: 'Labels from an Excel list', body: '<div class="note">An Excel file with the columns <b>Code · Cal. Date · Due Date · Cal. By</b> (in this order, or with these titles in the first row). The labels come out <b>1, 2, 3…</b> in the same order as the list – across the sheet, row by row.</div>' +
+      '<div class="cf" style="justify-content:flex-start;margin:10px 0"><label class="btn"><input type="file" id="lmF" accept=".xlsx,.csv,.txt" hidden>' + (st.busy ? '<span class="spin"></span> Reading…' : '📄 Choose the Excel file') + '</label><button class="btn ghost" id="lmP">Paste from Excel</button>' + (st.L.length ? '<button class="btn ghost" id="lmC">Clear</button>' : '') + '</div>' +
+      (st.paste ? '<textarea class="inp" id="lmT" rows="6" placeholder="Copy the rows in Excel (Ctrl+C) and paste them here (Ctrl+V)"></textarea><div class="cf" style="justify-content:flex-start"><button class="btn sm" id="lmTo">Use these rows</button></div>' : '') +
+      (st.L.length ? '<div class="ltbw" style="margin-top:10px"><table class="ltbl"><thead><tr><th>No.</th><th>Code</th><th>Cal. Date</th><th>Due Date</th><th>Cal. By</th></tr></thead><tbody>' + st.L.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.sn) + '</b></td><td>' + show(x.cal) + '</td><td>' + show(x.due) + '</td><td>' + esc(x.by) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="dsn">No list yet.</div>'),
+      foot: '<button class="btn ghost" id="lmX">Close</button><button class="btn" id="lmGo"' + (st.L.length ? '' : ' disabled') + '>Labels for ' + st.L.length + ' ›</button>',
+      mount: function () { $('#lmX').onclick = closeSheet; var c = $('#lmC'); if (c) c.onclick = function () { st.L = []; keep(); renderSheet(); }; $('#lmP').onclick = function () { st.paste = !st.paste; renderSheet(); };
+        var to = $('#lmTo'); if (to) to.onclick = function () { var t = $('#lmT').value; var rows = t.split(/\r?\n/).map(function (l) { return l.split('\t'); }); st.L = lblRows(rows); st.paste = false; keep(); renderSheet(); toast(st.L.length + ' rows'); };
+        $('#lmF').onchange = function (e) { var f = e.target.files[0]; if (!f) return; st.busy = true; renderSheet();
+          var done = function (rows) { st.busy = false; st.L = lblRows(rows); keep(); renderSheet(); toast(st.L.length ? st.L.length + ' rows read' : 'No rows found', !st.L.length); };
+          if (/\.(csv|txt)$/i.test(f.name)) f.text().then(function (t) { done(t.split(/\r?\n/).map(function (l) { return l.split(/[,;\t]/); })); });
+          else f.arrayBuffer().then(function (b) { return readXlsx(b); }).then(function (wb) { var k = Object.keys(wb)[0]; done(wb[k] || []); }).catch(function (er) { st.busy = false; renderSheet(); toast('Could not read it – ' + er.message, true); }); };
+        $('#lmGo').onclick = function () { var L = st.L.slice(); labelsSheet(null, 'Excel list', function (m) { return lblFromList(L, m); }); }; } }; }); }
 function lblPrint(html) { var fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(fr); fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
   setTimeout(function () { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Printing is not allowed here', true); } setTimeout(function () { fr.remove(); }, 4000); }, 700); }
-function labelsSheet(P, title) { var st = { start: 0, mode: 'month', set: false };
-  openSheet(function () { var c = lblCfg(), L = lblData(P, st.mode), per = c.cols * c.rows, prev = lblHtml(L.slice(0, Math.max(0, per - st.start)), st.start);
+function labelsSheet(P, title, src) { var st = { start: 0, mode: 'month', set: false }, SRC = src || function (m) { return lblData(P, m); };
+  openSheet(function () { var c = lblCfg(), L = SRC(st.mode), per = c.cols * c.rows, prev = lblHtml(L.slice(0, Math.max(0, per - st.start)), st.start);
     return { wide: 1, title: 'Labels – ' + esc(title) + ' · ' + L.length, body: '<div class="lbw"><div class="lbl">' +
         '<div class="lbs"><b>Sticker sheet</b><small>Riklabel L48-25 · A4 · 44 stickers 48.5 × 25.4 mm · 4 across × 11 down · no gaps · margins: side 8 mm, top 8.65 mm (the maker\'s settings)</small></div>' +
         '<div class="lbs"><b>Start at sticker</b><small>a sheet already used? tap the first free sticker</small><div class="lbg" style="grid-template-columns:repeat(' + c.cols + ',1fr)">' + Array.apply(null, Array(per)).map(function (_, i) { return '<button data-lst="' + i + '" class="' + (i < st.start ? 'used' : i === st.start ? 'on' : '') + '">' + (i + 1) + '</button>'; }).join('') + '</div></div>' +
@@ -3440,7 +3467,7 @@ function labelsSheet(P, title) { var st = { start: 0, mode: 'month', set: false 
         '<div class="lbp"><iframe id="lbF" title="Labels"></iframe></div></div>',
       foot: '<button class="btn ghost" id="lbX">Close</button><button class="btn" id="lbP">Print ' + L.length + ' label' + (L.length === 1 ? '' : 's') + '</button>',
       mount: function () { var f = $('#lbF'); f.srcdoc = prev.replace('</style>', 'html{background:#fff}body{transform-origin:0 0}</style>'); f.onload = function () { try { var w = f.clientWidth, sc = w / (210 * 3.7795); f.contentDocument.body.style.transform = 'scale(' + sc + ')'; f.style.height = (297 * 3.7795 * sc) + 'px'; } catch (e) {} };
-        $('#lbX').onclick = closeSheet; $('#lbP').onclick = function () { lblPrint(lblHtml(lblData(P, st.mode), st.start)); };
+        $('#lbX').onclick = closeSheet; $('#lbP').onclick = function () { lblPrint(lblHtml(SRC(st.mode), st.start)); };
         $$('[data-lst]').forEach(function (b) { b.onclick = function () { st.start = +b.dataset.lst; renderSheet(); }; }); $$('[data-lmd]').forEach(function (b) { b.onclick = function () { st.mode = b.dataset.lmd; renderSheet(); }; });
         $('#lbSet').onclick = function () { st.set = !st.set; renderSheet(); }; var t = $('#lbTest'); if (t) t.onclick = function () { lblPrint(lblHtml(Array.apply(null, Array(per)).map(function () { return {}; }), 0, true)); }; var r = $('#lbRst'); if (r) r.onclick = function () { LS.set('lblCfg', {}); renderSheet(); };
         $$('[data-lcf]').forEach(function (e) { e.onchange = function () { var k = e.dataset.lcf, v = e.value.trim(), o = LS.get('lblCfg', {}) || {}; if (k !== 'form') { if (!isNum(v)) return toast('Write a number', true); v = +v; } o[k] = v; LS.set('lblCfg', o); renderSheet(); }; }); } }; }); }
