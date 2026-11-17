@@ -463,12 +463,18 @@ function backFab() { var b = document.getElementById('backFab'); if (!b) { b = d
   b.className = (S.cur || sheetFn) && S.session !== false ? 'on' : ''; }
 setInterval(function () { try { backFab(); } catch (e) {} }, 400);
 /* phones: Back · Cover · Machine · Undo sit in one fixed row at the bottom (with the main buttons) instead of floating over the certificate */
+/* delete the certificate you are on – it leaves the job; ↶ Undo or the Recycle bin brings it back */
+function certDel() { var p = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (!p) return; var L = certList(p), it = L[p.ci]; if (!it) return;
+  if (typeof can === 'function' && !can('certs')) return toast('You do not have permission to change certificates', true);
+  dialog('Delete this certificate?', '<b>' + esc(it.certNo || it.code || 'Certificate') + '</b>' + (it.code ? ' · ' + esc(it.code) : '') + (it.description ? ' · ' + esc(it.description) : '') + '<br>It leaves this job and its cover; the numbers after it move up. ↶ Undo or the Recycle bin brings it back.', 'Delete').then(function (y) { if (!y) return;
+    var i0 = p.ci; p.items = p.items.filter(function (z) { return z !== it; }); var n = certList(p).length; try { syncLog(p, 'cert-del', 'deleted ' + (it.certNo || it.code || 'a certificate')); } catch (e) {}
+    if (!n) { p.ci = null; p.tab = 'cert'; } else p.ci = Math.min(i0, n - 1); saveProjects(); toast('Deleted – ↶ Undo brings it back'); render(); window.scrollTo(0, 0); }); }
 function mobSync() { var f = document.querySelector('.wiz-foot'), mt = document.getElementById('mtools'), on = f && (document.getElementById('cTab') || document.getElementById('mTab'));
   if (!on) { if (mt) mt.remove(); document.body.classList.remove('mt'); return; }
   if (!mt || mt.parentNode !== f) { if (mt) mt.remove(); mt = document.createElement('div'); mt.id = 'mtools';
-    mt.innerHTML = '<button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button>';
+    mt.innerHTML = '<button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button><button type="button" data-mt="del" class="mtdel" title="Delete this certificate">Delete</button>';
     f.insertBefore(mt, f.firstChild); mt.onclick = function (e) { var b = e.target.closest('[data-mt]'); if (!b) return; var k = b.dataset.mt;
-      if (k === 'ds') return dsLibSheet(); var t = document.getElementById(k === 'cov' ? 'cTab' : 'mTab'); if (t) t.click(); }; }
+      if (k === 'ds') return dsLibSheet(); if (k === 'del') return certDel(); var t = document.getElementById(k === 'cov' ? 'cTab' : 'mTab'); if (t) t.click(); }; }
   /* ‹ Previous and Next › side by side, like turning the pages of the certificates */
   var cb = document.getElementById('cbk'), cn = document.getElementById('cn'), nx = document.getElementById('cfNext');
   if (cb && cn) { if (!nx || nx.previousElementSibling !== cb) { if (nx) nx.remove(); nx = document.createElement('button'); nx.type = 'button'; nx.id = 'cfNext'; nx.className = 'btn ghost'; nx.textContent = 'Next ›'; nx.onclick = function () { var c = document.getElementById('cn'); if (c && !c.disabled) c.click(); }; cb.insertAdjacentElement('afterend', nx); }
@@ -664,7 +670,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'akh-certs-v280';
+var APP_V = 'akh-certs-v281';
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v\d+/); if (!m || m[0] === APP_V) return;
       var busy = function () { var a = document.activeElement; return (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) || sheetFn || ($('#dlg-root') && $('#dlg-root').innerHTML.trim()); };
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} (navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : Promise.resolve()).then(function () { setTimeout(function () { location.reload(); }, 400); }); };
