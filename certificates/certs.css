@@ -1487,3 +1487,11 @@ button.plp:hover{border-color:#CFDBEA;background:#fff}button.plp:hover .plpen{op
 .mcask .cf{flex-direction:column}
 .mcask .cf .btn{flex:none;width:100%;min-height:46px;padding:10px 16px}
 .note.warn{background:#FFF6E5;border-color:#F3D9A4;color:#6B4500}
+.hjtabs{display:flex;gap:4px;border-bottom:1px solid #E3E9F2;margin:-4px 0 14px}
+.hjtabs button{background:none;border:0;border-bottom:3px solid transparent;padding:8px 14px 10px;font:600 16px var(--font,inherit);color:#8695A8;cursor:pointer;margin-bottom:-1px}
+.hjtabs button em{font-style:normal;font-size:12px;font-weight:600;background:#EEF2F7;color:#5B6B80;border-radius:999px;padding:1px 8px;margin-left:6px}
+.hjtabs button.on{color:#0E2A52;border-bottom-color:#0E2A52}.hjtabs button.on em{background:#0E2A52;color:#fff}
+.hjft{display:flex;align-items:center;gap:6px}.hjft .sp{flex:1}
+.hjfx{border:1px solid #DCE3EC;background:#fff;border-radius:8px;padding:4px 10px;font:600 12px var(--font,inherit);color:#22324A;cursor:pointer}.hjfx:hover{border-color:#0E2A52}
+[data-pfin].hjfx{color:#1E7B4B;border-color:#BFE3CD}
+.hjring small.hjfd{color:#1E7B4B;font-weight:600}
