@@ -1166,3 +1166,4 @@ body.np-library [data-dle],body.np-library #dlNew,body.np-library #dlAll,body.np
 body.np-deljob [data-pd]{display:none!important}
 body.np-activity #actFab{display:none!important}
 body.np-users #usersB{display:none!important}
+.ujd{display:flex;flex-wrap:wrap;gap:2px 14px}.ujd b{color:#13294B;font-weight:600}
