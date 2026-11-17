@@ -240,7 +240,7 @@
   }
   function renderLogin() {
     tbarPaint();
-    var pick = null, pin = '';
+    var pick = null, pin = '', busy = false;
     var app = $('#app');
     function draw() {
       var people = (S.people || []).slice();
@@ -259,7 +259,7 @@
           }).join('') + '</div>' : '<div class="empty"><b>Loading names…</b>Check the internet connection.</div>')
           :
           '<div class="sec" style="margin-top:4px"><h2>' + esc(pick.name) + '</h2><button class="btn ghost sm" data-back>Change</button></div>' +
-          '<p style="text-align:center;margin:8px 0 0;color:var(--muted)">Enter your 4-digit PIN</p>' +
+          '<p style="text-align:center;margin:8px 0 0;color:' + (busy ? 'var(--blue);font-weight:600' : 'var(--muted)') + '">' + (busy ? '<span class="spin" style="display:inline-block;vertical-align:-4px;width:16px;height:16px;border-width:2px;border-color:var(--blue-soft);border-top-color:var(--blue);margin-right:8px"></span>Checking…' : 'Type your 4-digit PIN – keyboard or the buttons') + '</p>' +
           '<div class="pin" id="pin">' + [0, 1, 2, 3].map(function (i) { return '<i class="' + (i < pin.length ? 'f' : '') + '"></i>'; }).join('') + '</div>' +
           '<div class="pad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(function (k) {
             return k ? '<button data-k="' + k + '" aria-label="' + (k === '⌫' ? 'Delete' : k) + '">' + k + '</button>' : '<span></span>';
@@ -269,7 +269,7 @@
       var bk = $('[data-back]'); if (bk) bk.onclick = function () { pick = null; draw(); };
       $$('[data-k]').forEach(function (b) {
         b.onclick = function () {
-          var k = b.dataset.k;
+          var k = b.dataset.k; if (busy) return;
           if (k === '⌫') pin = pin.slice(0, -1); else if (pin.length < 4) pin += k;
           draw();
           if (pin.length === 4) tryLogin();
@@ -277,17 +277,17 @@
       });
     }
     function tryLogin() {
-      var who = pick, typed = pin;
-      Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) {
+      var who = pick, typed = pin; busy = true; draw();
+      Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) { busy = false;
         S.session = { userId: pick.id, pin: pin }; LS.set('session', S.session); S.me = r.user;
         if (r.mustChange) return askNewPin(true);
         CERT.setPin(who.id, who.name, typed, false); /* the same PIN in Certificates */
         boot();
       }).catch(function (e) {
-        pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake');
-        if (!/Wrong PIN/i.test(e.message)) return toast(e.message, true);
+        if (!/Wrong PIN/i.test(e.message)) { busy = false; pin = ''; draw(); return toast(e.message, true); }
         CERT.link(who.id, typed).then(function (r) {
-          if (r === true) { pick = who; pin = typed; return tryLogin(); } /* the Devices PIN is now the Certificates PIN */
+          if (r === true) { busy = false; pick = who; pin = typed; return tryLogin(); } /* the Devices PIN is now the Certificates PIN */
+          busy = false; pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake');
           toast(r === 'differs' ? 'That is your Certificates PIN – Lab Devices still has your old PIN. Sign in once with the old one (then both become the same), or ask the admin to reset your PIN.' : e.message, true);
         });
       });
@@ -296,7 +296,7 @@
     if (window.__loginKeys) document.removeEventListener('keydown', window.__loginKeys);
     window.__loginKeys = function (e) {
       if (!$('.login')) { document.removeEventListener('keydown', window.__loginKeys); window.__loginKeys = null; return; }
-      if (!pick) return;
+      if (!pick || busy) return;
       if (/^\d$/.test(e.key)) { e.preventDefault(); if (pin.length < 4) { pin += e.key; draw(); if (pin.length === 4) tryLogin(); } }
       else if (e.key === 'Backspace') { e.preventDefault(); pin = pin.slice(0, -1); draw(); }
       else if (e.key === 'Escape') { pick = null; pin = ''; draw(); }
@@ -2709,6 +2709,14 @@
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.session) { S._keepScroll = true; refresh(true); } });
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !DEMO) navigator.serviceWorker.register('OneSignalSDKWorker.js', { scope: '/' }).catch(function () {});
+  /* a newer version on the site: load it by itself (no need to clear the cache) */
+  (function () {
+    var me = document.querySelector('script[src*="app.js?v="]'), cur = me ? (me.getAttribute('src').match(/v=(\d+)/) || [])[1] : '';
+    if (!cur || DEMO) return;
+    var check = function () { fetch('index.html?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (t) {
+      var v = (t.match(/app\.js\?v=(\d+)/) || [])[1]; if (v && v !== cur && !sheetStack.length) location.reload(); }).catch(function () {}); };
+    check(); setInterval(check, 5 * 60000);
+  })();
   if (S.session) boot(); else renderLogin();
   window.__app = { S: S, refresh: refresh };
 })();
