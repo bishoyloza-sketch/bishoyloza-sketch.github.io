@@ -1395,3 +1395,10 @@ body.hasTb #mtools button.mtdel{color:#B3261E;border-color:#F2C4BE}body.hasTb #m
 .eqt tr.soon td.due small{color:#B26A00}
 .dltab{grid-template-columns:repeat(3,1fr)!important}
 .eqt tr.dlr{display:table-row!important;border:0!important;background:none!important;padding:0!important;margin:0!important;box-shadow:none!important;border-radius:0!important}.eqt tr.dlr td{display:table-cell!important;width:auto!important}
+.eqt tr.dlr{cursor:pointer}.eqt tr.dlr:hover td{background:#F2F7FD}
+.eqt td.eqa{white-space:nowrap;font-family:Barlow,system-ui,sans-serif}.eqt td.eqa .btn{margin-left:4px}
+.eqt small.eqres{display:block;color:#0B5CAD;font:600 11px Barlow,system-ui,sans-serif}
+.eqg{display:grid;grid-template-columns:1fr 1fr;gap:10px}.eqg .w2{grid-column:span 2}
+.eqrs{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}.eqrr{display:flex;gap:8px;align-items:center}.eqrr select{width:120px}.eqrr input{flex:1}
+.eqcert{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid #E3E9F2;border-radius:10px;padding:10px 12px;background:#fff}.eqcert b{flex:1 1 60%}.eqcert small{flex-basis:100%;color:#5b6b82;order:3}.eqcert span{display:flex;gap:6px}
+@media (max-width:760px){.eqg{grid-template-columns:1fr}.eqg .w2{grid-column:auto}}
