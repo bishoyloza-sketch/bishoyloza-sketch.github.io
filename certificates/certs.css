@@ -1361,3 +1361,10 @@ body.hasTb #mtools button:hover{border-color:#13294B}
 .ctnotes{margin-top:10px;font-size:14px;line-height:1.7}.ctnotes ul{margin:6px 0 0;padding-inline-start:20px}
 @media (max-width:760px){.ctpg{padding:16px}.ctpv{padding:6px}}
 .cthdr{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:2px solid #5B9BD5;padding-bottom:10px;margin-bottom:14px;font-size:12px;line-height:1.4}.cthdr img{height:46px}
+.ctgos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ctgo{display:inline-flex;align-items:baseline;gap:5px;border:1.5px solid #C9D4E2;background:#fff;color:#0B5CAD;border-radius:8px;padding:3px 9px;font:700 13px Barlow,system-ui,sans-serif;cursor:pointer;text-align:left}
+.ctgo small{font-weight:500;color:#5b6b82;font-size:12px}.ctgo:hover{border-color:#0B5CAD;background:#F2F7FD}
+.cttb td .ctgo{border-color:transparent;padding:2px 4px;margin-left:-4px;flex-direction:column;gap:0}.cttb td .ctgo:hover{border-color:#C9D4E2}
+.ctchk div>span{flex:1}
+.ctpts{display:block;margin-top:6px;border:0;background:none;padding:0;color:#B26A00;font:600 13px Barlow,system-ui,sans-serif;cursor:pointer;text-decoration:underline}
+#tbar .tbct{background:rgba(255,255,255,.12);margin-left:6px}
