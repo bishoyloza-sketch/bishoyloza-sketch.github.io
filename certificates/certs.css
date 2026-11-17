@@ -1482,3 +1482,7 @@ button.plp:hover{border-color:#CFDBEA;background:#fff}button.plp:hover .plpen{op
 .eqvw button{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:8px;padding:6px 12px;font:600 13px var(--font,inherit);color:#5B6B80;cursor:pointer;white-space:nowrap}
 .eqvw button.on{background:#fff;color:#0E2A52;box-shadow:0 1px 3px rgba(16,32,64,.12)}
 .eqtb{table-layout:fixed}.eqtb td{overflow-wrap:anywhere}
+.mcask{text-align:center}.mcok{width:48px;height:48px;border-radius:50%;background:#E6F4EC;color:#1E7B4B;display:grid;place-items:center;font-size:24px;font-weight:700;margin:0 auto 10px}
+.mcask p{margin:0 0 8px}.mcl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:6px}.mcl span{background:#EEF2F7;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;color:#22324A}
+.mcask .cf{flex-direction:column}
+.mcask .cf .btn{flex:none;width:100%;min-height:46px;padding:10px 16px}

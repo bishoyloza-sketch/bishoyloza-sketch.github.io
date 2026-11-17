@@ -671,7 +671,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'akh-certs-v287';
+var APP_V = 'akh-certs-v288';
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v\d+/); if (!m || m[0] === APP_V) return;
       var busy = function () { var a = document.activeElement; return (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) || sheetFn || ($('#dlg-root') && $('#dlg-root').innerHTML.trim()); };
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} (navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : Promise.resolve()).then(function () { setTimeout(function () { location.reload(); }, 400); }); };
@@ -4665,7 +4665,15 @@ function itemSheet2(p, gi, it0, pick) { if (it0 && mqSetup(it0)) saveProjects();
           if (!isNew) { var cds = $$('[data-cd]'), chain = function (k) { if (k >= cds.length) return fin(); var e2 = cds[k], key = e2.dataset.cd, v = e2.value.trim();
               var cur = key === 'calDate' ? (it.calDate || ensureInfo(p).cal || '') : key === 'interval' ? itInterval(p, it) : key === 'dsr' ? dsRef(p, it) : key === 'uncVal' ? (it.unc || '') : key === 'rcvSt' ? (it.rcvSt || 'In A Good Condition') : (it.dlvSt || '');
               if (v === String(cur || '')) return chain(k + 1); if (key === 'interval') { it.interval = v; saveProjects(); return chain(k + 1); } setField(p, it, key, v, function () { chain(k + 1); }); }, fin = function () { saveProjects(); var rp0 = rangeProblem(it); if (rp0) toast('Saved – ' + rp0 + ' (marked in red on the certificate)'); if (window.__backPanel != null) { back(); return; } window.__keepY = window.scrollY; window.__noFocus = 1; render(); }; closeSheet(); chain(0); return; }
-          if (isNew && !st.code) kindSetup(p, it); if (isNew && spc() && window.__backPanel == null) { saveProjects(); return goCert(it); } if (isNew && window.__backPanel == null) { p.ci = certList(p).indexOf(it); saveProjects(); window.scrollTo(0, 0); } if (window.__backPanel != null) { back(); return; } render(); }; }
+          if (isNew && !st.code) kindSetup(p, it);
+          var cont = function () { if (isNew && spc() && window.__backPanel == null) { saveProjects(); return goCert(it); } if (isNew && window.__backPanel == null) { p.ci = certList(p).indexOf(it); saveProjects(); window.scrollTo(0, 0); } if (window.__backPanel != null) { back(); return; } render(); };
+          /* an item under a machine: stay on the machine – add the next item, or say it is finished */
+          var mac = isNew && it.machineId && window.__backPanel == null && (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0]; if (!mac) return cont();
+          var mIts = p.items.filter(function (x) { return x.machineId === mac.id; }), dr = $('#dlg-root');
+          dr.innerHTML = '<div class="dlg"><div class="mcask"><div class="mcok">✓</div><h3>' + esc(it.code || it.description || 'Item') + ' added</h3><p>' + esc(mac.name || 'The machine') + (mac.code ? ' (' + esc(mac.code) + ')' : '') + ' has <b>' + mIts.length + ' item' + (mIts.length > 1 ? 's' : '') + '</b> now:</p><div class="mcl">' + mIts.map(function (x) { return '<span>' + esc(x.code || x.description || '—') + '</span>'; }).join('') + '</div>' +
+            '<div class="cf"><button class="btn" id="mcMore">+ Add the next item</button><button class="btn ghost" data-no="1" id="mcFin">Machine finished ✓</button></div></div></div>';
+          $('#mcMore').onclick = function () { dr.innerHTML = ''; itemSheet(p, null, newItem({ machineId: mac.id })); };
+          $('#mcFin').onclick = function () { dr.innerHTML = ''; toast((mac.name || 'Machine') + ' – ' + mIts.length + ' item' + (mIts.length > 1 ? 's' : '')); cont(); }; }; }
 }
 
 
