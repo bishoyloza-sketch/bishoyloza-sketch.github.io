@@ -642,7 +642,7 @@ function tbClick(e) { var b = e.target.closest('[data-tb]'); if (!b) return; var
   if (k === 'inst') return installSheet(); if (k === 'pin') return pinChange(); }
 setInterval(function () { try { tbarPaint(); } catch (e) {} }, 300);
 /* ===== long drop-down lists become "type to search": type a few letters, the list narrows, choose (keyboard or mouse) ===== */
-function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.length <= 12 || !sel.offsetParent) return; sel.dataset.cb = '1';
+function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.length <= 6 || !sel.offsetParent || sel.closest('.nocb')) return; sel.dataset.cb = '1';
   var w = document.createElement('span'); w.className = 'cbx'; var inp = document.createElement('input'); inp.className = 'cbi ' + sel.className; inp.type = 'text'; inp.autocomplete = 'off'; inp.spellcheck = false;
   var cur = function () { var o = sel.options[sel.selectedIndex]; return o && o.value ? o.text : ''; };
   inp.placeholder = (sel.options[0] && !sel.options[0].value ? sel.options[0].text.replace(/[–—-]\s*/g, '').trim() : 'Choose') + ' – type to search'; inp.value = cur();
@@ -4554,7 +4554,7 @@ function itemSheet2(p, gi, it0, pick) { if (it0 && mqSetup(it0)) saveProjects();
   var KMAP = { 'Humidity': 'RH', 'Differential Pressure': 'Differential pressure', 'Air Velocity': 'Air velocity' };
   var l0 = (it0 && it0.lim) || { type: 'rdg', val: '', unit: '' };
   var st = it0 ? { description: it0.description || ff.description || '', code: it0.code || '', manufacturer: it0.manufacturer || ff.manufacturer || '', model: it0.model || ff.model || '', serial: it0.serial || ff.serial || '', unit: it0.unit || '', rMin: it0.rMin || '', rMax: it0.rMax || '', cMin: it0.cMin || '', cMax: it0.cMax || '', res: it0.res || '', procedure: sopNorm(ff.procedure), limVal: l0.val || '', limType: l0.type || 'rdg' }
-    : { description: '', code: '', manufacturer: (gr.items[0] || {}).manufacturer || '', model: '', serial: '', unit: '', rMin: '', rMax: '', cMin: '', cMax: '', res: '', procedure: '', limVal: '', limType: 'rdg' }, touched = {};
+    : { description: '', code: (function () { /* the machine code is written for you – add the rest after the / (or delete it) */ var c = (m && m.code) || ''; if (!c) { var c0 = String((gr.items[0] || {}).code || ''); c = c0.indexOf('/') > 0 ? c0.slice(0, c0.lastIndexOf('/')) : ''; } return c ? c + '/' : ''; })(), manufacturer: (gr.items[0] || {}).manufacturer || '', model: '', serial: '', unit: '', rMin: '', rMax: '', cMin: '', cMax: '', res: '', procedure: '', limVal: '', limType: 'rdg' }, touched = {};
   var auto = function () { var kd = st.ty && st.ty !== 'other' ? st.ty : kind8(st.description); if (!isNew && !st.ty) return kind8(st.description); var KU = KUNIT[kd], KD = KDEF[KMAP[kd] || kd];
     if (KU) { if (!touched.unit) st.unit = KU[0]; if (!touched.res) st.res = KU[1]; } if (KD) { if (!touched.procedure && KD[0]) st.procedure = KD[0]; var mm = !touched.limVal && String(KD[1] || '').match(/±\s*([\d.]+)\s*(%\s*of\s*F\.?S|%\s*of\s*Rdg|.*)/i); if (mm) { st.limVal = mm[1]; st.limType = /F\.?S/i.test(mm[2]) ? 'fs' : /Rdg/i.test(mm[2]) ? 'rdg' : 'abs'; } } return kd; };
   var F = function (k, l, ph, wide) { return '<label class="isf' + (wide ? ' w2' : '') + '"><span>' + l + '</span><input class="inp" data-is="' + k + '" value="' + esc(st[k] || '') + '" placeholder="' + esc(ph || '') + '"' + (/Min|Max|res|limVal/.test(k) ? ' inputmode="decimal"' : '') + '></label>'; };
