@@ -1549,3 +1549,7 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 #alarmKeep{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:90;display:flex;align-items:center;gap:10px;background:#0E2A52;color:#fff;border-radius:14px;padding:10px 12px 10px 16px;box-shadow:0 10px 30px rgba(10,20,38,.3);font-size:14px;max-width:92vw}
 #alarmKeep b{color:#FFD58A}#alarmKeep .btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
 #alarmKeep .btn:not(.ghost){background:#fff;color:#0E2A52;border-color:#fff}
+.gpt tr.gph td{background:#F4F7FB;font-size:12px;font-weight:700;color:#5B6B80;text-transform:uppercase;letter-spacing:.05em;padding:7px 10px}
+.gpt tr.gph.nw td{background:#F1ECFD;color:#5F3DC4}
+.gpt tr.gpnw td:first-child{box-shadow:inset 4px 0 0 #7048E8}
+.gpk.nw{background:#7048E8;color:#fff;margin-right:6px}
