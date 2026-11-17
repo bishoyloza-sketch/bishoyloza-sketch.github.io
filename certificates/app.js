@@ -536,9 +536,9 @@ function tbIco(n) { var P = {
     out: '<path d="M15 4h4v16h-4"/><path d="M10 17l5-5-5-5M15 12H3"/>', ref: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>', down: '<path d="M6 9l6 6 6-6"/>' }[n] || '';
   return '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P + '</svg>'; }
 function tbLib() { var lu = LS.get('dataUpdated', 0), later = LS.get('libLater', 0) || 0;
-  if (UPD.run) return { k: 'run', t: 'Updating library…' };
-  if (lu && Date.now() - lu < 30 * 864e5) return { k: 'ok', t: 'Library up to date' };
-  return { k: Date.now() < later ? 'later' : 'old', t: lu ? 'Library update ready' : 'Library: first update' }; }
+  if (UPD.run) return { k: 'run', t: 'Library – updating now…' };
+  if (lu && Date.now() - lu < 30 * 864e5) return { k: 'ok', t: 'Library – up to date' };
+  return { k: 'old', t: lu ? 'Library – needs an update' : 'Library – never updated online' }; }
 function tbCrumb() { var hd = document.querySelector('#app .top.tc .tct'); if (!hd || !S.cur) return ''; var co = hd.querySelector('#crCo'), b = hd.querySelector('.crumb b'), sm = hd.querySelector('small');
   return '<span class="tbsep"></span><nav class="tbcr">' + (co ? '<button data-tb="crco">' + esc(co.textContent) + '</button><i>›</i>' : '') + (b ? '<b>' + esc(b.textContent) + '</b>' : '') + (sm && sm.textContent ? '<small>' + esc(sm.textContent) + '</small>' : '') + '</nav>'; }
 function tbarPaint() { var bar = document.getElementById('tbar');
@@ -549,18 +549,18 @@ function tbarPaint() { var bar = document.getElementById('tbar');
   var B = function (k, ico, txt, tip, cls) { return '<button class="tbb' + (cls ? ' ' + cls : '') + '" data-tb="' + k + '" title="' + esc(tip || txt) + '">' + tbIco(ico) + (txt ? '<span>' + txt + '</span>' : '') + '</button>'; };
   bar.classList.toggle('incr', !!S.cur); var h = '<div class="tbin">' + (canBack ? B('back', 'back', '', 'Back one step (Esc)', 'ic') : '') +
     '<button class="tbhome" data-tb="home" title="Home – all jobs"><img src="logo-en-light.png" alt="Akhnaton"><span>Certificates</span></button>' + tbCrumb() +
-    '<div class="tbtools">' + (can('newjob') ? B('new', 'plus', 'New job') : '') + B('lib', 'lib', 'Library', 'Data library – instruments and customers') +
+    '<div class="tbtools">' + (can('newjob') ? B('new', 'plus', 'New job') : '') + B('lib', 'lib', 'Library', L.t, 'lib-' + L.k) +
     B('bin', 'bin', 'Recycle bin' + (nb ? ' <em>' + nb + '</em>' : ''), 'Recycle bin') + (SYNC.on() && actAllowed() ? B('act', 'act', 'Activity', 'Team activity') : '') + (certAdmin() ? B('users', 'users', 'Users') : '') + '</div>' +
     '<span class="tbsp"></span>' +
     '<button class="tbb ic" data-tb="undo" title="' + (UNDO.st.length ? 'Undo – ' + UNDO.st.length + ' step' + (UNDO.st.length > 1 ? 's' : '') + ' (Ctrl+Z)' : 'Nothing to undo') + '"' + (UNDO.st.length ? '' : ' data-off') + '>' + tbIco('undo') + '</button>' +
     '<button class="tbb ic" data-tb="redo" title="' + (UNDO.rd.length ? 'Redo – ' + UNDO.rd.length + ' (Ctrl+Y)' : 'Nothing to redo') + '"' + (UNDO.rd.length ? '' : ' data-off') + '>' + tbIco('redo') + '</button>' +
-    '<button class="tbchip lib-' + L.k + '" data-tb="libst" title="' + esc(L.t) + '"><i></i><span>' + esc(L.t) + '</span></button>' +
+    
     '<span class="tbchip' + (sp ? '' : ' off') + '" title="SharePoint"><i></i><span>' + (sp ? 'SharePoint' : 'Offline') + '</span></span>' +
     '<button class="tbb ic rfbtn" title="Refresh – load the newest version">' + tbIco('ref') + '</button>' +
     '<button class="tbb tbme" data-tb="me" title="' + esc(S.me ? S.me.name : '') + '"><b>' + esc((me || '?').charAt(0)) + '</b><span>' + esc(me) + '</span>' + tbIco('down') + '</button>' +
     B('out', 'out', '', 'Sign out', 'ic') + '</div>' +
     (TB.menu ? '<div id="tbMenu"><div class="tbmh"><b>' + esc(S.me ? S.me.name : '') + '</b><small>' + esc(CROLE[certRoleOf(S.me)] || '') + '</small></div><button class="tbmo" data-tb="bin">Recycle bin' + (nb ? ' (' + nb + ')' : '') + '</button>' + (certAdmin() ? '<button class="tbmo" data-tb="users">Users</button>' : '') + (SYNC.on() && actAllowed() ? '<button class="tbmo" data-tb="act">Team activity</button>' : '') + '<button data-tb="paper">Paper used</button><button data-tb="inst">Install the app / share the link</button><button data-tb="out">Sign out</button></div>' : '') +
-    (L.k === 'old' && !TB.menu && !S.cur && !sheetFn && !TB.updSeen ? '<div id="tbUpd"><b>' + (LS.get('dataUpdated', 0) ? 'The library is over a month old' : 'The library was never updated online') + '</b><small>Instrument datasheets and customer data – like Windows updates, it runs in the background</small><div><button class="btn sm" data-tb="updnow">Update now</button><button class="btn ghost sm" data-tb="updlater">Later</button></div></div>' : '');
+    '';
   if (h === TB.last) return; TB.last = h; bar.innerHTML = h; }
 function tbClick(e) { var b = e.target.closest('[data-tb]'); if (!b) return; var k = b.dataset.tb; if (b.hasAttribute('data-off')) return; e.stopPropagation();
   var home = function (then) { if (S.cur || sheetFn) goHome(); if (then) setTimeout(then, 60); };
@@ -5630,14 +5630,21 @@ function coLibBind(p, redo) { $$('[data-col]').forEach(function (b) { b.onclick 
 function libFabPaint() { var b = document.getElementById('libFab'); if (!b) { b = document.createElement('button'); b.id = 'libFab'; b.type = 'button'; b.title = 'Data library – instruments & customers'; b.innerHTML = '📚'; b.onclick = function (e) { e.stopPropagation(); libPop(); }; document.body.appendChild(b); }
   b.className = S.session && !sheetFn ? 'on' : ''; }
 setInterval(function () { try { libFabPaint(); } catch (e) {} }, 500);
-function libPop() { var old = document.getElementById('libPop'); if (old) { old.remove(); return; } var all = dsLibAll(), withRes = all.filter(function (e) { return e.res; }).length, cos = ((S.data && S.data.companies) || []).filter(function (c) { return c.id; }), withCo = cos.filter(function (c) { return coLibGet(c.id); }).length, lu = LS.get('dataUpdated', 0);
-  var d = document.createElement('div'); d.id = 'libPop'; d.innerHTML = '<div class="lph"><b>📚 Data library</b><button class="lpx" title="Close">✕</button></div>' +
-    '<div class="lps"><div><b>' + all.length + '</b><span>instruments</span></div><div><b>' + withRes + '</b><span>with resolution</span></div><div><b>' + withCo + ' / ' + cos.length + '</b><span>customers with official data</span></div></div>' +
-    '<div class="lpu" id="lpU">' + (UPD.run ? '<span class="spin dark"></span> ' + esc(UPD.msg) : UPD.done ? '✓ ' + esc(UPD.done) : lu ? 'Last update ' + new Date(lu).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not updated online yet') + '</div>' +
-    '<div class="lpb"><button class="btn sm" id="lpUp"' + (UPD.run || (!CFG.DS_URL && !CL.on) ? ' disabled' : '') + '>🔄 Update all</button><button class="btn ghost sm" id="lpOpen">Open the library ›</button></div>';
+/* the library card: instruments and customers, each with how many are complete; it keeps itself up to date */
+function libStats() { var all = dsLibAll(), ok = all.filter(function (e) { return e.res && e.rMax !== '' && e.rMax != null; }).length, cos = ((S.data && S.data.companies) || []).filter(function (c) { return c.id && c.active !== false; }), co = cos.filter(function (c) { return coLibGet(c.id); }).length;
+  return { ni: all.length, ki: ok, nc: cos.length, kc: co }; }
+function libCan() { return !!(CFG.DS_URL || CL.on); }
+function libPop() { var old = document.getElementById('libPop'); if (old) { old.remove(); return; } var t = libStats(), L = tbLib(), lu = LS.get('dataUpdated', 0);
+  var row = function (ic, name, n, k, what) { var pc = n ? Math.round(k / n * 100) : 0; return '<div class="lprow"><div class="lpri">' + ic + '</div><div class="lprb"><div class="lprt"><b>' + name + '</b><span><b>' + n + '</b> total</span></div><div class="lpbar"><i style="width:' + pc + '%"></i></div><small>' + k + ' of ' + n + ' complete · ' + what + '</small></div></div>'; };
+  var d = document.createElement('div'); d.id = 'libPop'; d.innerHTML = '<div class="lph"><b>Data library</b><span class="lpst lib-' + L.k + '"><i></i>' + esc(L.k === 'ok' ? 'Up to date' : L.k === 'run' ? 'Updating…' : 'Needs update') + '</span><button class="lpx" title="Close">✕</button></div>' +
+    row(tbIco('lib'), 'Instruments', t.ni, t.ki, 'range and resolution from the datasheet') + row(tbIco('users'), 'Customers', t.nc, t.kc, 'official name, address and phone') +
+    '<div class="lpf"><small id="lpU">' + (UPD.run ? '<span class="spin dark"></span> ' + esc(UPD.msg) : lu ? 'Updated ' + new Date(lu).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not updated online yet') + '</small>' +
+    '<button class="lpbtn" id="lpOpen">Open</button><button class="lpbtn" id="lpUp"' + (UPD.run || !libCan() ? ' disabled title="' + (UPD.run ? 'Updating now' : 'Updates run from the Claude app or once the online datasheet search is set up') + '"' : '') + '>Update</button></div>';
   document.body.appendChild(d); d.onclick = function (e) { e.stopPropagation(); }; d.querySelector('.lpx').onclick = function () { d.remove(); };
-  d.querySelector('#lpOpen').onclick = function () { d.remove(); dsLibSheet(); }; d.querySelector('#lpUp').onclick = function () { dataUpdateAll(); var u = document.getElementById('lpU'); if (u) u.innerHTML = '<span class="spin dark"></span> Started – it goes on in the background'; this.disabled = true; setTimeout(function () { d.remove(); }, 1200); };
+  d.querySelector('#lpOpen').onclick = function () { d.remove(); dsLibSheet(); }; d.querySelector('#lpUp').onclick = function () { dataUpdateAll(); var u = document.getElementById('lpU'); if (u) u.innerHTML = '<span class="spin dark"></span> Updating in the background'; this.disabled = true; };
   setTimeout(function () { document.addEventListener('click', function cl() { var x = document.getElementById('libPop'); if (x) x.remove(); document.removeEventListener('click', cl); }); }, 0); }
+/* keep it updated without asking: once the library is a month old, the update runs by itself in the background */
+setTimeout(function libAuto() { try { if (S.session && !DEMO && libCan() && !UPD.run && Date.now() - (LS.get('dataUpdated', 0) || 0) > 30 * 864e5 && Date.now() - (LS.get('libAutoAt', 0) || 0) > 864e5) { LS.set('libAutoAt', Date.now()); dataUpdateAll(); } } catch (e) {} setTimeout(libAuto, 6e5); }, 20000);
 function dataCard() { var lu = LS.get('dataUpdated', 0), nm = DS_LIB.length + (LS.get('dsLibLocal', []) || []).length + (LS.get('dsRemote', []) || []).length, nc = Object.keys(Object.assign({}, CO_LIB, LS.get('coRemote', {}) || {})).length, old = !lu || Date.now() - lu > 30 * 864e5;
   return '<section class="hblk hdata"><div class="hdl"><b>📚 Data library</b><small>' + nm + ' instrument datasheets · ' + nc + ' companies with official name, address and phone · ' + (lu ? 'updated ' + new Date(lu).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'not updated online yet') + '</small></div><div class="hdb">' + (old ? '<span class="hdold">' + (lu ? 'over a month old' : 'needs a first update') + '</span>' : '<span class="hdok">✓ up to date</span>') + '<button class="btn ghost sm" id="hdOpen">Open ›</button></div></section>'; }
 

@@ -1228,3 +1228,21 @@ body.hasTb #mtools button:hover{border-color:#13294B}
  .tbchip{margin:0 2px}
  #tbMenu,#tbUpd{right:6px;left:6px;min-width:0;width:auto}
 }
+/* library: a status dot on the toolbar button, a clean card */
+.tbb[data-tb="lib"]{position:relative}
+.tbb[data-tb="lib"]::after{content:'';position:absolute;left:21px;top:7px;width:8px;height:8px;border-radius:50%;border:2px solid #13294B;background:#3DDC84}
+.tbb.lib-old::after{background:#F0B429}.tbb.lib-run::after{background:#7CC4FF;animation:pulse 1s infinite}
+#libPop{width:360px;padding:16px;border-radius:16px}
+#libPop .lph{display:flex;align-items:center;gap:10px;margin-bottom:12px}#libPop .lph b{font-size:16px;color:#13294B}
+#libPop .lpx{margin-left:auto;background:none;border:0;font-size:15px;color:#8090a6;cursor:pointer}
+.lpst{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:#E7F7EE;color:#187A43}
+.lpst i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.lpst.lib-old{background:#FFF4DC;color:#9A6400}.lpst.lib-run{background:#E6F1FB;color:#0C5C9E}
+.lprow{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid #E3E9F2;border-radius:12px;margin-bottom:8px}
+.lpri{width:34px;height:34px;border-radius:10px;background:#EEF3F9;color:#13294B;display:flex;align-items:center;justify-content:center;flex:none}
+.lprb{flex:1;min-width:0}.lprt{display:flex;justify-content:space-between;align-items:baseline}.lprt b{font-size:14.5px;color:#13294B}.lprt span{font-size:12.5px;color:#5b6b82}.lprt span b{font-size:15px}
+.lpbar{height:6px;border-radius:99px;background:#E7ECF3;margin:7px 0 5px;overflow:hidden}.lpbar i{display:block;height:100%;background:#1E6FBF;border-radius:99px}
+.lprb small{font-size:12px;color:#5b6b82}
+.lpf{display:flex;align-items:center;gap:6px;margin-top:10px}.lpf small{flex:1;font-size:12px;color:#5b6b82}
+.lpbtn{height:30px;padding:0 12px;border-radius:8px;border:1.5px solid #C9D4E2;background:#fff;color:#13294B;font:700 13px/1 Barlow,system-ui,sans-serif;cursor:pointer}
+.lpbtn:hover{border-color:#13294B}.lpbtn[disabled]{opacity:.45;cursor:default}
