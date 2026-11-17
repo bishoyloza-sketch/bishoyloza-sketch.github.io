@@ -1325,7 +1325,12 @@ function balTables(bd) { var u = bd.unit, n = Math.max.apply(null, [1].concat(bd
 var CROLE = { admin: 'Admin', writer: 'Certificate writer', none: 'No access' };
 function certRoleOf(u) { if (!u) return 'writer'; var r = (SYNC.roles || LS.get('certRoles', {}) || {})[u.id]; if (r && CROLE[r]) return r; return u.role === 'admin' || u.role === 'superadmin' ? 'admin' : 'writer'; }
 function certAdmin() { return !!S.me && certRoleOf(S.me) === 'admin'; }
-function rolesLoad() { if (!SYNC.on()) return Promise.resolve(); return jcall('roles').then(function (r) { SYNC.roles = r.roles || {}; LS.set('certRoles', SYNC.roles); }).catch(function () {}); }
+function rolesLoad() { if (!SYNC.on()) return Promise.resolve(); return jcall('list', { since: 0 }).then(function (r) { (r.jobs || []).forEach(function (j) { if (j.id === '__roles') rolesTake(j); }); }).catch(function () {}); }
+function rolesTake(j) { try { SYNC.roles = JSON.parse(j.json || '{}') || {}; } catch (e) { SYNC.roles = {}; } SYNC.rolesRev = j.rev; LS.set('certRoles', SYNC.roles); }
+function rolesSet(id, role, who) { var put = function (base, rev) { var m = Object.assign({}, base || {}); m[id] = role;
+    return jcall('save', { meta: { id: '__roles', company: '(app settings – do not delete)', done: 0, total: 0 }, json: JSON.stringify(m), baseRev: rev == null ? null : rev }).then(function (r) {
+      if (r.conflict) { var cur = {}; try { cur = JSON.parse(r.json || '{}'); } catch (e) {} return put(cur, r.rev); } SYNC.roles = m; SYNC.rolesRev = r.rev; LS.set('certRoles', m); }); };
+  return put(SYNC.roles || {}, SYNC.rolesRev).then(function () { syncLog(null, 'role', 'Set ' + who + ' to ' + CROLE[role]); }); }
 /* someone with "No access" sees only this */
 function noAccessCheck() { if (!S.me || certRoleOf(S.me) !== 'none') return false;
   $('#app').innerHTML = '<div class="shell"><main style="padding:40px 20px;max-width:520px;margin:0 auto;text-align:center"><div style="font-size:44px">🔒</div><h2>No access to Certificates</h2><p class="small">' + esc(S.me.name) + ', your account has no access to the Certificates app. Ask the admin to give you access.</p><button class="btn" id="naOut">Sign out</button></main></div>';
@@ -1354,7 +1359,7 @@ function userEdit(u, done) { var f = { name: u ? u.name : '', role: u ? certRole
     $('#ueS').onclick = function () { var nm = String(f.name || '').trim(); if (!nm) return toast('Write the name', true); var b = $('#ueS'); b.disabled = true;
       var chg = !u || nm !== u.name || f.active !== (u.active !== false), dev = chg ? req('saveUser', { user: u ? { id: u.id, name: nm, role: u.role, active: f.active } : { name: nm, role: 'engineer', active: true } }) : Promise.resolve({});
       dev.then(function (r) { return refresh().then(function () { return r || {}; }); }).then(function (r) { var id = u ? u.id : (r.id || (r.user && r.user.id) || (((S.data && S.data.users) || []).filter(function (x) { return x.name === nm; })[0] || {}).id);
-        var setR = id && (!u || f.role !== certRoleOf(u)) ? jcall('setRole', { id: id, who: nm, role: f.role }).then(function (x) { SYNC.roles = x.roles || SYNC.roles; LS.set('certRoles', SYNC.roles); }) : Promise.resolve();
+        var setR = id && (!u || f.role !== certRoleOf(u)) ? rolesSet(id, f.role, nm) : Promise.resolve();
         return setR.then(function () { closeSheet(); if (r.pin) showPin(nm, r.pin); else toast('Saved'); done && done(); }); })
         .catch(function (e) { b.disabled = false; toast(e.message, true); }); }; } }; }); }
 
@@ -1457,7 +1462,7 @@ function syncPush() { if (!SYNC.on() || SYNC.busy) return Promise.resolve(); var
 function syncEditing() { var ae = document.activeElement; return !!sheetFn || !!(ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !/^(q|lq|hq)$/.test(ae.id || '')); }
 function syncInPlace(loc, nx) { Object.keys(loc).forEach(function (k) { delete loc[k]; }); Object.assign(loc, nx); }
 /* one job from the server: new → added; untouched here → replaced; changed on both sides → merged (each side keeps its own certificates) */
-function syncApply(j) { var loc = S.projects.filter(function (q) { return q.id === j.id; })[0];
+function syncApply(j) { if (/^__/.test(j.id)) { if (j.id === '__roles' && !j.deleted) { var r0 = certRoleOf(S.me); rolesTake(j); if (certRoleOf(S.me) !== r0) setTimeout(render, 0); } return false; } var loc = S.projects.filter(function (q) { return q.id === j.id; })[0];
   if (j.deleted) { if (loc && syncHash(syncClean(loc)) === loc._syncH) { S.projects = S.projects.filter(function (q) { return q.id !== j.id; }); if (S.cur === j.id) S.cur = null; return true; } return false; }
   if (!j.json) return false; var rem; try { rem = JSON.parse(j.json); } catch (e) { return false; }
   if (!loc) { S.projects.push(rem); syncAdopt(rem, j.rev, j.updated); rem._byName = j.byName; rem._byUser = j.byUser; return true; }
@@ -1469,7 +1474,7 @@ function syncPull(force) { if (!SYNC.on() || SYNC.busy) return Promise.resolve(f
   return jcall('list', { since: since }).then(function (r) { var ed = syncEditing();
     Object.keys(SYNC.pend).forEach(function (id) { if (ed && id === S.cur) return; if (syncApply(SYNC.pend[id])) changed = true; delete SYNC.pend[id]; });
     (r.jobs || []).forEach(function (j) { if (ed && j.id === S.cur) { SYNC.pend[j.id] = j; return; } if (syncApply(j)) changed = true; });
-    SYNC.pres = r.pres || {}; SYNC.viewers = r.viewers || []; if (r.roles) { var meR0 = certRoleOf(S.me); SYNC.roles = r.roles; LS.set('certRoles', r.roles); if (certRoleOf(S.me) !== meR0) setTimeout(render, 0); } LS.set('jobsSince', r.now || Date.now()); SYNC.err = ''; SYNC.last = Date.now(); syncSave(); return changed; })
+    SYNC.pres = r.pres || {}; SYNC.viewers = r.viewers || []; LS.set('jobsSince', r.now || Date.now()); SYNC.err = ''; SYNC.last = Date.now(); syncSave(); return changed; })
     .catch(function (e) { SYNC.err = e.message; return false; }).then(function (c) { SYNC.busy = false; if (S.projects.some(function (p) { return p.company && syncHash(syncClean(p)) !== p._syncH; })) syncSoon(); return c; }); }
 /* a quiet refresh: the home page redraws; an open job only when nobody is typing in it */
 function syncTick() { if (!SYNC.on()) return; syncPull().then(function (ch) { if (!ch) { syncHomePaint(); return; } if (syncEditing()) return; window.__keepY = window.scrollY; render(); }); syncPing(); }
