@@ -1561,3 +1561,4 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .lbg button.used{background:#EEF2F7;color:#C5CEDA;text-decoration:line-through}.lbg button.on{background:#0E2A52;color:#fff;border-color:#0E2A52}
 .lbp{background:#DFE4EA;border-radius:14px;padding:12px}.lbp iframe{width:100%;border:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);display:block}
 @media (max-width:760px){.lbw{grid-template-columns:1fr}}
+.lbs .dfseg{display:grid!important;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px}.lbs .dfseg button{white-space:normal;line-height:1.25;padding:8px 6px}
