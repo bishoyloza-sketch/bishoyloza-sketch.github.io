@@ -641,6 +641,27 @@ function tbClick(e) { var b = e.target.closest('[data-tb]'); if (!b) return; var
   if (k === 'paper') return home(function () { var x = $('#paperB'); if (x) x.click(); });
   if (k === 'inst') return installSheet(); if (k === 'pin') return pinChange(); }
 setInterval(function () { try { tbarPaint(); } catch (e) {} }, 300);
+/* ===== long drop-down lists become "type to search": type a few letters, the list narrows, choose (keyboard or mouse) ===== */
+function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.length <= 12 || !sel.offsetParent) return; sel.dataset.cb = '1';
+  var w = document.createElement('span'); w.className = 'cbx'; var inp = document.createElement('input'); inp.className = 'cbi ' + sel.className; inp.type = 'text'; inp.autocomplete = 'off'; inp.spellcheck = false;
+  var cur = function () { var o = sel.options[sel.selectedIndex]; return o && o.value ? o.text : ''; };
+  inp.placeholder = (sel.options[0] && !sel.options[0].value ? sel.options[0].text.replace(/[–—-]\s*/g, '').trim() : 'Choose') + ' – type to search'; inp.value = cur();
+  var cs = getComputedStyle(sel); w.style.maxWidth = cs.maxWidth !== 'none' ? cs.maxWidth : ''; if (cs.display === 'inline-block' || cs.width && parseFloat(cs.width) < 260) w.style.width = cs.width; sel.parentNode.insertBefore(w, sel); w.appendChild(inp); w.appendChild(sel); sel.style.display = 'none';
+  var box = null, hi = 0, items = [];
+  var close = function () { if (box) { box.remove(); box = null; } }, pick = function (it) { sel.value = it.v; inp.value = it.t; close(); sel.dispatchEvent(new Event('change', { bubbles: true })); };
+  var draw = function () { var q = inp.value.toLowerCase().split(/\s+/).filter(Boolean); if (inp.value === cur()) q = [];
+    items = []; var grp = '';
+    Array.prototype.forEach.call(sel.options, function (o) { if (!o.value) return; var g = o.parentNode && o.parentNode.tagName === 'OPTGROUP' ? o.parentNode.label : '', t = o.text, lt = t.toLowerCase(); if (q.some(function (x) { return lt.indexOf(x) < 0; })) return; items.push({ v: o.value, t: t, g: g }); });
+    if (!box) { box = document.createElement('div'); box.className = 'cbl'; document.body.appendChild(box); }
+    var r = inp.getBoundingClientRect(), below = innerHeight - r.bottom > 260 || r.top < 260; box.style.left = r.left + 'px'; box.style.width = Math.max(r.width, 280) + 'px'; box.style.top = below ? (r.bottom + 4) + 'px' : 'auto'; box.style.bottom = below ? 'auto' : (innerHeight - r.top + 4) + 'px';
+    hi = Math.min(hi, Math.max(0, items.length - 1));
+    box.innerHTML = items.length ? items.map(function (it, i) { var h = (it.g !== grp ? '<div class="cbg">' + esc(it.g) + '</div>' : ''); grp = it.g; return h + '<div class="cbo' + (i === hi ? ' on' : '') + (it.v === sel.value ? ' sel' : '') + '" data-i="' + i + '">' + esc(it.t) + '</div>'; }).join('') : '<div class="cbe">Nothing matches “' + esc(inp.value) + '”</div>';
+    Array.prototype.forEach.call(box.querySelectorAll('.cbo'), function (d) { d.onmousedown = function (e) { e.preventDefault(); pick(items[+d.dataset.i]); }; });
+    var on = box.querySelector('.cbo.on'); if (on) on.scrollIntoView({ block: 'nearest' }); };
+  inp.onfocus = function () { inp.select(); hi = 0; draw(); }; inp.oninput = function () { hi = 0; draw(); };
+  inp.onblur = function () { setTimeout(function () { close(); inp.value = cur(); }, 120); };
+  inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
+setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== "Working…": whenever something you pressed waits for a server or a file, a small pill says so (background refreshes stay quiet) ===== */
 (function () { var n = 0, act = 0, t = null, pill = function (on) { var e = document.getElementById('busyPill'); if (on) { if (!e) { e = document.createElement('div'); e.id = 'busyPill'; e.innerHTML = '<span class="spin"></span> Working…'; document.body.appendChild(e); } } else if (e) e.remove(); };
   ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, function () { act = Date.now(); }, true); });
@@ -726,7 +747,8 @@ function top(title, sub, extra) {
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
     (S.cur ? '<button class="homebtn" id="goHome2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Home</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
-function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (P0 && P0.tab === 'cert' && P0._edCi === P0.ci) window.__keepY = window.scrollY;
+var MODELFIX = 0;
+function render() { if (!MODELFIX) { MODELFIX = 1; try { modelFix(); } catch (e) {} } var P0 = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (P0 && P0.tab === 'cert' && P0._edCi === P0.ci) window.__keepY = window.scrollY;
   if (!S.session) return renderLogin(); if (noAccessCheck()) return; permPaint();
   var p = S.cur ? S.projects.filter(function (x) { return x.id === S.cur; })[0] : null;
   if (!p) { S.cur = null; if (S.view === 'act' && SYNC.on() && actAllowed()) return renderActivity(); return renderHome(); }
@@ -3203,6 +3225,8 @@ function issBox(p, iss) { if (!iss.length) return '<div class="note" style="back
   return '<div class="issbox"><div class="ish"><b>Before the final PDF – ' + iss.length + ' thing' + (iss.length > 1 ? 's' : '') + ' to fix</b></div>' + iss.map(function (t) { var w = why(t), body = '';
       if (w[1] === 'res') body = '<div class="isres">' + (inf.refs || []).filter(function (id) { return !isNum((inf.refRes || {})[id]); }).map(function (id) { var d = dev(id);
         return '<div class="isr"><span><b>' + esc((d.manufacturer || '') + ' ' + (d.model || '')) + '</b><small>' + esc((d.description || '') + ' · S/N ' + (d.serial || '—') + (d.range ? ' · ' + d.range : '')) + '<br><i>' + esc((inf.refResSrc || {})[id] || '') + '</i></small></span><input class="inp" data-isr="' + esc(id) + '" inputmode="decimal" placeholder="e.g. 0.01"></div>'; }).join('') + '</div>';
+      if (/without a reference/.test(t)) body = '<span class="ctgos">' + p.items.filter(function (it) { return !(it.refs || []).length; }).map(function (it) { return ctItLink(p, it); }).join('') + '</span>';
+      if (/no old certificate/.test(t)) { var cd = t.replace(/: no old certificate.*$/, ''), it0 = p.items.filter(function (it) { return (it.code || it.description) === cd; })[0]; if (it0) body = '<span class="ctgos">' + ctItLink(p, it0) + '</span>'; }
       return '<div class="isi"><div class="ist"><b>' + esc(t) + '</b>' + (w[0] ? '<small>' + esc(w[0]) + '</small>' : '') + '</div>' + (w[1] && w[1] !== 'res' ? '<button class="btn ghost sm" data-isf="' + w[1] + '">Fix ›</button>' : '') + body + '</div>'; }).join('') + '</div>'; }
 /* last year's readings still in the certificate: decide per certificate */
 function phBox(p) { var by = {}, order = []; phList(p, true).forEach(function (x) { if (!by[x.code]) { by[x.code] = { code: x.code, cert: x.cert, miss: 0, out: 0 }; order.push(x.code); } by[x.code][x.why === 'OUT' ? 'out' : 'miss']++; });
@@ -3215,7 +3239,7 @@ function phBox(p) { var by = {}, order = []; phList(p, true).forEach(function (x
     '<div class="ltbw"><table class="ltbl phtab"><thead><tr><th>Certificate</th><th>Points</th><th>Your choice</th></tr></thead><tbody>' + show.map(function (c) { var o = by[c], it = its[c], st = it.phOk ? 'ok' : it.phSkip ? 'skip' : '';
       return '<tr><td><b>' + esc(o.cert || '—') + '</b><small>' + esc(c + ' · ' + (it.description || '')) + '</small></td><td class="lsm">' + (o.miss ? o.miss + ' not typed' : '') + (o.miss && o.out ? '<br>' : '') + (o.out ? '<span style="color:var(--danger);font-weight:700">' + o.out + ' OUT</span>' : '') + '</td><td><div class="seg phseg">' +
         '<button data-phc="ok|' + it.id + '" class="' + (st === 'ok' ? 'on' : '') + '">Keep last year\'s</button><button data-phc="skip|' + it.id + '" class="' + (st === 'skip' ? 'on' : '') + '">Leave out</button><button data-phc="fix|' + it.id + '">I\'ll type them ›</button></div>' + (o.out ? '<small style="color:var(--danger)">OUT points would print last year\'s value</small>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' + (nOk || nSk ? done : '') + '</div>'; }
-function genBoxBind(p, redo) { var da = $('#dsAll'); if (da) da.onclick = function () { dsBatch(p, p.items, p.company && p.company.name); };
+function genBoxBind(p, redo) { ctGoBind(p); var da = $('#dsAll'); if (da) da.onclick = function () { dsBatch(p, p.items, p.company && p.company.name); };
   $$('[data-isr]').forEach(function (e) { e.onchange = function () { var v = e.value.trim(); if (!isNum(v)) return toast('Resolution must be a number', true); var id = e.dataset.isr, m = LS.get('refRes', {}); m[id] = v; LS.set('refRes', m); p.info.refRes = p.info.refRes || {}; p.info.refRes[id] = v; p.info.refResSrc = p.info.refResSrc || {}; p.info.refResSrc[id] = 'Written by you'; saveProjects(); toast('Saved – kept for this device'); redo(); }; });
   $$('[data-isf]').forEach(function (b) { b.onclick = function () { var k = b.dataset.isf; if (k === 'num') { var ge = $('#gEd'); if (ge) return ge.click(); } if (k === 'refs') return gotoStep(p, 'refs'); if (k === 'date') return gotoStep(p, 'date'); if (k === 'certs') return gotoStep(p, 'certs'); }; });
   $$('[data-phc]').forEach(function (b) { b.onclick = function () { var a = b.dataset.phc.split('|'), it = p.items.filter(function (x) { return x.id === a[1]; })[0]; if (!it) return;
@@ -5480,7 +5504,7 @@ function ctSheet(p, done) { var st = { tab: 'job', q: '' };
 /* the contract on Job details: the price list and this job's prices, right there – two buttons only */
 function ctRealUrl(u) { return /^https:\/\//i.test(u || '') && !/local\.folder/i.test(u); }
 function ctGo(p, id) { var L = certList(p), i = -1; L.forEach(function (x, k) { if (x.id === id) i = k; }); if (i < 0) return toast('This certificate is not in the job any more', true); sheetFn = null; renderSheet(); $('#dlg-root').innerHTML = ''; S.view = null; S.cur = p.id; p.stage = 'done'; p.tab = 'cert'; p.ci = i; saveProjects(); render(); window.scrollTo(0, 0); }
-function ctItLink(p, it) { var d = it.description || ((it.old || {}).fields || {}).description || ''; return '<button class="ctgo" data-go="' + esc(it.id) + '" title="Open this certificate">' + esc(it.code || it.certNo || '—') + (d ? ' <small>' + esc(d) + '</small>' : '') + ' ›</button>'; }
+function ctItLink(p, it) { var d = it.description || ((it.old || {}).fields || {}).description || ''; return '<button class="ctgo" data-go="' + esc(it.id) + '" title="Open this certificate"><span>' + esc(it.code || it.certNo || '—') + ' ›</span>' + (d ? ' <small>' + esc(d) + '</small>' : '') + '</button>'; }
 function ctGoBind(p) { $$('[data-go]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); ctGo(p, b.dataset.go); }; }); }
 function ctCard(p) { var c = ctGet(p);
   if (!c) return '<div class="dcard"><div class="dh"><b>Contract</b><small>No price list yet</small></div><div class="cf" style="justify-content:flex-start"><button class="btn sm" id="dCtCh">Choose the contract</button></div></div>';
@@ -5799,11 +5823,16 @@ function dsLearn(st, j) { if (!j || !j.known || j.src !== 'claude') return; var 
   var L = (LS.get('dsLibLocal', []) || []).filter(function (x) { return !(dsNorm(x.model) === dsNorm(e.model) && dsNorm(x.maker) === dsNorm(e.maker)); }); L.push(e); LS.set('dsLibLocal', L.slice(-1500));
   if (CFG.DS_URL) dsPost({ action: 'save', by: 'claude', entry: { maker: e.maker, model: e.model, product: e.product, rMin: e.rMin, rMax: e.rMax, unit: e.unit, resolution: e.res, accuracy: e.acc, note: e.note } }).catch(function () {}); }
 /* once a month: Claude goes over every model in every job and refreshes the library */
+/* a model worth keeping: not N/A, not "S/N", not a bare number, not a piece of the next line ("Calibration Due Date …") */
+function dsGoodModel(m) { m = String(m || '').trim(); return m.length >= 2 && !/^(n\/?a|s\/?n|-+|—|none|unknown|\d{1,4})$/i.test(m) && !/calibration\s*due|cal\.?\s*due|due\s*date/i.test(m); }
+function dsCleanModel(m) { return String(m || '').replace(/\s*(calibration\s*due\s*date|cal\.?\s*due\s*date|due\s*date)\b.*$/i, '').trim(); }
+/* last year's certificates sometimes glued the next line to the model ("N/A Calibration Due Date May 2026"): cleaned once */
+function modelFix() { (S.projects || []).forEach(function (p) { (p.items || []).forEach(function (it) { var f = it.old && it.old.fields; ['model', 'serial'].forEach(function (k) { if (f && f[k] && /calibration\s*due|due\s*date/i.test(f[k])) f[k] = dsCleanModel(f[k]); if (it[k] && /calibration\s*due|due\s*date/i.test(it[k])) it[k] = dsCleanModel(it[k]); }); }); }); }
 function dsLibSheet(tab0) { var st = { run: 0, done: 0, n: 0, ch: 0, err: 0, tab: tab0 }, models = function () { var K = {}; (S.projects || []).forEach(function (p) { (p.items || []).forEach(function (it) { var s0 = dsSt(it); if (s0.model && !/^n\/?a$/i.test(s0.model)) K[dsKey(s0)] = s0; }); }); return K; };
   openSheet(function () { var K = models(), loc = LS.get('dsLibLocal', []) || [], rem = LS.get('dsRemote', []) || [];
-    var tab = st.tab || 'dev', cos = ((S.data && S.data.companies) || []).filter(function (c) { return c.id; }), rc = LS.get('coRemote', {}) || {}, all = dsLibAll(), q = function (x) { return esc(String(x || '').toLowerCase()); };
+    var tab = st.tab || 'dev', cos = ((S.data && S.data.companies) || []).filter(function (c) { return c.id; }), rc = LS.get('coRemote', {}) || {}, all = dsLibAll().filter(function (e) { return dsGoodModel(e.model); }), q = function (x) { return esc(String(x || '').toLowerCase()); };
     cos = cos.map(function (c) { return { c: c, d: coLibGet(c.id) }; }).sort(function (x, y) { return (y.d ? 1 : 0) - (x.d ? 1 : 0) || String(x.c.name).localeCompare(String(y.c.name)); });
-    var nCo = cos.filter(function (x) { return x.d; }).length, inJobs = Object.keys(K).map(function (k) { return K[k]; }).filter(function (m) { return !all.some(function (e) { return dsNorm(e.model) === dsNorm(m.model); }); });
+    var nCo = cos.filter(function (x) { return x.d; }).length, inJobs = [];
     var cpR = function (k, v) { return v ? '<div class="dlf"><span>' + k + '</span><b>' + esc(v) + '</b><button class="dlcp" data-cp="' + esc(v) + '">Copy</button></div>' : ''; };
     var TY = function (e) { return e.desc || ((UCAT[e.unit] || [])[0]) || ({ 'dB': 'Sound level', 'Lux': 'Light', 'L/min': 'Flow' })[e.unit] || '—'; };
     var devH = '<table class="dlt2"><thead><tr><th>#</th><th>Type</th><th>Maker</th><th>Model</th><th>Range</th><th>Resolution</th><th></th></tr></thead><tbody>' + all.map(function (e, i) { var mk = e.maker || e.mk || '', rg = e.rMin !== '' && e.rMin != null ? '(' + e.rMin + ' : ' + e.rMax + ') ' + (e.unit || '') : '';
@@ -5883,7 +5912,7 @@ function dsMount(st) { var host = document.querySelector('#sheet-root .isw'); if
   Array.prototype.forEach.call(document.querySelectorAll('#sheet-root [data-is]'), function (e) { e.addEventListener(e.tagName === 'SELECT' ? 'change' : 'input', function () { clearTimeout(st._dsT); st._dsT = setTimeout(function () { if (document.getElementById('dsBox')) draw(); }, 700); }); }); }
 
 /* check the data of many items at once (a machine, or the whole job): one list of updates, accept each or all */
-function dsSt(it) { var ff = (it.old && it.old.fields) || {}; return { manufacturer: it.manufacturer || ff.manufacturer || '', model: it.model || ff.model || '', serial: it.serial || ff.serial || '', description: it.description || ff.description || '', unit: it.unit || '', rMin: it.rMin == null ? '' : String(it.rMin), rMax: it.rMax == null ? '' : String(it.rMax), cMin: it.cMin == null ? '' : String(it.cMin), cMax: it.cMax == null ? '' : String(it.cMax), res: it.res == null ? '' : String(it.res), ty: it.ty || '' }; }
+function dsSt(it) { var ff = (it.old && it.old.fields) || {}; return { manufacturer: it.manufacturer || ff.manufacturer || '', model: dsCleanModel(it.model || ff.model || ''), serial: it.serial || ff.serial || '', description: it.description || ff.description || '', unit: it.unit || '', rMin: it.rMin == null ? '' : String(it.rMin), rMax: it.rMax == null ? '' : String(it.rMax), cMin: it.cMin == null ? '' : String(it.cMin), cMax: it.cMax == null ? '' : String(it.cMax), res: it.res == null ? '' : String(it.res), ty: it.ty || '' }; }
 function dsSet(it, f, v) { it[f] = v; var ff = it.old && it.old.fields; if (ff && /^(manufacturer|model|serial|description)$/.test(f)) ff[f] = v; it.saved = 0; }
 function dsQuick(p, items) { return items.reduce(function (n, it) { if ((it.qs || []).length || genOn(it) || sqOn(it)) return n; return n + dsLocal(dsSt(it)).length; }, 0); }
 function dsBatch(p, items, title, back) { var L0 = items.filter(function (it) { return !(genOn(it) || sqOn(it)); }), st = { busy: 0, done: 0, rows: [], asked: {}, ai: CL.on };
@@ -5942,7 +5971,7 @@ function libFabPaint() { var b = document.getElementById('libFab'); if (!b) { b 
   b.className = S.session && !sheetFn ? 'on' : ''; }
 setInterval(function () { try { libFabPaint(); } catch (e) {} }, 500);
 /* the library card: instruments and customers, each with how many are complete; it keeps itself up to date */
-function libStats() { var all = dsLibAll(), ok = all.filter(function (e) { return e.res && e.rMax !== '' && e.rMax != null; }).length, cos = ((S.data && S.data.companies) || []).filter(function (c) { return c.id && c.active !== false; }), co = cos.filter(function (c) { return coLibGet(c.id); }).length;
+function libStats() { var all = dsLibAll().filter(function (e) { return dsGoodModel(e.model); }), ok = all.filter(function (e) { return e.res && e.rMax !== '' && e.rMax != null; }).length, cos = ((S.data && S.data.companies) || []).filter(function (c) { return c.id && c.active !== false; }), co = cos.filter(function (c) { return coLibGet(c.id); }).length;
   return { ni: all.length, ki: ok, nc: cos.length, kc: co }; }
 function libCan() { return !!(CFG.DS_URL || CL.on); }
 function libPop() { var old = document.getElementById('libPop'); if (old) { old.remove(); return; } var t = libStats(), L = tbLib(), lu = LS.get('dataUpdated', 0);
