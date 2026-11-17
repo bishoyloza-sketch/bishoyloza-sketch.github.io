@@ -1381,3 +1381,5 @@ body.hasTb #mtools button:hover{border-color:#13294B}
 .dlwh b{display:block;color:#7A4E00;font-size:14.5px}.dlwh small{color:#7A6A4A}
 .dlwait .dlt2{margin-top:8px}.dlwait .a{white-space:nowrap}.dlwait .a .btn{margin-left:6px}
 .lpwait{margin:-2px 0 8px;padding:8px 12px;border-radius:10px;background:#FFF4DC;color:#7A4E00;font-weight:700;font-size:13px;cursor:pointer}
+#newV{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:350;background:#13294B;color:#fff;border:0;border-radius:999px;padding:11px 20px;font:700 14px Barlow,system-ui,sans-serif;box-shadow:0 10px 26px rgba(19,41,75,.35);cursor:pointer}
+.isrw{display:flex;gap:8px;align-items:center}.isrw .inp{width:170px}
