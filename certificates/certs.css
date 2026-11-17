@@ -1495,3 +1495,11 @@ button.plp:hover{border-color:#CFDBEA;background:#fff}button.plp:hover .plpen{op
 .hjfx{border:1px solid #DCE3EC;background:#fff;border-radius:8px;padding:4px 10px;font:600 12px var(--font,inherit);color:#22324A;cursor:pointer}.hjfx:hover{border-color:#0E2A52}
 [data-pfin].hjfx{color:#1E7B4B;border-color:#BFE3CD}
 .hjring small.hjfd{color:#1E7B4B;font-weight:600}
+.hsend{border:1px solid #F3D9A4;background:linear-gradient(180deg,#FFFBF2,#fff 60px)}
+.hsend .hbh{align-items:baseline;gap:12px;flex-wrap:wrap}.hsend .hbh b{display:flex;align-items:center;gap:8px}.hsend .hbh b em{font-style:normal;font-size:12px;background:#B26A00;color:#fff;border-radius:999px;padding:1px 9px}
+.hsend .hbh small{color:#8A6A2E;font-size:12.5px}
+.hsdot{width:9px;height:9px;border-radius:50%;background:#E8A200;box-shadow:0 0 0 4px rgba(232,162,0,.18)}
+.hsr{display:grid;grid-template-columns:1.6fr 1fr 1.2fr auto;align-items:center;gap:12px;padding:11px 4px;border-top:1px solid #F3EBDD;cursor:pointer}.hsr:hover{background:#FFFCF5}
+.hsr .c1 b{display:block;color:#0E2A52}.hsr .c1 small{color:#8695A8;font-size:12.5px}.hsr .n{font-size:13.5px;color:#5B6B80}.hsr .n b{color:#0E2A52}
+.hsr .d{font-size:13px;color:#5B6B80}.hsr .d em{font-style:normal;font-weight:700;color:#B26A00;margin-left:4px}
+@media (max-width:700px){.hsr{grid-template-columns:1fr auto}.hsr .n,.hsr .d{display:none}}
