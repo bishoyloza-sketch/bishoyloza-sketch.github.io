@@ -747,8 +747,11 @@ function top(title, sub, extra) {
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
     (S.cur ? '<button class="homebtn" id="goHome2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Home</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
+/* a refresh keeps you where you were: the open job (its tab and certificate are kept in the job), the Activity page, and the scroll */
+var RESTORE = { cur: LS.get('lastCur', null), view: LS.get('lastView', null), y: LS.get('lastY', 0), done: false };
+window.addEventListener('beforeunload', function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} });
 var MODELFIX = 0;
-function render() { if (!MODELFIX) { MODELFIX = 1; try { modelFix(); } catch (e) {} } var P0 = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (P0 && P0.tab === 'cert' && P0._edCi === P0.ci) window.__keepY = window.scrollY;
+function render() { if (!RESTORE.done && S.session) { if (RESTORE.cur && !S.cur && (S.projects || []).some(function (x) { return x.id === RESTORE.cur; })) { S.cur = RESTORE.cur; RESTORE.done = true; var y0 = RESTORE.y; setTimeout(function () { window.scrollTo(0, y0 || 0); }, 350); } else if (RESTORE.view === 'act' && !S.cur) { S.view = 'act'; RESTORE.done = true; } else if (!RESTORE.cur) RESTORE.done = true; } if (!MODELFIX) { MODELFIX = 1; try { modelFix(); } catch (e) {} } var P0 = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (P0 && P0.tab === 'cert' && P0._edCi === P0.ci) window.__keepY = window.scrollY;
   if (!S.session) return renderLogin(); if (noAccessCheck()) return; permPaint();
   var p = S.cur ? S.projects.filter(function (x) { return x.id === S.cur; })[0] : null;
   if (!p) { S.cur = null; if (S.view === 'act' && SYNC.on() && actAllowed()) return renderActivity(); return renderHome(); }
@@ -1356,7 +1359,7 @@ function renderOverview(p) {
   bindStepBar(p); bindHome(); bindProjFoot(p);
   ({ certs: tCerts, refs: tRefs, read: tRead, det: tDet, gen: tGen })[p.tab](p);
 }
-function goHome() { S.view = null; sheetFn = null; renderSheet(); $('#dlg-root').innerHTML = ''; S.cur = null; render(); window.scrollTo(0, 0); }
+function goHome() { RESTORE.done = true; S.view = null; sheetFn = null; renderSheet(); $('#dlg-root').innerHTML = ''; S.cur = null; render(); window.scrollTo(0, 0); }
 document.addEventListener('click', function (e) { var t = e.target && e.target.closest && e.target.closest('.top .brand, .top .bname, .top .tclogo, [data-home]'); if (!t || !S.session) return; e.preventDefault(); goHome(); });
 function bindHome() { var h = $('#goHome2'); if (h) h.onclick = goHome; $$('[data-home], .top .brand').forEach(function (b) { b.style.cursor = 'pointer'; b.onclick = goHome; }); }
 function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; p.items.forEach(function (it) { var s = (it.old || {}).status; if (s === 'found') c.found++; else if (s === 'similar') c.similar++; else if (s === 'missing' || s === 'error') c.missing++; else c.todo++; }); return c; }
