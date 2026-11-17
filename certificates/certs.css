@@ -1384,3 +1384,4 @@ body.hasTb #mtools button:hover{border-color:#13294B}
 #newV{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:350;background:#13294B;color:#fff;border:0;border-radius:999px;padding:11px 20px;font:700 14px Barlow,system-ui,sans-serif;box-shadow:0 10px 26px rgba(19,41,75,.35);cursor:pointer}
 .isrw{display:flex;gap:8px;align-items:center}.isrw .inp{width:170px}
 body.hasTb #mtools button.mtdel{color:#B3261E;border-color:#F2C4BE}body.hasTb #mtools button.mtdel:hover{border-color:#B3261E;background:#FFF4F2}
+.isrw .isru{width:92px;padding:0 6px}
