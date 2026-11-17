@@ -706,7 +706,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'akh-certs-v305';
+var APP_V = 'akh-certs-v306';
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v\d+/); if (!m || m[0] === APP_V) return;
       var busy = function () { var a = document.activeElement; return (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) || sheetFn || ($('#dlg-root') && $('#dlg-root').innerHTML.trim()); };
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} (navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : Promise.resolve()).then(function () { setTimeout(function () { location.reload(); }, 400); }); };
@@ -966,8 +966,11 @@ function companySheet(p) { var f = { name: W.q || '', official: '', code: '', gr
 
 /* ---- calibration date (all items) ---- */
 function coSaved(p) { var all = LS.get('coInfo', {}); return all[(p.company || {}).id] || {}; }
-function coKeep(p) { var all = LS.get('coInfo', {}), g = genDefaults(p); all[p.company.id] = { official: p.company.official || '', code: p.company.code || '', addr: g.addr || '', tel: g.tel || '', fax: g.fax || '', dsr: g.dsrAll || '', dfmt: g.dfmt || '' }; LS.set('coInfo', all); }
-function coFill(p) { var c = coSaved(p), g = genDefaults(p); ['addr', 'tel', 'fax'].forEach(function (k) { if (!g[k] && c[k]) g[k] = c[k]; }); if (!g.dsrAll && c.dsr) g.dsrAll = c.dsr; if (!g.dfmt && c.dfmt) g.dfmt = c.dfmt; if (c.official && !p.company.officialSet) { p.company.official = c.official; } if (c.code && !p.company.code) p.company.code = c.code; }
+function coKeep(p) { var all = LS.get('coInfo', {}), g = genDefaults(p); all[p.company.id] = { official: p.company.official || '', code: p.company.code || '', addr: g.addr || '', tel: g.tel || '', fax: g.fax || '', dsr: '', dfmt: g.dfmt || '' }; LS.set('coInfo', all); }
+function coFill(p) { var c = coSaved(p), g = genDefaults(p); ['addr', 'tel', 'fax'].forEach(function (k) { if (!g[k] && c[k]) g[k] = c[k]; });  if (!g.dfmt && c.dfmt) g.dfmt = c.dfmt; if (c.official && !p.company.officialSet) { p.company.official = c.official; } if (c.code && !p.company.code) p.company.code = c.code; if (!p.company.code) { var cid = coIdGuess(p); if (cid) p.company.code = cid; } }
+function coIdGuess(p) { var me = p.company || {}, nm = String(me.name || '').toLowerCase().trim(), hit = (S.projects || []).filter(function (q) { var c = q.company || {}; return q !== p && c.code && ((me.id && c.id === me.id) || (nm && String(c.name || '').toLowerCase().trim() === nm)); }).sort(function (a, b) { return String(b.created || '').localeCompare(String(a.created || '')); })[0]; if (hit) return hit.company.code;
+  var co = ((S.data && S.data.companies) || []).filter(function (c) { return c.id === me.id && c.code; })[0]; if (co) return co.code;
+  var pf = String((genDefaults(p) || {}).prefix || '').replace(/[\s\-\/]+$/, ''); return /^[0-9]{1,3}\/?[A-Za-z]{1,5}$/.test(pf) ? pf.replace('/', '').toUpperCase() : ''; }
 function pSel(id, v) { var names = peopleNames(); v = cleanName(v); if (v && names.indexOf(v) < 0) names.unshift(v); return pickWrap('<select class="inp" id="' + id + '"><option value="">— choose —</option>' + names.map(function (n) { return '<option' + (n === v ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>', v, 'people'); }
 function wDate(p) { var inf = ensureInfo(p); coFill(p); var g9 = genDefaults(p); if (!g9.addr && spOn() && !p.genAddrTried) { p.genAddrTried = true; findAddress(p).then(function () { coKeep(p); if (p.stage === 'date' && !sheetFn) wDate(p); }).catch(function () {}); } if (!inf.cal) { inf.cal = d2s(new Date()); calcDates(inf); saveProjects(); } if (!inf.tech && S.me) { inf.tech = cleanName(S.me.name); inf.techId = S.me.id || ''; saveProjects(); } if (!inf.woPre) inf.woPre = (String(p.company.code || '').match(/^\d+/) || [''])[0];
   var F = function (k, l, t) { return '<label class="f"><span>' + l + '</span>' + (t ? dpick('class="inp" data-i="' + k + '"', inf[k], 'big') : '<input class="inp" data-i="' + k + '" value="' + esc(inf[k]) + '">') + '</label>'; };
@@ -2783,7 +2786,7 @@ function genGroups(p) { /* one cover per machine; units of the same kind share o
   var used = {}, nk = function (it) { return (p._nos && p._nos[it.id]) || it.lockNo; }; (p.items || []).forEach(function (it) { var k = nk(it); if (k) used[k] = 1; });
   groups.forEach(function (gr) { gr.items.forEach(function (it) { var k = nk(it); if (k) { it.certNo = k; return; } if (isNaN(n)) { it.certNo = ''; return; } while (used[certNo(g, n)]) n++; it.certNo = certNo(g, n++); }); gr.from = gr.items[0].certNo; gr.to = gr.items[gr.items.length - 1].certNo; });
   return groups; }
-function dsRef(p, it) { var g = genDefaults(p); if (g.dsr[it.id] != null && String(g.dsr[it.id]).trim()) return g.dsr[it.id]; if (g.dsrAll) return g.dsrAll; var o = ''; if (!o) { var cd = String(it.calDate || (p.info && p.info.cal) || ''), mt = cd.match(/^(\d{4})-(\d{2})/), dt = mt ? null : new Date(cd || Date.now()); return mt ? mt[2] + '/' + mt[1].slice(2) : (isNaN(dt) ? '' : ('0' + (dt.getMonth() + 1)).slice(-2) + '/' + String(dt.getFullYear()).slice(2)); }
+function dsRef(p, it) { var g = genDefaults(p); if (g.dsr[it.id] != null && String(g.dsr[it.id]).trim()) return g.dsr[it.id]; if (g.dsrAll && !/^\s*\d{1,2}\s*\/\s*\d{2,4}\s*$/.test(g.dsrAll)) return g.dsrAll; var o = ''; if (!o) { var cd = String(it.calDate || (p.info && p.info.cal) || ''), mt = cd.match(/^(\d{4})-(\d{2})/), dt = mt ? null : new Date(cd || Date.now()); return mt ? mt[2] + '/' + mt[1].slice(2) : (isNaN(dt) ? '' : ('0' + (dt.getMonth() + 1)).slice(-2) + '/' + String(dt.getFullYear()).slice(2)); }
   var yy = String(g.year).slice(2); return String(o).replace(/\s+/g, '').replace(/^(\d+)-(\d{2})$/, '$1-' + yy); }
 function ptRows(p, it) { /* new readings; if missing or OUT → last year's readings as placeholder */
   var o = it.old, rows = [], ph = [];
@@ -2835,7 +2838,7 @@ function H(t) { return W.p(W.r(t, { b: true, caps: true, sz: FS, c: '13294B', sp
 function wHeader(title) { return W.p(W.r(title || 'Calibration Certificate', { b: true, caps: true, f: TFONT, sz: FS_T, c: '13294B', sp: 30 }), { jc: 'center', after: 30 }) + (paperGet().on ? '' :
   W.p([W.r('ISSUED BY  ', { sz: FS }), W.r(LAB.name + ' ', { b: true, sz: FS }), W.r(LAB.sub + '   ' + LAB.lab, { sz: FS })], { jc: 'center', after: 0 }) + W.p(W.r(LAB.addr + '   ' + LAB.tel + '   ' + LAB.mail, { sz: FS }), { jc: 'center', after: 60 })); }
 /* the info lines of a cover: empty address / phone lines are left out */
-function coverInfo(p) { var g = genDefaults(p), inf = p.info, tel = [g.tel, g.fax].filter(Boolean).join(' / '), L = [['DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code || ''], ['CUSTOMER:', p.company.official || p.company.name]];
+function coverInfo(p) { var g = genDefaults(p), inf = p.info, tel = [g.tel, g.fax].filter(Boolean).join(' / '), L = [['DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code || coIdGuess(p) || ''], ['CUSTOMER:', p.company.official || p.company.name]];
   /* a long address gets the whole line, Tel / Fax goes to the next line – they never run into each other */
   if (g.addr && tel && String(g.addr).length <= 38) L.push(['ADDRESS:', g.addr, 'Tel / Fax:', tel]); else { if (g.addr) L.push(['ADDRESS:', g.addr]); if (tel) L.push(['Tel / Fax:', tel]); }
   L.push(['DATE RECEIVED:', fmtD(inf.rec), 'WORK ORDER No.:', woNo(inf)]); return L; }
@@ -2855,7 +2858,7 @@ function paperGet() { var q = LS.get('paper', {}); if (q.v !== 2) q = { on: q.on
 function paperMar() { var q = paperGet(); if (!q.on) return null; var tw = function (mm) { return Math.round(mm * 56.7); }; return { top: tw(q.top + 20), bottom: tw(q.bottom + 12), side: tw(q.side), header: tw(q.top), footer: tw(q.bottom) }; }
 function paperCss() { var q = paperGet(); if (!q.on) return ''; return '@page{size:A4;margin:' + q.top + 'mm ' + q.side + 'mm ' + q.bottom + 'mm ' + q.side + 'mm}.pg{min-height:' + (297 - q.top - q.bottom - 3) + 'mm!important}'; }
 function pagesOf(it) { if (tpOn(it)) return tpPages(it); if (sqOn(it)) return 1; if (genOn(it)) return it.old.gen.pages || 1; var n = (it.old.points || []).length; return Math.max(1, Math.ceil(n / ROWS_PER_PAGE)) + (it.old.bal && it.old.bal.ecc ? 1 : 0); }
-function topBlock(p, no, cont) { var inf = p.info; return wCertNo(no, cont) + W.tbl([kvRow('DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code || ''), [{ t: 'CUSTOMER:', b: true, jc: 'left' }, { t: p.company.official || p.company.name, jc: 'left', span: 3 }]], KVW, { sz: FS, nb: true, h: 300 }); }
+function topBlock(p, no, cont) { var inf = p.info; return wCertNo(no, cont) + W.tbl([kvRow('DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code || coIdGuess(p) || ''), [{ t: 'CUSTOMER:', b: true, jc: 'left' }, { t: p.company.official || p.company.name, jc: 'left', span: 3 }]], KVW, { sz: FS, nb: true, h: 300 }); }
 function coverDoc(p, gr, total) { var inf = p.info, g = genDefaults(p), its = gr.items, body = '';
   body += wCertNo(its.length > 1 ? 'From ' + gr.from + ' to ' + gr.to : gr.from) + W.tbl(coverInfo(p).map(function (r) { return r.length === 2 ? [{ t: r[0], b: true, jc: 'left' }, { t: r[1], jc: 'left', span: 3 }] : kvRow(r[0], r[1], r[2], r[3]); }), KVW, { sz: FS, nb: true, h: 300 });
   body += H('Unit under Test');
@@ -3143,7 +3146,7 @@ function printView(p, opt) { opt = opt || {}; var all = buildAll(p), g = genDefa
       ftr(COVER_FORM, pg++, total) + '</section>'); if (tg) pg = 1;
     if (opt.coverOnly) return;
     its.forEach(function (it) { try { normItem(p, it); } catch (e) {} if (opt.only && it.id !== opt.only) { pg += pagesOf(it); return; } var pg0 = pages.length; var f = it.old.fields || {}, pr = ptRows(p, it), dirs = it.old.dirs === 2, out = pr.ph.some(function (x) { return x.why === 'OUT'; }), form = itemForm(it); it.__pg0 = pg0;
-      var top = function (cont) { return cno(it.certNo, cont) + htmlTbl([kv('DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code), [{ t: 'CUSTOMER:', b: 1 }, { t: p.company.official || p.company.name, span: 3 }]], false, 'info'); };
+      var top = function (cont) { return cno(it.certNo, cont) + htmlTbl([kv('DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', p.company.code || coIdGuess(p) || ''), [{ t: 'CUSTOMER:', b: 1 }, { t: p.company.official || p.company.name, span: 3 }]], false, 'info'); };
       if (tpOn(it)) { var ht = '<section class="pg" data-it="' + it.id + '">' + hdr + top(false);
         ht += tpHtml(p, it, function () { return ftr(form, pg++, total) + '</section><section class="pg" data-it="' + it.id + '">' + hdr + top(true); });
         ht += '<div class="sigd"><b>Date:</b> ' + esc(fmtD(inf.iss)) + '</div>' + htmlTbl([[{ t: 'Calibrated By:', b: 1 }, '', { t: 'Approved By:', b: 1 }, ''], kv('Position:', g.techPos, 'Position:', g.approverPos), kv('Name:', 'Eng. ' + String(inf.tech).replace(/^Eng\.\s*/i, ''), 'Name:', g.approver), kv('Signature:', '____________', 'Signature:', '____________')], false, 'info sig') +
@@ -4319,7 +4322,10 @@ function tCertEd0(p) { var L = certList(p), inf = ensureInfo(p), g = genDefaults
   var firstEmpty = inputs.filter(function (x) { return !x.value; })[0]; if (firstEmpty && !CERT_NOFOCUS) setTimeout(function () { try { firstEmpty.focus({ preventScroll: true }); } catch (e) {} }, 50);
 }
 var CERT_NOFOCUS = /Android|iPhone|iPad/i.test(navigator.userAgent);
+function balDefault(it) { var r0 = ((it.old && it.old.points) || []).map(function (q) { return numv(q.point); }).filter(function (x) { return x > 0; }), mx = r0.length ? Math.max.apply(null, r0) : (isNum(it.cMax) ? numv(it.cMax) : isNum(it.rMax) ? numv(it.rMax) : 0);
+  return { unit: uOf(it) || 'g', rep: [{ load: '', r: ['', '', '', '', ''] }, { load: '', r: ['', '', '', '', ''] }], ecc: { load: mx ? String(Math.round(mx / 3)) : '', pos: ['1', '2', '3', '4', '5'], r: ['', '', '', '', ''], err: [] }, auto: 1 }; }
 function balHtml(p, it) { var b = it.old && it.old.bal; if (!isBal(it) && !b) return '';
+  if (!b && it.old && !(it.old.file && it.old.file.id && spOn() && !(it.old.balTried && Date.now() - it.old.balTried > 60000))) { it.old.bal = b = balDefault(it); setTimeout(saveProjects, 0); }
   if (!b) return '<h5>Repeatability &amp; Eccentricity</h5><div class="note">' + (it.old && it.old.balTried && Date.now() - it.old.balTried > 60000 || !spOn() || !(it.old && it.old.file && it.old.file.id) ? 'Not found in last year\'s certificate.' : '<span class="spin dark"></span> Reading them from last year\'s certificate…') + ' <button class="btn ghost sm" id="balAdd">Add the tables</button></div>';
   var nb = it.nbal || {}, u = b.unit || uOf(it) || 'g', inp = function (attr, v, old) { return '<input class="pin num" inputmode="decimal" ' + attr + ' value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(old || '') + '">'; }, h = '';
   if ((b.rep || []).length) { var n = Math.max.apply(null, b.rep.map(function (r) { return r.r.length; }));
@@ -4894,7 +4900,7 @@ function balBind(p, it, rr) { var nb = function () { return (it.nbal = it.nbal |
   $$('[data-bel]').forEach(function (e) { keep(e, function (v) { (nb().ecc = nb().ecc || {}).load = v; }); });
   var re = $('#balRe'); if (re) re.onclick = function () { if (it.old) { delete it.old.bal; delete it.old.balTried; } saveProjects(); rr(); };
   var ad = $('#balAdd'); if (ad) ad.onclick = function () { var r0 = (it.old.points || []).map(function (q) { return numv(q.point); }).filter(function (x) { return x > 0; }), mx = r0.length ? Math.max.apply(null, r0) : 0;
-    it.old.bal = { unit: uOf(it) || 'g', rep: [{ load: '', r: ['', '', '', '', ''] }, { load: '', r: ['', '', '', '', ''] }], ecc: { load: mx ? String(Math.round(mx / 3)) : '', pos: ['1', '2', '3', '4', '5'], r: ['', '', '', '', ''], err: [] } }; saveProjects(); rr(); toast('Tables added – write the loads and the readings'); }; }
+    it.old.bal = balDefault(it); saveProjects(); rr(); toast('Tables added – write the loads and the readings'); }; }
 
 /* ---------- next certificate number: continue after the last one of this year ---------- */
 var LASTNO = LS.get('lastNo', {});
@@ -5240,7 +5246,7 @@ function tHub(p) { if (!$('#pm')) return; knowSeed(); certList(p).forEach(functi
   $('#hDet').onclick = function () { p.reached = Math.max(p.reached || 0, FIDX.det); p.stage = 'done'; p.tab = 'det'; saveProjects(); render(); window.scrollTo(0, 0); }; }
 function wlHead(p, no, title) { var inf = p.info || {};
   return '<div class="wlt">' + esc(title || 'Calibration Certificate') + '</div><div class="wlno">CERTIFICATE NO.: ' + esc(no || '—') + '</div>' +
-    '<table class="wlinfo"><tr><th>DATE OF ISSUE:</th><td>' + esc(fmtD(inf.iss)) + '</td><th>CUSTOMER ID:</th><td>' + esc(p.company.code || '') + '</td></tr><tr><th>CUSTOMER:</th><td colspan="3">' + esc(p.company.official || p.company.name) + '</td></tr></table>'; }
+    '<table class="wlinfo"><tr><th>DATE OF ISSUE:</th><td>' + esc(fmtD(inf.iss)) + '</td><th>CUSTOMER ID:</th><td>' + esc(p.company.code || coIdGuess(p) || '') + '</td></tr><tr><th>CUSTOMER:</th><td colspan="3">' + esc(p.company.official || p.company.name) + '</td></tr></table>'; }
 function topC(title, sub, co) {
   return '<div class="top tc"><div class="top-row"><button class="homebtn hb2" id="goHome2" title="Home – all jobs"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Home</span></button><img class="tclogo" data-home src="logo-en-light.png" alt="Akhnaton" title="Home – all jobs"><div class="tct"><nav class="crumb">' + (co ? '<button id="crCo">' + co + '</button><span>›</span>' : '') + '<b>' + title + '</b></nav><small>' + sub + '</small></div>' +
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span><button class="rfbtn" title="Refresh – load the newest version">↻</button></div></div>'; }
