@@ -1343,3 +1343,7 @@ body.hasTb #mtools button:hover{border-color:#13294B}
 .hjc b{font-size:13.5px;color:#13294B}.hjc small{grid-column:1;font-size:12px;color:#5b6b82}.hjc .hpbar{grid-column:1}.hjc em{grid-column:2;grid-row:1 / span 3;align-self:center;font-style:normal;font-weight:700;color:#13294B;font-size:13px}
 @media (max-width:1000px){.hjtiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:760px){.hjtiles{grid-template-columns:repeat(2,minmax(0,1fr))}.hjr{grid-template-columns:1.6fr 1fr 28px}.hjr>span:nth-child(2),.hjr>span:nth-child(3),.hjr>span:nth-child(4){display:none}.hjv button{font-size:0}.hjv button::first-letter{font-size:15px}.hjq{order:5;flex-basis:100%}}
+.ctmini{width:100%;border-collapse:collapse;font-size:13.5px;margin:4px 0 8px}
+.ctmini td{padding:6px 4px;border-bottom:1px solid #EEF1F5;color:#26364f}.ctmini .r{text-align:right;white-space:nowrap}
+.ctmini tfoot td{border-bottom:0;border-top:2px solid #13294B;font-weight:600;color:#13294B;padding-top:8px}
+.ctmini tr.ctno td{color:#B26A00;background:#FFF7E6}
