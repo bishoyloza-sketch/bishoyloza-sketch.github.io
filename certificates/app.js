@@ -550,7 +550,7 @@ function top(title, sub, extra) {
     (S.cur ? '<button class="homebtn" id="goHome2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Home</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
 function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (P0 && P0.tab === 'cert' && P0._edCi === P0.ci) window.__keepY = window.scrollY;
-  if (!S.session) return renderLogin();
+  if (!S.session) return renderLogin(); if (noAccessCheck()) return;
   var p = S.cur ? S.projects.filter(function (x) { return x.id === S.cur; })[0] : null;
   if (!p) { S.cur = null; return renderHome(); }
   if (p.stage !== 'done') return renderWizard(p);
@@ -591,7 +591,7 @@ function renderHome() { var HM = HOME, now = new Date(), Y = HM.yr || now.getFul
   var gl = Object.keys(grp).map(function (k) { return grp[k]; }).sort(function (a, b) { return fby === 'co' ? b.n - a.n : b.t - a.t; });
   var hr = now.getHours(), hi = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening', me = S.me ? String(S.me.name || '').split(/\s+/)[0] : '';
   var prog = function (p) { var L = certsOf(p), n = L.filter(function (x) { return x.saved; }).length; return { n: n, t: L.length }; };
-  var jobRow = function (p) { var g = prog(p), inf = p.info || {}; return '<div class="hjob" data-p="' + p.id + '"><div class="hjt"><b>' + esc(coName(p)) + '</b><small>' + esc([inf.cal ? fmtD(inf.cal) : '', p.dept || ''].filter(Boolean).join(' · ') || 'not started') + '</small>' + syncJobLine(p) + '</div><div class="hjp"><span>' + g.n + ' / ' + g.t + '</span><div class="hpbar"><i style="width:' + (g.t ? Math.round(g.n / g.t * 100) : 0) + '%"></i></div></div><button class="lx" data-pd="' + p.id + '" title="Delete this job">✕</button></div>'; };
+  var jobRow = function (p) { var g = prog(p), inf = p.info || {}; return '<div class="hjob" data-p="' + p.id + '"><div class="hjt"><b>' + esc(coName(p)) + '</b><small>' + esc([inf.cal ? fmtD(inf.cal) : '', p.dept || ''].filter(Boolean).join(' · ') || 'not started') + '</small>' + syncJobLine(p) + '</div><div class="hjp"><span>' + g.n + ' / ' + g.t + '</span><div class="hpbar"><i style="width:' + (g.t ? Math.round(g.n / g.t * 100) : 0) + '%"></i></div></div>' + (certAdmin() ? '<button class="lx" data-pd="' + p.id + '" title="Delete this job">✕</button>' : '') + '</div>'; };
   $('#app').innerHTML = '<div class="shell hshell">' + ((DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top tc"><div class="top-row"><img class="tclogo" src="logo-en-light.png" alt="Akhnaton" style="height:26px"><div class="tct"><b>Certificates</b><small>Akhnaton calibration lab</small></div><span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span><button class="rfbtn" title="Refresh – load the newest version">↻</button></div></div>') + '<main>' + (spOn() ? dsRemind() : msCard()) +
     '<div class="hhead"><div><div class="hhi">' + hi + (me ? ', ' + esc(me) : '') + '</div><div class="hdt">' + now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · Calibration lab</div></div><div class="hact"><button class="btn" id="newP">+ New job</button>' + (last ? '<button class="btn ghost" data-p="' + last.id + '">Continue ' + esc(coName(last)) + ' ›</button>' : '') + '</div></div>' +
     '<section class="hblk hopen"><div class="hbh"><b>Open jobs</b><span>' + open.length + '</span></div>' + (open.length ? open.map(jobRow).join('') : '<div class="hemp">No open jobs – start one with “New job”.</div>') + '</section>' +
@@ -601,14 +601,14 @@ function renderHome() { var HM = HOME, now = new Date(), Y = HM.yr || now.getFul
     '<section class="hblk"><div class="hbh"><b>Finished jobs</b><div class="seg pvseg"><button data-fby="co" class="' + (fby === 'co' ? 'on' : '') + '">By customer</button><button data-fby="mo" class="' + (fby === 'mo' ? 'on' : '') + '">By month</button></div></div>' +
       (gl.length ? gl.map(function (g) { return '<details class="hfin"><summary><b>' + esc(g.k) + '</b><span>' + g.jobs.length + ' job' + (g.jobs.length > 1 ? 's' : '') + ' · ' + g.n + ' certificates</span></summary>' + g.jobs.map(jobRow).join('') + '</details>'; }).join('') : '<div class="hemp">Finished jobs of ' + Y + ' appear here.</div>') + '</section>' +
     
-    '<div class="hinst"><button class="btn sm" id="instB">📲 Install the app / share the link</button></div><div class="hfoot"><button class="btn ghost sm" id="paperB">Paper used</button><button class="btn ghost sm" id="binB">Recycle bin' + (binGet().length ? ' (' + binGet().length + ')' : '') + '</button><button class="btn ghost sm" id="out">Sign out</button></div></main></div>';
+    '<div class="hinst"><button class="btn sm" id="instB">📲 Install the app / share the link</button></div><div class="hfoot"><button class="btn ghost sm" id="paperB">Paper used</button><button class="btn ghost sm" id="binB">Recycle bin' + (binGet().length ? ' (' + binGet().length + ')' : '') + '</button>' + (certAdmin() ? '<button class="btn ghost sm" id="usersB">👥 Users</button>' : '') + '<button class="btn ghost sm" id="out">Sign out</button></div></main></div>';
   $('#newP').onclick = function () { newProject(); }; $('#binB').onclick = binSheet; undoFab();
   $('#hYr').onchange = function () { HOME.yr = +$('#hYr').value; render(); };
   $$('[data-fby]').forEach(function (b) { b.onclick = function () { HOME.fby = b.dataset.fby; render(); }; });
   $$('[data-p]').forEach(function (b) { b.onclick = function (e) { if (e.target.closest('[data-pd]')) return; S.cur = b.dataset.p; var pp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (pp) openProjectPage(pp); try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e2) {} render(); window.scrollTo(0, 0); }; });
   $$('[data-pd]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0]; if (!p) return;
     dialog('Delete this job?', '<b>' + esc(coName(p)) + '</b> – ' + certsOf(p).length + ' certificates. You can bring it back from the Recycle bin.', 'Delete').then(function (y) { if (!y) return; try { if (SYNC.on() && p.company) jcall('del', { id: p.id }).catch(function () {}); } catch (e) {} S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); }); }; });
-  $('#paperB').onclick = function () { paperSheet(ev, Y); }; $('#instB').onclick = installSheet;
+  $('#paperB').onclick = function () { paperSheet(ev, Y); }; $('#instB').onclick = installSheet; if ($('#usersB')) $('#usersB').onclick = usersSheet;
   $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn; locBind(); var ho = $('#hdOpen'); if (ho) ho.onclick = dsLibSheet; var rg = $('#dsRemGo'); if (rg) rg.onclick = dsRemSteps; var rl = $('#dsRemL'); if (rl) rl.onclick = function () { LS.set('dsRemLater', Date.now() + 864e5); render(); }; }
 /* ================= wizard ================= */
 var STAGES = ['company', 'date', 'dept', 'type', 'order', 'items'];
@@ -1321,6 +1321,43 @@ function balTables(bd) { var u = bd.unit, n = Math.max.apply(null, [1].concat(bd
   if (bd.rep.length) out.rep = [['Load (' + u + ')'].concat(Array.apply(null, Array(n)).map(function (x, k) { return 'Reading ' + (k + 1) + ' (' + u + ')'; }))].concat(bd.rep.map(function (r) { var a = [r.load].concat(r.r); while (a.length < n + 1) a.push(''); return a; }));
   if (bd.ecc) { var e = bd.ecc; out.ecc = [['Position No.'].concat(e.pos), ['Load (' + u + ')'].concat(e.r.map(function () { return e.load; })), ['Reading (' + u + ')'].concat(e.r), ['Error from the center (' + u + ')'].concat(e.err.length === e.r.length ? e.err : ['—'].concat(e.err))]; }
   return out; }
+/* ===== people: the same names and PINs as Akhnaton Devices (its server); the certificates permission is kept on the jobs server ===== */
+var CROLE = { admin: 'Admin', writer: 'Certificate writer', none: 'No access' };
+function certRoleOf(u) { if (!u) return 'writer'; var r = (SYNC.roles || LS.get('certRoles', {}) || {})[u.id]; if (r && CROLE[r]) return r; return u.role === 'admin' || u.role === 'superadmin' ? 'admin' : 'writer'; }
+function certAdmin() { return !!S.me && certRoleOf(S.me) === 'admin'; }
+function rolesLoad() { if (!SYNC.on()) return Promise.resolve(); return jcall('roles').then(function (r) { SYNC.roles = r.roles || {}; LS.set('certRoles', SYNC.roles); }).catch(function () {}); }
+/* someone with "No access" sees only this */
+function noAccessCheck() { if (!S.me || certRoleOf(S.me) !== 'none') return false;
+  $('#app').innerHTML = '<div class="shell"><main style="padding:40px 20px;max-width:520px;margin:0 auto;text-align:center"><div style="font-size:44px">🔒</div><h2>No access to Certificates</h2><p class="small">' + esc(S.me.name) + ', your account has no access to the Certificates app. Ask the admin to give you access.</p><button class="btn" id="naOut">Sign out</button></main></div>';
+  $('#naOut').onclick = signOut; return true; }
+function showPin(name, pin) { dialog('New PIN for ' + esc(name), '<div style="text-align:center;font-size:34px;font-weight:800;letter-spacing:8px;margin:10px 0;color:#13294B">' + esc(pin) + '</div>Give it to ' + esc(String(name).split(/\s+/)[0]) + '. It works in Certificates and in Akhnaton Devices – the old PIN stops working.', 'Done', ''); }
+function usersSheet() { if (!certAdmin()) return toast('Only an admin can open Users', true); var busy = false;
+  var load = function () { return refresh().then(function () { return rolesLoad(); }).catch(function (e) { toast(e.message, true); }); };
+  var body = function () { var us = ((S.data && S.data.users) || []).slice(), order = { admin: 0, writer: 1, none: 2 };
+    us.sort(function (a, b) { return (a.active === false) - (b.active === false) || order[certRoleOf(a)] - order[certRoleOf(b)] || String(a.name).localeCompare(b.name); });
+    return '<div class="small" style="margin-bottom:10px">The same people and PINs as <b>Akhnaton Devices</b> – a change here changes there too. The permission below is for Certificates only.</div><div class="list">' + us.map(function (u) { var r = certRoleOf(u);
+      return '<button class="row" data-us="' + esc(u.id) + '"><span class="t"><b>' + esc(u.name) + (u.active === false ? ' <span style="color:#C2362B">(stopped)</span>' : '') + '</b><small>Devices: ' + esc(u.role || '') + '</small></span><span class="tpst ' + (r === 'admin' ? 'ok' : r === 'none' ? 'no' : '') + '">' + CROLE[r] + '</span></button>'; }).join('') + '</div>'; };
+  openSheet(function () { return { title: 'Users', body: body(), foot: '<button class="btn" id="usAdd">+ Add a person</button>', mount: function () {
+    $$('[data-us]').forEach(function (b) { b.onclick = function () { var u = ((S.data && S.data.users) || []).filter(function (x) { return x.id === b.dataset.us; })[0]; if (u) userEdit(u, function () { renderSheet(); }); }; });
+    $('#usAdd').onclick = function () { userEdit(null, function () { renderSheet(); }); }; } }; });
+  load().then(function () { if (sheetFn) renderSheet(); }); }
+function userEdit(u, done) { var f = { name: u ? u.name : '', role: u ? certRoleOf(u) : 'writer', active: u ? u.active !== false : true };
+  var body = function () { return '<label class="f"><span>Full name</span><input class="inp" id="ueN" value="' + esc(f.name) + '"></label>' +
+    '<div class="f"><span style="display:block;font-size:13px;color:var(--muted);margin:8px 0 6px">Permission in Certificates</span><div class="tmseg" id="ueR">' + Object.keys(CROLE).map(function (k) { return '<button type="button" data-ur="' + k + '" class="' + (f.role === k ? 'on' : '') + '">' + CROLE[k] + '</button>'; }).join('') + '</div></div>' +
+    '<div class="note" style="margin-top:12px"><b>Admin</b> – everything, Users, the activity panel, deleting jobs. <b>Certificate writer</b> – jobs, certificates, letters, prices and the library. <b>No access</b> – can not open Certificates (Akhnaton Devices is not touched).</div>' +
+    (u ? '<div class="cf" style="justify-content:flex-start;margin-top:12px"><button class="btn ghost sm" id="ueP">Reset PIN</button><button class="btn ghost sm" id="ueA">' + (f.active ? 'Stop this person' : 'Stopped – tap to bring back') + '</button></div><div class="small">Reset PIN and stopping work in Akhnaton Devices too.</div>' : '<div class="small" style="margin-top:10px">The person is added to Akhnaton Devices as an Engineer and gets a PIN for both apps.</div>'); };
+  openSheet(function () { return { title: u ? esc(u.name) : 'Add a person', body: body(), foot: '<button class="btn" id="ueS">Save</button>', mount: function () {
+    $('#ueN').oninput = function (e) { f.name = e.target.value; };
+    $$('[data-ur]').forEach(function (b) { b.onclick = function () { f.role = b.dataset.ur; $$('[data-ur]').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
+    var a = $('#ueA'); if (a) a.onclick = function () { f.active = !f.active; a.textContent = f.active ? 'Stop this person' : 'Stopped – tap to bring back'; };
+    var rp = $('#ueP'); if (rp) rp.onclick = function () { dialog('Give ' + esc(u.name) + ' a new PIN?', 'The old PIN stops working in Certificates and in Akhnaton Devices.', 'Reset PIN').then(function (y) { if (!y) return; req('resetPin', { userId: u.id }).then(function (r) { showPin(u.name, r.pin); syncLog(null, 'user', 'Reset the PIN of ' + u.name); }).catch(function (e) { toast(e.message, true); }); }); };
+    $('#ueS').onclick = function () { var nm = String(f.name || '').trim(); if (!nm) return toast('Write the name', true); var b = $('#ueS'); b.disabled = true;
+      var chg = !u || nm !== u.name || f.active !== (u.active !== false), dev = chg ? req('saveUser', { user: u ? { id: u.id, name: nm, role: u.role, active: f.active } : { name: nm, role: 'engineer', active: true } }) : Promise.resolve({});
+      dev.then(function (r) { return refresh().then(function () { return r || {}; }); }).then(function (r) { var id = u ? u.id : (r.id || (r.user && r.user.id) || (((S.data && S.data.users) || []).filter(function (x) { return x.name === nm; })[0] || {}).id);
+        var setR = id && (!u || f.role !== certRoleOf(u)) ? jcall('setRole', { id: id, who: nm, role: f.role }).then(function (x) { SYNC.roles = x.roles || SYNC.roles; LS.set('certRoles', SYNC.roles); }) : Promise.resolve();
+        return setR.then(function () { closeSheet(); if (r.pin) showPin(nm, r.pin); else toast('Saved'); done && done(); }); })
+        .catch(function (e) { b.disabled = false; toast(e.message, true); }); }; } }; }); }
+
 /* ===== the purchase order: its lines, the certificates matched to them, the extras offered in a separate quotation ===== */
 function poNum(s) { var v = parseFloat(String(s == null ? '' : s).replace(/,/g, '')); return isFinite(v) ? v : null; }
 function poFmt(v) { return v == null ? '' : Number(v).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
@@ -1432,12 +1469,12 @@ function syncPull(force) { if (!SYNC.on() || SYNC.busy) return Promise.resolve(f
   return jcall('list', { since: since }).then(function (r) { var ed = syncEditing();
     Object.keys(SYNC.pend).forEach(function (id) { if (ed && id === S.cur) return; if (syncApply(SYNC.pend[id])) changed = true; delete SYNC.pend[id]; });
     (r.jobs || []).forEach(function (j) { if (ed && j.id === S.cur) { SYNC.pend[j.id] = j; return; } if (syncApply(j)) changed = true; });
-    SYNC.pres = r.pres || {}; SYNC.viewers = r.viewers || []; LS.set('jobsSince', r.now || Date.now()); SYNC.err = ''; SYNC.last = Date.now(); syncSave(); return changed; })
+    SYNC.pres = r.pres || {}; SYNC.viewers = r.viewers || []; if (r.roles) { var meR0 = certRoleOf(S.me); SYNC.roles = r.roles; LS.set('certRoles', r.roles); if (certRoleOf(S.me) !== meR0) setTimeout(render, 0); } LS.set('jobsSince', r.now || Date.now()); SYNC.err = ''; SYNC.last = Date.now(); syncSave(); return changed; })
     .catch(function (e) { SYNC.err = e.message; return false; }).then(function (c) { SYNC.busy = false; if (S.projects.some(function (p) { return p.company && syncHash(syncClean(p)) !== p._syncH; })) syncSoon(); return c; }); }
 /* a quiet refresh: the home page redraws; an open job only when nobody is typing in it */
 function syncTick() { if (!SYNC.on()) return; syncPull().then(function (ch) { if (!ch) { syncHomePaint(); return; } if (syncEditing()) return; window.__keepY = window.scrollY; render(); }); syncPing(); }
 function syncPing() { if (!SYNC.on()) return; jcall('ping', { jobId: S.cur || '' }).then(function (r) { SYNC.pres = r.pres || SYNC.pres; syncHomePaint(); }).catch(function () {}); }
-function syncLog(p, action, detail) { if (!SYNC.on() || !p) return; SYNC.queue.push({ jobId: p.id, company: p.company ? p.company.name : '', action: action, detail: detail }); clearTimeout(SYNC.lt); SYNC.lt = setTimeout(syncFlush, 1500); }
+function syncLog(p, action, detail) { if (!SYNC.on()) return; SYNC.queue.push({ jobId: p ? p.id : '', company: p && p.company ? p.company.name : '', action: action, detail: detail }); clearTimeout(SYNC.lt); SYNC.lt = setTimeout(syncFlush, 1500); }
 function syncFlush() { if (!SYNC.on() || !SYNC.queue.length) return; var q = SYNC.queue.splice(0, 50); jcall('log', { entries: q }).catch(function () { SYNC.queue = q.concat(SYNC.queue); }); }
 function syncStart() { if (!SYNC.on() || SYNC.started) return; SYNC.started = 1; syncPull(true).then(function (ch) { if (ch && !sheetFn) render(); syncSoon(); }); syncPing(); setInterval(syncTick, 30000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) syncTick(); }); window.addEventListener('online', function () { syncSoon(); syncTick(); }); }
@@ -1449,7 +1486,7 @@ function syncJobLine(p) { if (!SYNC.on()) return ''; var o = syncOthers(p.id), w
   return '<div class="hjsync">' + (o.length ? '<span class="live">● ' + esc(o.join(', ')) + ' in it now</span>' : '') + (who ? '<span>' + esc(who) + '</span>' : '') + '</div>'; }
 function syncHomePaint() { if (!SYNC.on()) return; $$('.hjob[data-p]').forEach(function (r) { var p = S.projects.filter(function (q) { return q.id === r.dataset.p; })[0], x = r.querySelector('.hjsync'); if (!p) return; var h = syncJobLine(p); if (x) x.outerHTML = h; else { var t = r.querySelector('.hjt'); if (t) t.insertAdjacentHTML('beforeend', h); } }); actFabPaint(); }
 /* ---- the activity panel: who finished how many certificates on a day, then the latest steps ---- */
-function actAllowed() { var v = SYNC.viewers || [], me = String(syncMe().name || '').toLowerCase().trim(); return !v.length || v.some(function (n) { n = String(n).toLowerCase().trim(); return n && (me === n || me.indexOf(n) === 0 || n.indexOf(me) === 0); }); }
+function actAllowed() { if (certAdmin()) return true; var v = SYNC.viewers || [], me = String(syncMe().name || '').toLowerCase().trim(); return v.length > 0 && v.some(function (n) { n = String(n).toLowerCase().trim(); return n && (me === n || me.indexOf(n) === 0 || n.indexOf(me) === 0); }); }
 function actFabPaint() { var b = $('#actFab'); var show = SYNC.on() && actAllowed() && !S.cur; if (!show) { if (b) b.remove(); return; } if (!b) { b = document.createElement('button'); b.id = 'actFab'; b.title = 'Team activity'; b.innerHTML = '📊'; b.onclick = function (e) { e.stopPropagation(); actPanel(); }; document.body.appendChild(b); } }
 function actPanel(day) { var d0 = day ? new Date(day) : new Date(); d0.setHours(0, 0, 0, 0); var d1 = new Date(d0); d1.setDate(d1.getDate() + 1); var isToday = d0.toDateString() === new Date().toDateString();
   var lbl = isToday ? 'Today' : d0.toDateString() === new Date(Date.now() - 864e5).toDateString() ? 'Yesterday' : d0.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d0.getMonth()] + ' ' + d0.getFullYear();
@@ -3315,7 +3352,7 @@ function projCard(p) { var cs = curStep(p), ci = phaseOf(cs);
   return '<div class="card pcard"><button class="projcard" data-p="' + p.id + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h3>' + esc(projTitle(p)) + '</h3><span class="pill" style="--s-fg:' + (ci === 2 ? 'var(--office)' : 'var(--blue)') + ';--s-bg:' + (ci === 2 ? 'var(--office-soft)' : 'var(--blue-soft)') + '">' + PHASES[ci].t + '</span></div>' +
     '<div class="minirail">' + PHASES.map(function (ph, i) { return '<span class="' + (i < ci ? 'ok' : i === ci ? 'on' : '') + '"><i></i>' + esc(phaseSum(p, i)) + '</span>'; }).join('') + '</div>' +
     '<div class="meta" style="margin-top:6px">Started ' + fmtDate(p.created) + (p.depts && p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></button>' +
-    '<div class="cf"><button class="btn sm" data-p="' + p.id + '">Continue</button><button class="btn ghost sm" data-pd="' + p.id + '" style="flex:none;color:var(--danger)">Delete</button></div></div>'; }
+    '<div class="cf"><button class="btn sm" data-p="' + p.id + '">Continue</button>' + (certAdmin() ? '<button class="btn ghost sm" data-pd="' + p.id + '" style="flex:none;color:var(--danger)">Delete</button>' : '') + '</div></div>'; }
 function renderHomeOld415473() {
   var mine = S.projects.slice().sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
   var ms = sugMonths(), fresh = SUG && !SUG.err && SUG.key === ms[0].y + '-' + ms[0].m && (SUG.busy || Date.now() - SUG.at < 12 * 3600e3);

@@ -22,6 +22,9 @@ function dir() { var P = PropertiesService.getScriptProperties(), id = P.getProp
   var f = DriveApp.createFolder('Akhnaton Certificates – Jobs'); P.setProperty('DIR', f.getId()); return f; }
 function rows(sh) { var v = sh.getDataRange().getValues(); return v.slice(1); }
 function findRow(sh, id) { var v = sh.getRange(1, 1, Math.max(1, sh.getLastRow()), 1).getValues(); for (var i = 1; i < v.length; i++) if (String(v[i][0]) === String(id)) return i + 1; return 0; }
+/* certificates permission per person (admin / writer / none) – the people and PINs stay on the Devices server */
+function rolesSheet(s) { var r = s.getSheetByName('Roles'); if (!r) { r = s.insertSheet('Roles'); r.appendRow(['userId', 'name', 'role', 'changedBy', 'changedAt']); } return r; }
+function roles(s) { var m = {}; rows(rolesSheet(s)).forEach(function (r) { if (r[0]) m[String(r[0])] = String(r[2] || ''); }); return m; }
 function viewers(s) { return rows(s.getSheetByName('Settings')).map(function (r) { return String(r[0] || '').trim(); }).filter(Boolean); }
 function log(s, b, a) { s.getSheetByName('History').appendRow([new Date(), b.user || '', b.name || '', a.jobId || '', a.company || '', a.action || '', a.detail || '']); }
 function pres() { var c = CacheService.getScriptCache().get('pres'); var m = {}; try { m = c ? JSON.parse(c) : {}; } catch (x) {} var now = Date.now(); Object.keys(m).forEach(function (k) { m[k] = (m[k] || []).filter(function (p) { return now - p.t < 150000; }); if (!m[k].length) delete m[k]; }); return m; }
@@ -33,7 +36,7 @@ function handle(b) { var s = book(), J = s.getSheetByName('Jobs'), op = b.op;
       if (upd <= since && del <= since) return;
       var json = null; if (!del && r[10]) { try { json = DriveApp.getFileById(r[10]).getBlob().getDataAsString(); } catch (x) {} }
       list.push({ id: String(r[0]), company: r[1], rev: +r[2] || 0, updated: upd, byUser: r[4], byName: r[5], done: r[6], total: r[7], finished: !!r[8], deleted: del, json: json }); });
-    var vw = viewers(s); return { ok: true, now: now, jobs: list, pres: pres(), viewers: vw }; }
+    var vw = viewers(s); return { ok: true, now: now, jobs: list, pres: pres(), viewers: vw, roles: roles(s) }; }
   if (op === 'save') { var m = b.meta || {}, id = String(m.id), rn = findRow(J, id), now2 = Date.now();
     if (rn) { var r0 = J.getRange(rn, 1, 1, 13).getValues()[0], rev0 = +r0[2] || 0;
       if (b.baseRev != null && +b.baseRev !== rev0 && !+r0[9]) { var cur = null; try { cur = DriveApp.getFileById(r0[10]).getBlob().getDataAsString(); } catch (x) {} return { conflict: true, rev: rev0, json: cur, byName: r0[5] }; }
@@ -46,6 +49,9 @@ function handle(b) { var s = book(), J = s.getSheetByName('Jobs'), op = b.op;
     return { ok: true, rev: 1, updated: now2 }; }
   if (op === 'del' || op === 'restore') { var rn2 = findRow(J, b.id); if (!rn2) return { ok: true }; var t = Date.now();
     J.getRange(rn2, 10).setValue(op === 'del' ? t : ''); J.getRange(rn2, 4).setValue(t); log(s, b, { jobId: b.id, company: J.getRange(rn2, 2).getValue(), action: op, detail: op === 'del' ? 'Deleted the job' : 'Restored the job' }); return { ok: true }; }
+  if (op === 'roles') return { ok: true, roles: roles(s) };
+  if (op === 'setRole') { var R = rolesSheet(s), rr = findRow(R, b.id), row = [String(b.id), b.who || '', b.role || 'writer', b.name || '', new Date()];
+    if (rr) R.getRange(rr, 1, 1, 5).setValues([row]); else R.appendRow(row); log(s, b, { action: 'role', detail: 'Set ' + (b.who || b.id) + ' to ' + (b.role === 'admin' ? 'Admin' : b.role === 'none' ? 'No access' : 'Certificate writer') }); return { ok: true, roles: roles(s) }; }
   if (op === 'log') { (b.entries || []).slice(0, 50).forEach(function (a) { log(s, b, a); }); return { ok: true }; }
   if (op === 'ping') { var c = CacheService.getScriptCache(), m2 = pres(); Object.keys(m2).forEach(function (k) { m2[k] = m2[k].filter(function (p) { return p.user !== b.user; }); if (!m2[k].length) delete m2[k]; });
     if (b.jobId) (m2[b.jobId] = m2[b.jobId] || []).push({ user: b.user, name: b.name, t: Date.now() }); c.put('pres', JSON.stringify(m2), 600); return { ok: true, pres: m2 }; }
