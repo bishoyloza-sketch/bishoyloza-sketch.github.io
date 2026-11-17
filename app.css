@@ -457,3 +457,43 @@ a.tel{color:var(--blue);font-weight:700;text-decoration:none;white-space:nowrap}
 .gadd,.gclear{border:0;background:transparent;font:inherit;font-size:13px;font-weight:700;color:var(--blue);padding:5px 6px}
 .gclear{color:var(--muted)}
 .gbar input::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
+
+/* ===== fixed top bar – the same bar as Akhnaton Certificates ===== */
+#tbar{position:fixed;top:0;left:0;right:0;z-index:45;background:#13294B;color:#fff;box-shadow:0 2px 10px rgba(19,41,75,.18);font-family:Barlow,system-ui,sans-serif}
+#tbar .tbin{display:flex;align-items:center;gap:2px;height:52px;padding:0 10px;max-width:1500px;margin:0 auto}
+#tbar button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.tbb{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;border-radius:9px;font-size:14px!important;font-weight:600!important;white-space:nowrap;transition:background .12s;position:relative}
+#tbar .tbb:hover,#tbar .tbhome:hover{background:rgba(255,255,255,.12)}
+#tbar .tbb.cur{background:rgba(255,255,255,.18);box-shadow:inset 0 -3px 0 #7FC0F0}
+.tbb.ic{width:36px;padding:0;justify-content:center}
+.tbb svg{width:18px;height:18px;flex:none}
+.tbb em{font-style:normal;font-size:11.5px;background:rgba(255,255,255,.2);border-radius:999px;padding:1px 7px}
+.tbb em.tbpend{background:var(--pending);color:#fff}
+.tbhome{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 10px 0 6px;border-radius:9px}
+.tbhome:hover{background:rgba(255,255,255,.1)}
+.tbhome img{height:22px}.tbhome span{font-weight:700;font-size:15.5px;padding-left:10px;border-left:1px solid rgba(255,255,255,.3)}
+.tbtools{display:flex;align-items:center;gap:2px;margin-left:10px;padding-left:10px;border-left:1px solid rgba(255,255,255,.2)}
+.tbsp{flex:1}
+.tbchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;background:rgba(255,255,255,.1);font-size:12.5px!important;font-weight:600!important;margin:0 3px;white-space:nowrap}
+.tbchip i{width:8px;height:8px;border-radius:50%;background:#3DDC84}
+.tbchip.off i{background:#F0B429}
+.tbme{gap:7px}.tbme b{width:26px;height:26px;border-radius:50%;background:#fff;color:#13294B;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+#tbMenu{position:absolute;right:12px;top:58px;background:#fff;color:#1b2d52;border:1px solid #c9d6ea;border-radius:14px;box-shadow:0 14px 34px rgba(19,41,75,.25);padding:8px;min-width:240px}
+#tbMenu .tbmh{padding:8px 10px 10px;border-bottom:1px solid #e3e9f2;margin-bottom:4px}#tbMenu .tbmh b{display:block;font-size:15px}#tbMenu .tbmh small{color:#5b6b82}
+#tbMenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border-radius:8px;font-size:14px;font-weight:600;color:#1b2d52}
+#tbMenu button svg{color:#5b6b82}
+#tbMenu button:hover{background:#EEF3F9}
+body.hasTb{padding-top:52px}
+body.hasTb .nav{display:none}
+body.hasTb .top .top-row{display:none}
+body.hasTb .top{padding-top:10px}
+body.hasTb .top .ptitle{margin-top:4px}
+body.hasTb .shell{padding-bottom:calc(96px + var(--safe-b))}
+body.hasTb .fab{bottom:calc(22px + var(--safe-b))}
+body.hasTb #toast{bottom:calc(92px + var(--safe-b))}
+body.hasTb .selbar{top:36px}
+@media (max-width:980px){.tbtools .tbb span,.tbchip span{display:none}.tbtools .tbb{width:40px;padding:0;justify-content:center}.tbchip{width:28px;padding:0;justify-content:center}
+ .tbtools .tbb em.tbpend{position:absolute;top:1px;right:0;padding:0 5px;font-size:10.5px}}
+@media (max-width:600px){.tbhome span,.tbme span,.tbme svg{display:none}.tbtools{margin-left:2px;padding-left:2px;border:0;flex:1;justify-content:space-around}.tbsp{display:none}
+ #tbar .tbin{padding:0 4px;gap:0}.tbb.ic{width:32px}.tbtools .tbb{width:38px}#tbar .rfbtn,#tbar [data-tb="out"].ic,#tbar .tbchip{display:none}
+ .tbhome{padding:0 4px}.tbhome img{height:18px}#tbMenu{right:6px;left:6px;min-width:0;width:auto}}

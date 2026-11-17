@@ -239,6 +239,7 @@
     return Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); return p; });
   }
   function renderLogin() {
+    tbarPaint();
     var pick = null, pin = '';
     var app = $('#app');
     function draw() {
@@ -276,12 +277,18 @@
       });
     }
     function tryLogin() {
+      var who = pick, typed = pin;
       Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) {
         S.session = { userId: pick.id, pin: pin }; LS.set('session', S.session); S.me = r.user;
         if (r.mustChange) return askNewPin(true);
+        CERT.setPin(who.id, who.name, typed, false); /* the same PIN in Certificates */
         boot();
       }).catch(function (e) {
-        pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake'); toast(e.message, true);
+        pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake');
+        if (!/Wrong PIN/i.test(e.message)) return toast(e.message, true);
+        CERT.isCertPin(who.id, typed).then(function (yes) {
+          toast(yes ? 'That is your Certificates PIN – Lab Devices still has your old PIN. Sign in once with the old one (then both become the same), or ask the admin to reset your PIN.' : e.message, true);
+        });
       });
     }
     draw();
@@ -310,7 +317,7 @@
             if (stage === 2 && b.length === 4) {
               if (a !== b) { a = ''; b = ''; stage = 1; draw(); $('#pin2').classList.add('shake'); toast('The two PINs did not match. Start again.', true); return; }
               req('changePin', { newPin: a }).then(function () {
-                S.session.pin = a; LS.set('session', S.session); closeSheet(); toast('PIN saved'); if (first) boot();
+                S.session.pin = a; LS.set('session', S.session); closeSheet(); toast('PIN saved – the same PIN works in Certificates'); CERT.setPin(S.session.userId, S.me && S.me.name, a, false); if (first) boot();
               }).catch(function (e) { toast(e.message, true); });
             }
           };
@@ -352,12 +359,139 @@
       });
     });
   }
-  function signOut() { os(function (O) { return O.logout(); }); pushLinked = null; LS.del('session'); LS.del('cache'); S.session = null; S.me = null; S.data = null; closeSheet(); renderLogin(); }
+  function signOut() { os(function (O) { return O.logout(); }); pushLinked = null; LS.del('session'); LS.del('cache'); S.session = null; S.me = null; S.data = null; closeAll(); TB.menu = false; tbarPaint(); renderLogin(); }
+
+  /* ================= one PIN for both apps =================
+   * Akhnaton Certificates keeps its own copy of each person's PIN (on the jobs server).
+   * Whenever a PIN is set here (sign-in, change, reset, new person) the same PIN is written there too. */
+  var CERT = {
+    USERS: '(app users – do not delete)', ROLES: '(app settings – do not delete)',
+    on: function () { return !DEMO && !!(CFG.JOBS_URL && CFG.JOBS_KEY) && !!(window.crypto && crypto.subtle && window.TextEncoder); },
+    call: function (op, p) {
+      var b = Object.assign({ key: CFG.JOBS_KEY, op: op, user: (S.session && S.session.userId) || '', name: (S.me && S.me.name) || '' }, p || {});
+      return fetch(CFG.JOBS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(b), redirect: 'follow' })
+        .then(function (r) { return r.json(); }).then(function (j) { if (j && j.error) throw new Error(j.error); return j; });
+    },
+    hash: function (id, pin) {
+      return crypto.subtle.digest('SHA-256', new TextEncoder().encode('akh-cert|' + id + '|' + pin)).then(function (b) {
+        return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); });
+    },
+    parse: function (s) { try { return JSON.parse(s || '{}') || {}; } catch (e) { return {}; } },
+    /* read one shared record: a save with an old revision is refused and answers the current copy (nothing is written) */
+    get: function (id, label) {
+      var self = this;
+      return self.call('save', { meta: { id: id, company: label, done: 0, total: 0 }, json: '{}', baseRev: -1 })
+        .then(function (r) { return r.conflict ? { m: self.parse(r.json), rev: r.rev } : { m: {}, rev: r.rev }; });
+    },
+    put: function (id, label, mut) {
+      var self = this;
+      return self.get(id, label).then(function (g) {
+        var go = function (m, rev) {
+          if (mut(m) === false) return null;
+          return self.call('save', { meta: { id: id, company: label, done: 0, total: 0 }, json: JSON.stringify(m), baseRev: rev })
+            .then(function (r) { if (r.conflict) return go(self.parse(r.json), r.rev); return r; });
+        };
+        return go(g.m, g.rev);
+      });
+    },
+    seed: function (m) {
+      if (Object.keys(m).length) return;
+      ((S.data && S.data.users) || S.people || []).forEach(function (p) { m[p.id] = { name: p.name, active: p.active !== false, dev: p.role || '', from: 'devices' }; });
+    },
+    /* the PIN of one person, in Certificates too */
+    setPin: function (id, name, pin, must) {
+      if (!this.on() || !id || !/^\d{4}$/.test(String(pin))) return Promise.resolve();
+      var self = this;
+      return self.hash(id, pin).then(function (h) {
+        return self.put('__users', self.USERS, function (m) {
+          self.seed(m); var x = m[id];
+          if (x && x.gone) return false;
+          if (x && x.h === h && !!x.must === !!must) return false;
+          x = m[id] = x || { name: name, active: true, from: 'devices' };
+          x.h = h; x.must = !!must; x.at = new Date().toISOString();
+        });
+      }).catch(function () {});
+    },
+    /* a new person here: if they were added in Certificates only (same name), their Certificates record moves to this id */
+    adopt: function (id, name, pin) {
+      if (!this.on() || !id) return Promise.resolve();
+      var self = this, old = null, dev = {}, norm = function (s) { return String(s || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+      ((S.data && S.data.users) || []).forEach(function (u) { dev[u.id] = 1; });
+      return self.hash(id, pin).then(function (h) {
+        return self.put('__users', self.USERS, function (m) {
+          self.seed(m); old = null;
+          Object.keys(m).forEach(function (k) { if (!old && k !== id && !dev[k] && !m[k].gone && norm(m[k].name) === norm(name)) old = k; });
+          var x = Object.assign({}, old ? m[old] : { active: true }, m[id] || {}, { name: name, h: h, must: true, from: 'devices', at: new Date().toISOString() });
+          delete x.gone; delete x.movedTo; m[id] = x;
+          if (old) { m[old].gone = true; m[old].active = false; m[old].h = ''; m[old].movedTo = id; }
+        });
+      }).then(function () {
+        if (!old) return;
+        return self.put('__roles', self.ROLES, function (r) { if (r[old] == null || r[id] != null) return false; r[id] = r[old]; });
+      }).catch(function () {});
+    },
+    /* is this the person's Certificates PIN? (to explain a wrong PIN here) */
+    isCertPin: function (id, pin) {
+      if (!this.on()) return Promise.resolve(false);
+      var self = this;
+      return Promise.all([self.get('__users', self.USERS), self.hash(id, pin)]).then(function (a) { var x = a[0].m[id]; return !!(x && x.h && x.h === a[1]); }).catch(function () { return false; });
+    }
+  };
+
+  /* ================= top bar (the same bar as Akhnaton Certificates) ================= */
+  var TB = { menu: false, last: '' };
+  function tbIco(n) {
+    var P = {
+      out: '<path d="M15 4h4v16h-4"/><path d="M10 17l5-5-5-5M15 12H3"/>', ref: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>', down: '<path d="M6 9l6 6 6-6"/>',
+      key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>', cert: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+      me: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'
+    }[n] || '';
+    return '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P + '</svg>';
+  }
+  function tbarPaint() {
+    var bar = document.getElementById('tbar');
+    if (!S.session || !S.me) { if (bar) bar.remove(); document.body.classList.remove('hasTb'); TB.last = ''; TB.menu = false; return; }
+    document.body.classList.add('hasTb');
+    if (!bar) {
+      bar = document.createElement('div'); bar.id = 'tbar'; document.body.appendChild(bar); bar.onclick = tbClick;
+      document.addEventListener('click', function (e) { if (TB.menu && !e.target.closest('#tbMenu, [data-tb="me"]')) { TB.menu = false; tbarPaint(); } });
+    }
+    var v = S.view, pend = S.data ? myPending().length : 0, off = !S.online, full = S.me.name || '', first = String(full).split(/\s+/)[0] || '?';
+    var nav = [['home', 'Today', ICON.home], ['jobs', 'Jobs', ICON.jobs], ['devices', 'Devices', ICON.devices], ['kits', 'Loggers', ICON.kits], ['activity', 'Activity', ICON.activity]].map(function (n) {
+      return '<button class="tbb tbn' + (v === n[0] ? ' cur' : '') + '" data-tb="go" data-v="' + n[0] + '" title="' + n[1] + '">' + n[2] + '<span>' + n[1] + '</span>' +
+        (n[0] === 'home' && pend ? '<em class="tbpend">' + pend + '</em>' : '') + '</button>';
+    }).join('');
+    var h = '<div class="tbin">' +
+      '<button class="tbhome" data-tb="go" data-v="home" title="Today"><img src="logo-en-light.png" alt="Akhnaton"><span>Lab Devices</span></button>' +
+      '<div class="tbtools">' + nav + '</div><span class="tbsp"></span>' +
+      '<span class="tbchip' + (off ? ' off' : '') + '" title="' + (off ? 'Offline – showing the last copy' : 'Live – updates every 20 seconds') + '"><i></i><span>' + (off ? 'Offline' : 'Live') + '</span></span>' +
+      '<button class="tbb ic rfbtn" data-tb="ref" title="Refresh now">' + tbIco('ref') + '</button>' +
+      '<button class="tbb tbme' + (v === 'more' ? ' cur' : '') + '" data-tb="me" title="' + esc(full) + '"><b>' + esc(first.charAt(0).toUpperCase()) + '</b><span>' + esc(first) + '</span>' + tbIco('down') + '</button>' +
+      '<button class="tbb ic" data-tb="out" title="Sign out">' + tbIco('out') + '</button></div>' +
+      (TB.menu ? '<div id="tbMenu"><div class="tbmh"><b>' + esc(full) + '</b><small>' + esc(ROLE_NAME[S.me.role] || '') + '</small></div>' +
+        '<button data-tb="go" data-v="more">' + tbIco('me') + (can('admin') ? 'My account &amp; admin' : 'My account') + '</button>' +
+        '<button data-tb="pin">' + tbIco('key') + 'Change my PIN</button>' +
+        '<button data-tb="certs">' + tbIco('cert') + 'Open Certificates</button>' +
+        '<button data-tb="out">' + tbIco('out') + 'Sign out</button></div>' : '');
+    if (h === TB.last) return; TB.last = h; bar.innerHTML = h;
+  }
+  function tbClick(e) {
+    var b = e.target.closest('[data-tb]'); if (!b) return; e.stopPropagation();
+    var k = b.dataset.tb;
+    if (k === 'me') { TB.menu = !TB.menu; return tbarPaint(); }
+    TB.menu = false; tbarPaint();
+    if (k === 'go') { var v = b.dataset.v; closeAll(); if (('#' + v) === location.hash || (v === 'home' && !location.hash && S.view === 'home')) { S.view = v; render(); } else location.hash = '#' + v; return; }
+    if (k === 'ref') return refresh().then(function () { if (S.online) toast('Up to date'); });
+    if (k === 'pin') return askNewPin(false);
+    if (k === 'certs') { var w = window.open('/certificates/', '_blank'); if (!w) location.href = '/certificates/'; return; }
+    if (k === 'out') return signOut();
+  }
+  setInterval(function () { try { tbarPaint(); } catch (e) {} }, 1000);
 
   /* ================= shell ================= */
   function render() {
     if (!S.session) return renderLogin();
-    if (!S.data) { $('#app').innerHTML = splashHtml(); return; }
+    if (!S.data) { $('#app').innerHTML = splashHtml(); tbarPaint(); return; }
     var v = S.view, pend = myPending().length;
     var html = (DEMO ? '<div class="demo">Preview with sample data — changes stay on this phone only</div>' : '') + '<div class="shell">';
     if (v === 'home') html += viewHome();
@@ -377,7 +511,7 @@
     var y = window.scrollY;
     $('#app').innerHTML = html;
     window.scrollTo(0, S._keepScroll ? y : 0); S._keepScroll = false;
-    wire();
+    wire(); tbarPaint();
   }
   /* Jobs search: refresh only the results under the search panel, so typing (and the suggestion list) is not interrupted */
   var softT = null;
@@ -2026,13 +2160,13 @@
       var ac = $('[data-active]', body); if (ac) ac.onclick = function () { f.active = !f.active; ac.classList.toggle('on', !f.active); ac.textContent = f.active ? 'Deactivate this person' : 'Inactive — tap to reactivate'; };
       var rs = $('[data-reset]', body); if (rs) rs.onclick = function () {
         askConfirm('Give ' + u.name + ' a new PIN? Their old PIN stops working.', 'Reset PIN', function () {
-          req('resetPin', { userId: u.id }).then(function (r) { showPin(u.name, r.pin); }).catch(function (e) { toast(e.message, true); });
+          req('resetPin', { userId: u.id }).then(function (r) { CERT.setPin(u.id, u.name, r.pin, true); showPin(u.name, r.pin); }).catch(function (e) { toast(e.message, true); });
         }, true);
       };
       setFoot('<button class="btn" data-save>Save</button>');
       $('[data-save]').onclick = function () {
         req('saveUser', { user: f }).then(function (r) { return refresh(true).then(function () { return r; }); })
-          .then(function (r) { closeSheet(); after && after(); if (r.pin) showPin(f.name, r.pin); else toast('Saved'); })
+          .then(function (r) { closeSheet(); after && after(); if (r.pin) { CERT.adopt(r.id, String(f.name).trim(), r.pin); showPin(f.name, r.pin); } else toast('Saved'); })
           .catch(function (e) { toast(e.message, true); });
       };
     });
@@ -2040,7 +2174,7 @@
   function showPin(name, pin) {
     openSheet(function (body, setFoot, setTitle) {
       setTitle('First PIN');
-      body.innerHTML = '<div class="done"><p>Give this PIN to <b>' + esc(name) + '</b>. They choose their own PIN at first sign-in.</p><div class="tag xl" style="--c:var(--blue)"><i></i><span>' + pin + '</span></div></div>';
+      body.innerHTML = '<div class="done"><p>Give this PIN to <b>' + esc(name) + '</b>. It works in Lab Devices and in Certificates; they choose their own PIN at first sign-in.</p><div class="tag xl" style="--c:var(--blue)"><i></i><span>' + pin + '</span></div></div>';
       setFoot('<button class="btn" data-x2>Done</button>'); $('[data-x2]').onclick = function () { closeSheet(); };
     });
   }
