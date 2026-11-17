@@ -1486,3 +1486,4 @@ button.plp:hover{border-color:#CFDBEA;background:#fff}button.plp:hover .plpen{op
 .mcask p{margin:0 0 8px}.mcl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:6px}.mcl span{background:#EEF2F7;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;color:#22324A}
 .mcask .cf{flex-direction:column}
 .mcask .cf .btn{flex:none;width:100%;min-height:46px;padding:10px 16px}
+.note.warn{background:#FFF6E5;border-color:#F3D9A4;color:#6B4500}

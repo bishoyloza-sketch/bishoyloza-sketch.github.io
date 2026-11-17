@@ -671,7 +671,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'akh-certs-v288';
+var APP_V = 'akh-certs-v289';
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v\d+/); if (!m || m[0] === APP_V) return;
       var busy = function () { var a = document.activeElement; return (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) || sheetFn || ($('#dlg-root') && $('#dlg-root').innerHTML.trim()); };
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} (navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : Promise.resolve()).then(function () { setTimeout(function () { location.reload(); }, 400); }); };
@@ -1714,6 +1714,15 @@ function poSheet(p, done) { var o = p.order = p.order || {}; o.items = o.items |
 /* after a PO file is attached or chosen: read its lines and match the certificates */
 function poLoad(p, file) { var o = p.order || {}, pr = file ? poRead(file) : (o.fileId && o.driveId ? poReadSP(o) : Promise.resolve(null));
   return pr.then(function (r) { if (!r) return; if (r.b64) o.b64 = r.b64; if ((r.lines || []).length) { o.items = r.lines; if (r.number) o.number = o.number || r.number; if (r.date) o.date = o.date || r.date; certList(p).forEach(function (it) { it.poSet = 0; }); poAuto(p); poApply(p); toast('PO read: ' + r.lines.length + ' line' + (r.lines.length > 1 ? 's' : '') + ' – the prices follow it'); } saveProjects(); }).catch(function () {}); }
+
+/* a PO job: the PO is found by itself (its number in Calibration Orders, or the best PO file of the company), read, and every certificate takes its line and price – what is not in the PO goes to a separate letter */
+function poEnsure(p) { if (p.orderType !== 'po') return Promise.resolve(); var o = p.order || {};
+  if ((o.items || []).length) { poAuto(p); poApply(p); return Promise.resolve(); }
+  if (o.fileId && o.driveId || o.b64) return poLoad(p);
+  if (!spOn() || o.skipped) return Promise.resolve();
+  return findOrderFiles(p).then(function () { var l = ((p.orderFiles && p.orderFiles.list) || []).filter(function (f) { return /\.pdf$/i.test(f.name); }), f = l.filter(function (x) { return x.number; })[0] || l.filter(function (x) { return (x.score || 0) >= 6 && /\bp\.?o\b|purchase/i.test(x.name); })[0];
+    if (!f) return; p.order = { fileId: f.id, driveId: f.driveId, fileName: f.name, webUrl: f.webUrl, number: f.number || o.number || '', value: f.value, date: f.date, auto: true }; p.orderCheck = 'found'; saveProjects(); return poLoad(p); }).catch(function () {}); }
+function poExtra(p) { return certList(p).filter(function (it) { return it.letterId === 'xq'; }); }
 
 /* ===== shared jobs: every job lives on the jobs server (Google), open for the whole team; who did what is kept in History ===== */
 var SYNC = { on: function () { return !!(CFG.JOBS_URL && CFG.JOBS_KEY) && !DEMO; }, t: null, busy: false, pres: {}, viewers: null, err: '', last: 0, queue: [] };
@@ -5626,13 +5635,17 @@ function plSheet(p, done) { var st = { busy: true, fs: [] }, cur = plGet(p);
 function askPrices(p, left, done, rows) { var g = genDefaults(p), groups = {}, order = []; rows = rows || [];
   left.forEach(function (it) { var k = itKind(it) || (it.description || 'Other'); if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(it); });
   var opts = rows.length ? '<option value="">– choose from the price list –</option>' + rows.map(function (r) { return '<option value="' + esc(r.price) + '">' + esc(r.text.slice(0, 70)) + ' · ' + esc(r.price) + '</option>'; }).join('') : '';
-  openSheet(function () { return { title: 'Prices missing', body: '<div class="note">' + left.length + (left.length === 1 ? ' item has' : ' items have') + ' no price yet. ' + (rows.length ? 'Choose the line from the price list, or write the price.' : 'No price list was found for this company – write one price for each kind.') + ' It is kept for this company. Empty = Lump sum.</div>' +
+  openSheet(function () { return { title: 'Prices missing', body: (function () { var xq = left.filter(function (it) { return it.letterId === 'xq'; }).length, o = p.order || {}; return xq && p.orderType === 'po' ? '<div class="note warn"><b>' + xq + (xq === 1 ? ' item is' : ' items are') + ' not in PO ' + esc(o.number || '') + '</b> – ' + (xq === 1 ? 'it goes' : 'they go') + ' in a separate letter (Extra items – quotation). Write ' + (xq === 1 ? 'its price' : 'their prices') + ' for that letter.</div>' : ''; })() + '<div class="note">' + left.length + (left.length === 1 ? ' item has' : ' items have') + ' no price yet. ' + (rows.length ? 'Choose the line from the price list, or write the price.' : 'Write one price for each kind.') + ' It is kept for this company.</div>' +
       order.map(function (k, i) { return '<label class="f"><span>' + esc(k) + ' <i class="small">(' + groups[k].length + ': ' + esc(groups[k].slice(0, 3).map(function (x) { return x.code || x.description; }).join(', ')) + (groups[k].length > 3 ? '…' : '') + ')</i></span>' + (opts ? '<select class="inp" data-pl="' + i + '">' + opts + '</select>' : '') + '<input class="inp" inputmode="decimal" data-pk="' + i + '" placeholder="e.g. 450"' + (opts ? ' style="margin-top:6px"' : '') + '></label>'; }).join(''),
-    foot: '<button class="btn ghost" id="pkX">Leave Lump sum</button><button class="btn" id="pkOk">Save prices</button>',
+    foot: '<button class="btn ghost" id="pkX">Skip for now</button><button class="btn" id="pkOk">Save prices</button>',
     mount: function () { $$('[data-pl]').forEach(function (e) { e.onchange = function () { var q = $('[data-pk="' + e.dataset.pl + '"]'); if (q && e.value) q.value = e.value; }; });
       $('#pkX').onclick = function () { closeSheet(); done && done(); };
       $('#pkOk').onclick = function () { $$('[data-pk]').forEach(function (e) { var v = e.value.trim().replace(/,/g, ''); if (!v) return; var k = order[+e.dataset.pk]; priceBookSet(p, k, v); groups[k].forEach(function (it) { g.prices[it.id] = v; }); }); saveProjects(); toast('Prices saved'); closeSheet(); done && done(); }; } }; }); }
-function pricesThen(p, go, force) { var g = genDefaults(p), miss = certList(p).filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); if (!miss.length && !force) return go();
+function pricesThen(p, go, force) { if (p.orderType === 'po' && !p._poDone) { busy(true, 'Reading the PO…'); return poEnsure(p).then(function () { busy(false); p._poDone = 1; var x = poExtra(p), o = p.order || {};
+      if ((o.items || []).length) toast('PO ' + (o.number || '') + ': ' + (certList(p).length - x.length) + ' certificate' + (certList(p).length - x.length === 1 ? '' : 's') + ' priced from it' + (x.length ? ' · ' + x.length + ' not in the PO → a separate letter' : ''));
+      else toast('The PO was not found on SharePoint – attach it from Job details › Order', true);
+      try { pricesThen(p, go, force); } finally { delete p._poDone; } }); }
+  var g = genDefaults(p), miss = certList(p).filter(function (it) { return !String(g.prices[it.id] || '').trim(); }); if (!miss.length && !force) return go();
   if (!force && miss.every(function (it) { return (g.priceTry || {})[it.id]; })) { if (miss.some(function (it) { return !(g.priceAsk || {})[it.id]; })) { g.priceAsk = g.priceAsk || {}; miss.forEach(function (it) { g.priceAsk[it.id] = 1; }); saveProjects(); var pl = plGet(p); return askPrices(p, miss, go, pl ? pl.rows : []); } return go(); }
   if (!force && PRBG[p.id]) { busy(true, 'Getting the prices…'); var w8 = setInterval(function () { if (PRBG[p.id]) return; clearInterval(w8); busy(false); pricesThen(p, go); }, 400); return; }
   if (force) certList(p).forEach(function (it) { if (/lump/i.test(g.prices[it.id] || '')) g.prices[it.id] = ''; });
