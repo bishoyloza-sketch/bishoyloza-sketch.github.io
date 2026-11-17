@@ -286,8 +286,9 @@
       }).catch(function (e) {
         pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake');
         if (!/Wrong PIN/i.test(e.message)) return toast(e.message, true);
-        CERT.isCertPin(who.id, typed).then(function (yes) {
-          toast(yes ? 'That is your Certificates PIN – Lab Devices still has your old PIN. Sign in once with the old one (then both become the same), or ask the admin to reset your PIN.' : e.message, true);
+        CERT.link(who.id, typed).then(function (r) {
+          if (r === true) { pick = who; pin = typed; return tryLogin(); } /* the Devices PIN is now the Certificates PIN */
+          toast(r === 'differs' ? 'That is your Certificates PIN – Lab Devices still has your old PIN. Sign in once with the old one (then both become the same), or ask the admin to reset your PIN.' : e.message, true);
         });
       });
     }
@@ -398,19 +399,40 @@
       if (Object.keys(m).length) return;
       ((S.data && S.data.users) || S.people || []).forEach(function (p) { m[p.id] = { name: p.name, active: p.active !== false, dev: p.role || '', from: 'devices' }; });
     },
+    /* the Certificates record of a Devices person: same id, or a Certificates person linked to this Devices account */
+    keyOf: function (m, id) { if (m[id]) return id; var k = Object.keys(m).filter(function (x) { return m[x].devId === id && !m[x].gone; })[0]; return k || id; },
     /* the PIN of one person, in Certificates too */
     setPin: function (id, name, pin, must) {
       if (!this.on() || !id || !/^\d{4}$/.test(String(pin))) return Promise.resolve();
       var self = this;
-      return self.hash(id, pin).then(function (h) {
-        return self.put('__users', self.USERS, function (m) {
-          self.seed(m); var x = m[id];
-          if (x && x.gone) return false;
-          if (x && x.h === h && !!x.must === !!must) return false;
-          x = m[id] = x || { name: name, active: true, from: 'devices' };
-          x.h = h; x.must = !!must; x.at = new Date().toISOString();
+      return self.get('__users', self.USERS).then(function (g) {
+        var key = self.keyOf(g.m, id);
+        return self.hash(key, pin).then(function (h) {
+          return self.put('__users', self.USERS, function (m) {
+            self.seed(m); var x = m[key];
+            if (x && x.gone) return false;
+            if (x && x.h === h && !!x.must === !!must && !x.dtmp) return false;
+            x = m[key] = x || { name: name, active: true, from: 'devices' };
+            x.h = h; x.must = !!must; delete x.dtmp; x.at = new Date().toISOString();
+          });
         });
       }).catch(function () {});
+    },
+    /* a person made in Certificates and added here by itself: the first time they sign in here with their Certificates PIN,
+       the first Devices PIN is changed to it – then it is one PIN. Answers true when that was done. */
+    link: function (id, pin) {
+      if (!this.on()) return Promise.resolve(false);
+      var self = this;
+      return self.get('__users', self.USERS).then(function (g) {
+        var key = self.keyOf(g.m, id), x = g.m[key]; if (!x || x.gone || !x.h) return false;
+        return self.hash(key, pin).then(function (h) {
+          if (h !== x.h) return false;
+          if (!x.dtmp) return 'differs';
+          return Api.call({ action: 'changePin', userId: id, pin: x.dtmp, payload: { newPin: pin } }).then(function () {
+            return self.put('__users', self.USERS, function (m) { if (!m[key]) return false; delete m[key].dtmp; }).then(function () { return true; });
+          });
+        });
+      }).catch(function () { return false; });
     },
     /* a new person here: if they were added in Certificates only (same name), their Certificates record moves to this id */
     adopt: function (id, name, pin) {
@@ -430,12 +452,6 @@
         return self.put('__roles', self.ROLES, function (r) { if (r[old] == null || r[id] != null) return false; r[id] = r[old]; });
       }).catch(function () {});
     },
-    /* is this the person's Certificates PIN? (to explain a wrong PIN here) */
-    isCertPin: function (id, pin) {
-      if (!this.on()) return Promise.resolve(false);
-      var self = this;
-      return Promise.all([self.get('__users', self.USERS), self.hash(id, pin)]).then(function (a) { var x = a[0].m[id]; return !!(x && x.h && x.h === a[1]); }).catch(function () { return false; });
-    }
   };
 
   /* ================= top bar (the same bar as Akhnaton Certificates) ================= */

@@ -656,11 +656,11 @@ function renderLogin() {
   function inDev() { return (S.people || []).some(function (p) { return p.id === pick.id; }); }
   function devChange(np) { var auth = LS.get('dpin:' + pick.id, '') || oldPin; if (!inDev() || !auth) return Promise.resolve('');
     return Api.call({ action: 'changePin', userId: pick.id, pin: auth, payload: { newPin: np } }).then(function () { LS.set('dpin:' + pick.id, np); return np; }).catch(function () { return ''; }); }
-  function certCheck(u, devErr) { return pinHash(pick.id, pin).then(function (h) { if (h !== u.h) return fail(devErr || 'Wrong PIN'); busy = false; if (u.must) { oldPin = pin; stage = 'new1'; pin = ''; draw(); return toast('Choose your own PIN now – it works in both apps'); } finish(); }); }
+  function certCheck(u, devErr) { return pinHash(pick.id, pin).then(function (h) { if (h !== u.h) return fail(devErr || 'Wrong PIN'); busy = false; if (u.must) { oldPin = pin; stage = 'new1'; pin = ''; draw(); return toast('Choose your own PIN now – it works in both apps'); } devLink(pick.id, pin); finish(); }); }
   function next() {
     if (stage === 'new1') { first = pin; pin = ''; stage = 'new2'; return draw(); }
     if (stage === 'new2') { if (pin !== first) { stage = 'new1'; return fail('The two PINs are not the same – choose it again'); } busy = true; draw(); var np = pin;
-      return save(pick.id, np).then(function () { return devChange(np); }).then(function (dp) { busy = false; toast('Your PIN is saved – the same PIN for Certificates and Lab Devices'); finish(dp); }).catch(function (e) { fail(e.message); }); }
+      return save(pick.id, np).then(function () { return devLink(pick.id, np); }).then(function () { return devChange(np); }).then(function (dp) { busy = false; toast('Your PIN is saved – the same PIN for Certificates and Lab Devices'); finish(dp); }).catch(function (e) { fail(e.message); }); }
     busy = true; draw(); var u = (CU.map || {})[pick.id];
     if (!inDev()) { if (u && u.h) return certCheck(u); return fail('Wrong PIN'); }
     Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) { busy = false; var dp = pin; LS.set('dpin:' + pick.id, dp);
@@ -687,7 +687,7 @@ function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.
   if (p.stage !== 'done') return renderWizard(p);
   return renderOverview(p);
 }
-function boot() { undoInit(); render(); try { syncStart(); } catch (e) {} try { dsRemoteSync(); } catch (e) {} LOC.init().then(function () { if (!sheetFn) render(); }); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) {
+function boot() { undoInit(); render(); try { syncStart(); } catch (e) {} try { dsRemoteSync(); } catch (e) {} LOC.init().then(function () { if (!sheetFn) render(); }); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); devAutoSync(); }).catch(function (e) {
     /* the Devices app did not accept this person: stay signed in to Certificates and use the shared lab copy */
     if (/PIN|sign in|not allowed|stopped/i.test(e.message)) { if (S.session) { S.session.noDev = true; S.session.dpin = ''; LS.set('session', S.session); LS.del('dpin:' + S.session.userId); } return labLoad().then(function () { if (!sheetFn) render(); }).catch(function () {}); }
     toast(e.message, true); }); }
@@ -1481,10 +1481,28 @@ function noAccessCheck() { permPaint(); if (!S.me || certRoleOf(S.me) !== 'none'
   $('#app').innerHTML = '<div class="shell"><main style="padding:40px 20px;max-width:520px;margin:0 auto;text-align:center"><div style="font-size:44px">🔒</div><h2>No access to Certificates</h2><p class="small">' + esc(S.me.name) + ', your account has no access to the Certificates app. Ask the admin to give you access.</p><button class="btn" id="naOut">Sign out</button></main></div>';
   $('#naOut').onclick = signOut; return true; }
 function cuAll() { var m = JSON.parse(JSON.stringify(CU.map || {})); cuSeed(m); var dev = S.people || (S.data && S.data.users) || [];
-  return Object.keys(m).filter(function (id) { return !m[id].gone; }).map(function (id) { var d = dev.filter(function (p) { return p.id === id; })[0]; return { id: id, name: m[id].name, active: m[id].active !== false, role: d ? d.role : '', inDev: !!d, hasPin: !!m[id].h }; }); }
+  return Object.keys(m).filter(function (id) { return !m[id].gone; }).map(function (id) { var d = dev.filter(function (p) { return p.id === id || p.id === m[id].devId; })[0]; return { id: id, name: m[id].name, active: m[id].active !== false, role: d ? d.role : '', inDev: !!d, hasPin: !!m[id].h }; }); }
 function showPin(name, pin, both) { dialog('New PIN for ' + esc(name), '<div style="text-align:center;font-size:34px;font-weight:800;letter-spacing:8px;margin:10px 0;color:#13294B">' + esc(pin) + '</div>Give it to ' + esc(String(name).split(/\s+/)[0]) + '. ' + (both ? 'It works in <b>Certificates and Lab Devices</b>' : 'It is for <b>Certificates only</b> (sign in to Lab Devices to make it work there too)') + ' – the first time they sign in with it, they choose their own PIN.', 'Done', ''); }
 /* the admin is signed in to Akhnaton Devices too: people and PINs are made there as well, so one PIN works in both apps */
 function devAdmin() { return !DEMO && !!(S.session && S.session.dpin && !S.session.noDev) && /^(admin|superadmin)$/.test((S.me && S.me.role) || ''); }
+/* EVERY person in Certificates is in Lab Devices too – done by itself whenever the admin opens Certificates.
+   The person keeps their Certificates id and PIN; the Devices account is linked (devId) and gets a first PIN (dtmp) that is
+   changed to their own PIN the first time they sign in to either app. Their job/permissions in Lab Devices are set there (Engineer to start). */
+var DEVSYNC = { busy: false };
+function devAutoSync() { if (DEVSYNC.busy || !devAdmin() || !CU.map) return Promise.resolve(); DEVSYNC.busy = true;
+  var dev = S.people || (S.data && S.data.users) || [], ids = {}, names = {}, norm = function (x) { return String(x || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+  dev.forEach(function (p) { ids[p.id] = 1; names[norm(p.name)] = p.id; });
+  var todo = Object.keys(CU.map).filter(function (id) { var u = CU.map[id]; return !ids[id] && !u.gone && !u.rm && u.active !== false && !u.devId && String(u.name || '').trim(); });
+  var made = [];
+  var one = function (i) { if (i >= todo.length) return Promise.resolve(); var id = todo[i], u = CU.map[id], same = names[norm(u.name)];
+    var mk = same ? Promise.resolve({ id: same }) : req('saveUser', { user: { name: String(u.name).trim(), role: 'engineer', active: true } });
+    return mk.then(function (r) { return cuPut(function (m) { if (!m[id]) return; m[id].devId = r.id; if (r.pin) m[id].dtmp = r.pin; }).then(function () { made.push(u.name); }); }).catch(function () {}).then(function () { return one(i + 1); }); };
+  return one(0).then(function () { DEVSYNC.busy = false; if (!made.length) return;
+    Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); }).catch(function () {});
+    toast('Added to Lab Devices too: ' + made.join(', ')); syncLog(null, 'user', 'Added to Lab Devices: ' + made.join(', ')); }, function () { DEVSYNC.busy = false; }); }
+/* a linked person signs in with their PIN: their Lab Devices PIN becomes the same */
+function devLink(id, pin) { var u = (CU.map || {})[id]; if (!u || !u.devId || !u.dtmp || !/^\d{4}$/.test(pin)) return Promise.resolve();
+  return Api.call({ action: 'changePin', userId: u.devId, pin: u.dtmp, payload: { newPin: pin } }).then(function () { return cuPut(function (m) { if (m[id]) delete m[id].dtmp; }); }).catch(function () {}); }
 /* someone added in Certificates only: make them in Akhnaton Devices and move their Certificates record to the Devices id */
 function devAdd(u, done) { if (!devAdmin()) return toast('Sign in to Lab Devices as the admin first (sign out here and sign in again with your PIN)', true);
   dialog('Add ' + esc(u.name) + ' to Lab Devices?', 'They get one new PIN that works in Certificates and Lab Devices. Their Certificates permission stays the same. In Lab Devices they start as <b>Engineer</b> – change the job there if needed.', 'Add').then(function (y) { if (!y) return; toast('Working…');
@@ -1495,7 +1513,7 @@ function devAdd(u, done) { if (!devAdmin()) return toast('Sign in to Lab Devices
         .then(function () { closeSheet(); showPin(u.name, np, true); syncLog(null, 'user', 'Added ' + u.name + ' to Lab Devices'); done && done(); }); })
       .catch(function (e) { toast(e.message, true); }); }); }
 function usersSheet() { if (!certAdmin()) return toast('Only an admin can open Users', true); var busy = false;
-  var load = function () { return cuFetch().catch(function (e) { toast(e.message, true); }); };
+  var load = function () { return cuFetch().then(function () { return devAutoSync(); }).catch(function (e) { toast(e.message, true); }); };
   var body = function () { var us = cuAll(), order = { admin: 0, writer: 1, none: 2 };
     us.sort(function (a, b) { return certInfo(a).rm - certInfo(b).rm || (a.active === false) - (b.active === false) || order[certRoleOf(a)] - order[certRoleOf(b)] || String(a.name).localeCompare(b.name); });
     return '<div class="small" style="margin-bottom:10px">One PIN for Certificates and Lab Devices. New people are added to both apps. The permission here is for Certificates only; the job in Lab Devices is shown for reference.</div><div class="list">' + us.map(function (u) { var r = certRoleOf(u);
@@ -1522,7 +1540,7 @@ function userEdit(u, done) { var ci0 = certInfo(u), f = { name: u ? u.name : '',
     var rmB = $('#ueRm'); if (rmB) rmB.onclick = function () { dialog('Remove ' + esc(u.name) + ' from Certificates?', 'They are taken off the Certificates list and can not sign in any more. Akhnaton Devices is not touched.', 'Remove').then(function (y) { if (!y) return; f.rm = true; toast('Working…'); cuPut(function (m) { if (m[u.id]) { m[u.id].gone = true; m[u.id].active = false; m[u.id].h = ''; } }).then(function () { return rolesSet(u.id, value(), u.name, 'Removed ' + u.name + ' from Certificates'); }).then(function () { closeSheet(); toast('Removed from Certificates'); done && done(); }).catch(function (e) { toast(e.message, true); }); }); };
     var dv = $('#ueDv'); if (dv) dv.onclick = function () { devAdd(u, done); };
     var rp = $('#ueP'); if (rp) rp.onclick = function () { var both = u.inDev && devAdmin(); dialog('Give ' + esc(u.name) + ' a new PIN?', both ? 'The old PIN stops working in Certificates and Lab Devices.' : 'The old Certificates PIN stops working.', 'Reset PIN').then(function (y) { if (!y) return; toast('Working…');
-      (both ? req('resetPin', { userId: u.id }).then(function (r) { return r.pin; }) : Promise.resolve(newPin())).then(function (np) { return pinHash(u.id, np).then(function (h) { return cuPut(function (m) { var x = m[u.id] = m[u.id] || { name: u.name, active: true }; x.h = h; x.must = true; }); }).then(function () { showPin(u.name, np, both); syncLog(null, 'user', 'Reset the PIN of ' + u.name); }); }).catch(function (e) { toast(e.message, true); }); }); };
+      (both ? req('resetPin', { userId: ((CU.map || {})[u.id] || {}).devId || u.id }).then(function (r) { return r.pin; }) : Promise.resolve(newPin())).then(function (np) { return pinHash(u.id, np).then(function (h) { return cuPut(function (m) { var x = m[u.id] = m[u.id] || { name: u.name, active: true }; x.h = h; x.must = true; if (both && x.devId) x.dtmp = np; }); }).then(function () { showPin(u.name, np, both); syncLog(null, 'user', 'Reset the PIN of ' + u.name); }); }).catch(function (e) { toast(e.message, true); }); }); };
     $('#ueS').onclick = function () { var nm = String(f.name || '').trim(); if (!nm) return toast('Write the name', true); var b = $('#ueS'); b.disabled = true;
       var both = !u && devAdmin(), nid = u ? u.id : 'C' + Date.now().toString(36).toUpperCase(), np = u ? '' : newPin(), chg = !u || nm !== u.name || f.active !== (u.active !== false);
       var mk = both ? req('saveUser', { user: { name: nm, role: 'engineer', active: f.active } }).then(function (r) { nid = r.id; np = r.pin; return Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); }).catch(function () {}); }) : Promise.resolve();
