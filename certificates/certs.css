@@ -1562,3 +1562,7 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .lbp{background:#DFE4EA;border-radius:14px;padding:12px}.lbp iframe{width:100%;border:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);display:block}
 @media (max-width:760px){.lbw{grid-template-columns:1fr}}
 .lbs .dfseg{display:grid!important;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px}.lbs .dfseg button{white-space:normal;line-height:1.25;padding:8px 6px}
+.lmmap{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-items:end;background:#fff;border:1px solid #E3E9F2;border-radius:14px;padding:10px 12px;margin-top:10px}
+.lmmap>b{grid-column:1/-1;color:#0E2A52}.lmmap label span{display:block;font-size:12px;color:#5B6B80;font-weight:600;margin-bottom:3px}.lmmap select{width:100%;font-size:12.5px}
+.lmmap small{grid-column:1/-1;color:#8695A8;font-size:12px}
+@media (max-width:700px){.lmmap{grid-template-columns:1fr 1fr}}
