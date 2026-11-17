@@ -1518,3 +1518,25 @@ button.plp:hover{border-color:#CFDBEA;background:#fff}button.plp:hover .plpen{op
 .hjfx.rdy{background:#1E7B4B;border-color:#1E7B4B;color:#fff}
 @media (max-width:700px){.hpipe{grid-template-columns:1fr}}
 .snt h3{margin-bottom:4px}.snt p{margin:0 0 10px}.sng{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}.sng .w2{grid-column:1/-1}.snt .fld{margin-bottom:8px}
+.hjtabs{overflow-x:auto}.hjtabs button{white-space:nowrap}
+.hjtabs .t-print.due em{background:#4F7FB5;color:#fff}.hjtabs .t-send.due em{background:#B26A00;color:#fff}
+.hjr .hjfx{margin-right:6px}
+/* Files page */
+.gwarn{display:flex;align-items:center;gap:8px;background:#FFF6E5;border:1px solid #F3D9A4;border-radius:12px;padding:8px 12px;margin:10px 0;font-size:13.5px;color:#6B4500}.gwarn span{flex:1}
+.gtools{display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 2px 4px}.gtools .lk{font-size:13.5px}
+.gnp{color:#B26A00;font-size:12px}
+.gout{background:#fff;border:1px solid #E3E9F2;border-radius:14px;padding:10px 14px;margin:14px 0 12px}
+.goutr{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:4px 0}.gl{font-size:12px;font-weight:600;color:#8695A8;text-transform:uppercase;letter-spacing:.06em;min-width:44px}
+.goutr .dfseg{margin:0}.grg{width:auto;min-width:150px;padding:6px 10px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.g3 button{background:#fff;border:1px solid #E3E9F2;border-radius:16px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font:inherit;color:#22324A;transition:.15s}
+.g3 button span{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:#EEF4FB;color:#1864AB;margin-bottom:4px}
+.g3 button b{font-size:16px;color:#0E2A52}.g3 button small{font-size:12px;color:#8695A8;text-align:center}
+.g3 button:hover{border-color:#B9C8DC;box-shadow:0 6px 18px rgba(16,32,64,.08);transform:translateY(-1px)}
+#gPrint span{background:#0E2A52;color:#fff}
+.gpo{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
+.gpo button{text-align:left;background:#fff;border:1.5px solid #E3E9F2;border-radius:14px;padding:14px 16px;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:2px}
+.gpo button b{font-size:16px;color:#0E2A52}.gpo button small{font-size:12.5px;color:#8695A8}.gpo button:hover{border-color:#0E2A52}
+@media (max-width:640px){.g3{grid-template-columns:1fr}}
+button.lk{background:none;border:0;padding:2px 0;font:600 13.5px var(--font,inherit);color:#1864AB;cursor:pointer;text-decoration:none}button.lk:hover{text-decoration:underline}
+#gpM{display:block;margin-bottom:6px}
