@@ -372,14 +372,14 @@ var Api = { call: function (req) {
     .then(function (j) { if (!j.ok) throw new Error(j.error || 'Something went wrong.'); return j.data; });
 } };
 (function () { try { var pr = JSON.parse(localStorage.getItem(LSP + 'projects') || '[]'); pr.forEach(function (p) { (p.items || []).forEach(function (it) { if (it.old && it.old.status === 'searching') it.old = null; var o = it.old, nv = it.nv || {}; if (o && o.dirs === 2 && (o.points || []).length && !o.points.some(function (q) { return String(q.reading2 || '').trim(); }) && !Object.keys(nv).some(function (k) { return /d$/.test(k) && String(nv[k] || '').trim(); })) o.dirs = 1; }); }); localStorage.setItem(LSP + 'projects', JSON.stringify(pr)); } catch (e) {} })();
-var S = { session: DEMO ? { userId: 'U01', pin: 'demo' } : LS.get('session', null), me: null, people: LS.get('people', null), data: LS.get('cache', null), projects: LS.get('projects', []), cur: null, view: 'home' };
+var S = { session: DEMO ? { userId: 'U01', pin: 'demo' } : LS.get('session', null), me: (function () { var m = LS.get('me', null), s0 = LS.get('session', null); return m && s0 && m.id === s0.userId ? m : null; })(), people: LS.get('people', null), data: LS.get('cache', null), projects: LS.get('projects', []), cur: null, view: 'home' };
 var DEMO_DEV = [{ id: 'dv1', manufacturer: 'Druck', description: 'Digital Pressure Calibrator', model: 'DPI610', serial: '61054935', range: '(0 : 20) bar', calDue: '2027-03-15', category: 'Pressure' }, { id: 'dv2', manufacturer: 'Fluke', description: 'PRT with Digital Indicator', model: '1524', serial: 'A12701', range: '(-50 : 300) °C', calDue: '2027-01-20', category: 'Temperature' },
   { id: 'dv3', manufacturer: 'Kern', description: 'Weight Set Class E2', model: 'E2', serial: 'S1508416', range: '(0 : 5000) g', calDue: '2027-05-02', category: 'Weight' }, { id: 'dv4', manufacturer: 'Extech', description: 'Tachometer', model: '461920', serial: '41880024', range: '(5 : 99999) RPM', calDue: '2027-02-11', category: 'RPM' },
   { id: 'dv5', manufacturer: 'Fluke', description: 'Digital Stop Watch', model: 'SW-1', serial: 'Z1242G', range: '(0 : 600) min', calDue: '2027-04-09', category: 'Timer' }, { id: 'dv6', manufacturer: 'Testo', description: 'Differential Pressure Meter', model: '510', serial: 'DEMO-3365', range: '(0 : 1000) Pa', calDue: '2027-06-30', category: 'Pressure' }];
 function demoState() { return { companies: [DEMO.company], users: DEMO.people, devices: DEMO_DEV }; }
 function req(action, payload) { if (DEMO) return Promise.resolve(action === 'state' ? demoState() : action === 'people' ? DEMO.people : action === 'login' ? { user: DEMO.people[0] } : {}); return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
-  S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; return d; }); }
+  S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; if (S.me) LS.set('me', S.me); return d; }); }
 /* ---- undo (any change) + recycle bin (anything deleted is kept 60 days) ---- */
 var UNDO = { st: [], rd: [], last: null, ids: null, t: 0, busy: false }, UNDO_MAX = 100;
 function projIds(pr) { var m = {}; (pr || []).forEach(function (p) { m[p.id] = (p.items || []).map(function (i) { return i.id; }); }); return m; }
@@ -536,12 +536,12 @@ function renderLogin() {
   }
   function tryLogin() { Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) {
       if (r.mustChange) { pin = ''; draw(); return dialog('Choose your PIN first', 'Open <b>Akhnaton Devices</b> once and choose your own PIN, then sign in here with it.', 'OK', 'Close'); }
-      S.session = { userId: pick.id, pin: pin }; LS.set('session', S.session); S.me = r.user; boot();
+      S.session = { userId: pick.id, pin: pin }; LS.set('session', S.session); S.me = r.user; if (S.me) LS.set('me', S.me); boot();
     }).catch(function (e) { pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake'); toast(e.message, true); }); }
   draw();
   Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); if (!pick) draw(); }).catch(function (e) { if (!S.people) toast(CL.on ? (e && e.message) || 'Could not load the names' : 'Cannot reach the server. Check the internet.', true); });
 }
-function signOut() { S.session = null; S.me = null; LS.del('session'); renderLogin(); }
+function signOut() { S.session = null; S.me = null; LS.del('session'); LS.del('me'); renderLogin(); }
 
 /* ================= app shell ================= */
 function top(title, sub, extra) {
