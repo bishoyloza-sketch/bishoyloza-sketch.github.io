@@ -432,7 +432,10 @@ function mobSync() { var f = document.querySelector('.wiz-foot'), mt = document.
   /* ‹ Previous and Next › side by side, like turning the pages of the certificates */
   var cb = document.getElementById('cbk'), cn = document.getElementById('cn'), nx = document.getElementById('cfNext');
   if (cb && cn) { if (!nx || nx.previousElementSibling !== cb) { if (nx) nx.remove(); nx = document.createElement('button'); nx.type = 'button'; nx.id = 'cfNext'; nx.className = 'btn ghost'; nx.textContent = 'Next ›'; nx.onclick = function () { var c = document.getElementById('cn'); if (c && !c.disabled) c.click(); }; cb.insertAdjacentElement('afterend', nx); }
-    nx.disabled = cn.disabled; nx.title = cn.disabled ? 'This is the last certificate' : 'Next certificate'; } else if (nx) nx.remove();
+    nx.disabled = cn.disabled; nx.title = cn.disabled ? 'This is the last certificate' : 'Next certificate';
+    /* "All certificates" is always there; on the first certificate Previous is just greyed */
+    var al = document.getElementById('cfAll'); if (!al || al.nextElementSibling !== cb) { if (al) al.remove(); al = document.createElement('button'); al.type = 'button'; al.id = 'cfAll'; al.className = 'btn ghost'; al.title = 'All the certificates of this job'; al.innerHTML = '☰ All'; al.onclick = function () { var p = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (p) toHub(p); }; cb.insertAdjacentElement('beforebegin', al); }
+    if (/All/.test(cb.textContent)) { cb.textContent = '‹ Previous'; cb.disabled = true; cb.title = 'This is the first certificate'; } } else { if (nx) nx.remove(); var a2 = document.getElementById('cfAll'); if (a2) a2.remove(); }
   document.body.classList.add('mt'); var has = function (id) { return !!document.getElementById(id); };
   mt.querySelector('[data-mt="cov"]').style.display = has('cTab') ? '' : 'none'; mt.querySelector('[data-mt="mach"]').style.display = has('mTab') ? '' : 'none'; }
 setInterval(function () { try { mobSync(); } catch (e) {} }, 300); window.addEventListener('resize', function () { try { mobSync(); } catch (e) {} });
