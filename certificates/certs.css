@@ -1545,3 +1545,7 @@ button.lk{background:none;border:0;padding:2px 0;font:600 13.5px var(--font,inhe
 .eqk.fit{border-color:#9FD3B4;box-shadow:0 0 0 2px rgba(30,123,75,.12)}
 button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .pkq{flex:1;min-width:180px;max-width:280px;margin-left:auto;height:38px}
+.rru{width:96px;height:42px;margin-left:6px;padding:0 8px}
+#alarmKeep{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:90;display:flex;align-items:center;gap:10px;background:#0E2A52;color:#fff;border-radius:14px;padding:10px 12px 10px 16px;box-shadow:0 10px 30px rgba(10,20,38,.3);font-size:14px;max-width:92vw}
+#alarmKeep b{color:#FFD58A}#alarmKeep .btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+#alarmKeep .btn:not(.ghost){background:#fff;color:#0E2A52;border-color:#fff}
