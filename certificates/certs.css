@@ -1167,3 +1167,5 @@ body.np-deljob [data-pd]{display:none!important}
 body.np-activity #actFab{display:none!important}
 body.np-users #usersB{display:none!important}
 .ujd{display:flex;flex-wrap:wrap;gap:2px 14px}.ujd b{color:#13294B;font-weight:600}
+#busyPill{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:300;background:#13294B;color:#fff;padding:8px 16px;border-radius:999px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(19,41,75,.3)}
+#busyPill .spin{width:14px;height:14px;border-width:2px}

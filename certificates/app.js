@@ -377,9 +377,9 @@ var DEMO_DEV = [{ id: 'dv1', manufacturer: 'Druck', description: 'Digital Pressu
   { id: 'dv3', manufacturer: 'Kern', description: 'Weight Set Class E2', model: 'E2', serial: 'S1508416', range: '(0 : 5000) g', calDue: '2027-05-02', category: 'Weight' }, { id: 'dv4', manufacturer: 'Extech', description: 'Tachometer', model: '461920', serial: '41880024', range: '(5 : 99999) RPM', calDue: '2027-02-11', category: 'RPM' },
   { id: 'dv5', manufacturer: 'Fluke', description: 'Digital Stop Watch', model: 'SW-1', serial: 'Z1242G', range: '(0 : 600) min', calDue: '2027-04-09', category: 'Timer' }, { id: 'dv6', manufacturer: 'Testo', description: 'Differential Pressure Meter', model: '510', serial: 'DEMO-3365', range: '(0 : 1000) Pa', calDue: '2027-06-30', category: 'Pressure' }];
 function demoState() { return { companies: [DEMO.company], users: DEMO.people, devices: DEMO_DEV }; }
-function req(action, payload) { if (DEMO) return Promise.resolve(action === 'state' ? demoState() : action === 'people' ? DEMO.people : action === 'login' ? { user: DEMO.people[0] } : {}); return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && S.session.pin, payload: payload || {} }); }
+function req(action, payload) { if (DEMO) return Promise.resolve(action === 'state' ? demoState() : action === 'people' ? DEMO.people : action === 'login' ? { user: DEMO.people[0] } : {}); return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && (S.session.dpin || S.session.pin), payload: payload || {} }); }
 function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
-  S.me = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0] || S.me; if (S.me) LS.set('me', S.me); return d; }); }
+  var dv = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0]; if (dv) S.me = Object.assign({}, dv, { name: ((CU.map || {})[dv.id] || {}).name || dv.name }); if (S.me) LS.set('me', S.me); return d; }); }
 /* ---- undo (any change) + recycle bin (anything deleted is kept 60 days) ---- */
 var UNDO = { st: [], rd: [], last: null, ids: null, t: 0, busy: false }, UNDO_MAX = 100;
 function projIds(pr) { var m = {}; (pr || []).forEach(function (p) { m[p.id] = (p.items || []).map(function (i) { return i.id; }); }); return m; }
@@ -516,30 +516,67 @@ var SHEET_LAST = null; function renderSheet() { var root = $('#sheet-root'); if 
 function closeSheet() { var gr = window.__gapRet, back = gr && gr.sheet && sheetFn === gr.sheet; sheetFn = null; renderSheet(); render(); if (back) { window.__gapRet = null; setTimeout(function () { gr.fn(); setTimeout(function () { gapDoneToast(gr.cert); }, 150); }, 30); } }
 
 /* ================= login ================= */
+/* ===== "Working…": whenever something you pressed waits for a server or a file, a small pill says so (background refreshes stay quiet) ===== */
+(function () { var n = 0, act = 0, t = null, pill = function (on) { var e = document.getElementById('busyPill'); if (on) { if (!e) { e = document.createElement('div'); e.id = 'busyPill'; e.innerHTML = '<span class="spin"></span> Working…'; document.body.appendChild(e); } } else if (e) e.remove(); };
+  ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, function () { act = Date.now(); }, true); });
+  var of = window.fetch; if (!of) return; window.fetch = function () { var mine = Date.now() - act < 2500; if (!mine) return of.apply(this, arguments); n++; clearTimeout(t); t = setTimeout(function () { if (n > 0) pill(true); }, 350);
+    var done = function () { n = Math.max(0, n - 1); if (!n) { clearTimeout(t); pill(false); } }; return of.apply(this, arguments).then(function (r) { done(); return r; }, function (e) { done(); throw e; }); }; })();
+/* ===== Certificates has its own people and PINs (kept on the jobs server); Akhnaton Devices keeps its own ===== */
+var CU = { map: LS.get('certUsers', null), rev: LS.get('certUsersRev', null) };
+function cuTake(j) { try { CU.map = JSON.parse(j.json || '{}') || {}; } catch (e) { CU.map = {}; } CU.rev = j.rev; LS.set('certUsers', CU.map); LS.set('certUsersRev', CU.rev); }
+function cuFetch() { if (!SYNC.on()) return Promise.resolve(); return jcall('list', { since: CU.map ? LS.get('cuSince', 0) : 0 }).then(function (r) { (r.jobs || []).forEach(function (j) { if (j.deleted) return; if (j.id === '__users') cuTake(j); if (j.id === '__roles') rolesTake(j); }); LS.set('cuSince', r.now || Date.now()); }); }
+/* the first time, the names (and ids) are copied from Akhnaton Devices – after that the two lists are separate */
+function cuSeed(m) { if (Object.keys(m).length) return; (S.people || (S.data && S.data.users) || []).forEach(function (p) { m[p.id] = { name: p.name, active: p.active !== false, dev: p.role || '', from: 'devices' }; }); }
+function cuPut(mut) { var put = function (base, rev) { var m = JSON.parse(JSON.stringify(base || {})); cuSeed(m); mut(m);
+    return jcall('save', { meta: { id: '__users', company: '(app users – do not delete)', done: 0, total: 0 }, json: JSON.stringify(m), baseRev: rev == null ? null : rev }).then(function (r) {
+      if (r.conflict) { var c = {}; try { c = JSON.parse(r.json || '{}'); } catch (e) {} return put(c, r.rev); } CU.map = m; CU.rev = r.rev; LS.set('certUsers', m); LS.set('certUsersRev', r.rev); }); };
+  return put(CU.map || {}, CU.rev); }
+function pinHash(id, pin) { var d = new TextEncoder().encode('akh-cert|' + id + '|' + pin); return crypto.subtle.digest('SHA-256', d).then(function (b) { return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }); }
+function newPin() { return String(Math.floor(1000 + Math.random() * 9000)); }
+/* the list people pick their name from */
+function cuPeople() { var m = CU.map, dev = S.people || (S.data && S.data.users) || []; if (!m || !Object.keys(m).length) return dev.filter(function (p) { return p.active !== false; }).map(function (p) { return { id: p.id, name: p.name, role: p.role }; });
+  return Object.keys(m).filter(function (id) { var u = m[id]; return u.active !== false && !u.rm; }).map(function (id) { return { id: id, name: m[id].name, role: (dev.filter(function (p) { return p.id === id; })[0] || {}).role || m[id].dev || '' }; }); }
 function renderLogin() {
-  var pick = null, pin = '', app = $('#app');
+  var pick = null, pin = '', stage = 'pin', first = '', app = $('#app'), busy = false;
   function draw() {
-    var people = (S.people || []).slice(), order = { admin: 0, keeper: 1, engineer: 2 }, roleName = { admin: 'Admin', keeper: 'Lab keeper', engineer: 'Engineer' };
-    people.sort(function (a, b) { return (order[a.role] - order[b.role]) || a.name.localeCompare(b.name); });
+    var people = cuPeople().sort(function (a, b) { return String(a.name).localeCompare(b.name); });
+    var title = stage === 'new1' ? 'Choose your new PIN' : stage === 'new2' ? 'Write the new PIN again' : 'Enter your 4-digit PIN';
     app.innerHTML = '<div class="login"><div class="login-top"><img src="logo-en-light.png" alt="Akhnaton Trading and Representation">' +
       '<h1><small>Akhnaton</small>Certificates</h1><p>Calibration certificates from last year\'s data.</p></div><div class="login-card"><div>' +
-      (!pick ? '<div class="sec" style="margin-top:4px"><h2>Who are you?</h2><small>' + (CL.on ? 'Tap your name' : 'Same PIN as Akhnaton Devices') + '</small></div>' +
-        (people.length ? '<div class="people">' + people.map(function (p) { return '<button data-u="' + p.id + '"><b>' + esc(p.name) + '</b><small>' + (roleName[p.role] || p.role) + '</small></button>'; }).join('') + '</div>'
+      (!pick ? '<div class="sec" style="margin-top:4px"><h2>Who are you?</h2><small>Tap your name</small></div>' +
+        (people.length ? '<div class="people">' + people.map(function (p) { return '<button data-u="' + esc(p.id) + '"><b>' + esc(p.name) + '</b><small>' + esc(CROLE[certRoleOf(p)] || '') + '</small></button>'; }).join('') + '</div>'
           : '<div class="empty"><b>Loading names…</b>Check the internet connection.</div>')
-      : '<div class="sec" style="margin-top:4px"><h2>' + esc(pick.name) + '</h2><button class="btn ghost sm" data-back>Change</button></div><p style="text-align:center;margin:8px 0 0;color:var(--muted)">Enter your 4-digit PIN</p>' +
+      : '<div class="sec" style="margin-top:4px"><h2>' + esc(pick.name) + '</h2>' + (stage === 'pin' ? '<button class="btn ghost sm" data-back>Change</button>' : '') + '</div><p style="text-align:center;margin:8px 0 0;color:var(--muted)">' + title + (busy ? ' <span class="spin dark"></span>' : '') + '</p>' +
         '<div class="pin" id="pin">' + [0, 1, 2, 3].map(function (i) { return '<i class="' + (i < pin.length ? 'f' : '') + '"></i>'; }).join('') + '</div>' +
-        '<div class="pad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(function (k) { return k ? '<button data-k="' + k + '">' + k + '</button>' : '<span></span>'; }).join('') + '</div>') +
+        '<div class="pad">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(function (k) { return k ? '<button data-k="' + k + '">' + k + '</button>' : '<span></span>'; }).join('') + '</div>' +
+        '<p class="small" style="text-align:center;margin-top:8px">You can type the numbers on the keyboard too</p>') +
       '</div></div></div>';
-    $$('[data-u]').forEach(function (b) { b.onclick = function () { pick = people.filter(function (p) { return p.id === b.dataset.u; })[0]; pin = ''; if (CL.on) { pin = '----'; return tryLogin(); } draw(); }; });
+    $$('[data-u]').forEach(function (b) { b.onclick = function () { pick = people.filter(function (p) { return p.id === b.dataset.u; })[0]; pin = ''; stage = 'pin'; draw(); }; });
     var bk = $('[data-back]'); if (bk) bk.onclick = function () { pick = null; draw(); };
-    $$('[data-k]').forEach(function (b) { b.onclick = function () { var k = b.dataset.k; if (k === '⌫') pin = pin.slice(0, -1); else if (pin.length < 4) pin += k; draw(); if (pin.length === 4) tryLogin(); }; });
+    $$('[data-k]').forEach(function (b) { b.onclick = function () { key(b.dataset.k); }; });
   }
-  function tryLogin() { Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) {
-      if (r.mustChange) { pin = ''; draw(); return dialog('Choose your PIN first', 'Open <b>Akhnaton Devices</b> once and choose your own PIN, then sign in here with it.', 'OK', 'Close'); }
-      S.session = { userId: pick.id, pin: pin }; LS.set('session', S.session); S.me = r.user; if (S.me) LS.set('me', S.me); boot();
-    }).catch(function (e) { pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake'); toast(e.message, true); }); }
+  function key(k) { if (!pick || busy) return; if (k === '⌫') pin = pin.slice(0, -1); else if (/^\d$/.test(k) && pin.length < 4) pin += k; else return; draw(); if (pin.length === 4) next(); }
+  /* the keyboard works too (numbers, numpad, Backspace, Esc) */
+  if (window.__loginKeys) document.removeEventListener('keydown', window.__loginKeys);
+  window.__loginKeys = function (e) { if (!$('.login')) { document.removeEventListener('keydown', window.__loginKeys); return; } if (/^\d$/.test(e.key)) { e.preventDefault(); key(e.key); } else if (e.key === 'Backspace') { e.preventDefault(); key('⌫'); } else if (e.key === 'Escape' && stage === 'pin') { pick = null; pin = ''; draw(); } };
+  document.addEventListener('keydown', window.__loginKeys);
+  function fail(msg) { busy = false; pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake'); if (msg) toast(msg, true); }
+  function finish(dpin) { var u = (CU.map || {})[pick.id] || {}, dev = (S.people || []).filter(function (p) { return p.id === pick.id; })[0] || {};
+    S.session = { userId: pick.id, pin: pin, dpin: dpin || (S.session && S.session.userId === pick.id ? S.session.dpin : '') || LS.get('dpin:' + pick.id, '') }; if (dpin) LS.set('dpin:' + pick.id, dpin); LS.set('session', S.session);
+    S.me = { id: pick.id, name: u.name || pick.name, role: dev.role || u.dev || '' }; LS.set('me', S.me); document.removeEventListener('keydown', window.__loginKeys); boot(); }
+  function save(id, p, extra) { return pinHash(id, p).then(function (h) { return cuPut(function (m) { var u = m[id] = m[id] || { name: pick.name, active: true }; u.h = h; u.must = false; u.at = new Date().toISOString(); Object.assign(u, extra || {}); }); }); }
+  function next() {
+    if (stage === 'new1') { first = pin; pin = ''; stage = 'new2'; return draw(); }
+    if (stage === 'new2') { if (pin !== first) { stage = 'new1'; return fail('The two PINs are not the same – choose it again'); } busy = true; draw(); return save(pick.id, pin).then(function () { busy = false; toast('Your PIN is saved'); finish(); }).catch(function (e) { fail(e.message); }); }
+    busy = true; draw(); var u = (CU.map || {})[pick.id];
+    if (u && u.h) return pinHash(pick.id, pin).then(function (h) { if (h !== u.h) return fail('Wrong PIN'); busy = false; if (u.must) { stage = 'new1'; pin = ''; draw(); return toast('Choose your own PIN now'); } finish(); });
+    /* not set in Certificates yet: the Devices PIN is checked once, then kept as the Certificates PIN */
+    Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) { busy = false; var dp = pin;
+      if (r.mustChange) { stage = 'new1'; pin = ''; draw(); return toast('Choose your Certificates PIN now'); }
+      return save(pick.id, pin, { name: (u && u.name) || pick.name }).then(function () { finish(dp); }); }).catch(function (e) { fail(e.message); }); }
   draw();
-  Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); if (!pick) draw(); }).catch(function (e) { if (!S.people) toast(CL.on ? (e && e.message) || 'Could not load the names' : 'Cannot reach the server. Check the internet.', true); });
+  if (S.people && CU.map) {} cuFetch().then(function () { if (!pick) draw(); }).catch(function () {});
+  Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); if (!pick) draw(); }).catch(function (e) { if (!S.people && !(CU.map && Object.keys(CU.map).length)) toast('Cannot reach the server. Check the internet.', true); });
 }
 function signOut() { S.session = null; S.me = null; LS.del('session'); LS.del('me'); renderLogin(); }
 
@@ -1345,15 +1382,17 @@ function rolesSet(id, role, who, what) { var put = function (base, rev) { var m 
 function noAccessCheck() { permPaint(); if (!S.me || certRoleOf(S.me) !== 'none') return false;
   $('#app').innerHTML = '<div class="shell"><main style="padding:40px 20px;max-width:520px;margin:0 auto;text-align:center"><div style="font-size:44px">🔒</div><h2>No access to Certificates</h2><p class="small">' + esc(S.me.name) + ', your account has no access to the Certificates app. Ask the admin to give you access.</p><button class="btn" id="naOut">Sign out</button></main></div>';
   $('#naOut').onclick = signOut; return true; }
-function showPin(name, pin) { dialog('New PIN for ' + esc(name), '<div style="text-align:center;font-size:34px;font-weight:800;letter-spacing:8px;margin:10px 0;color:#13294B">' + esc(pin) + '</div>Give it to ' + esc(String(name).split(/\s+/)[0]) + '. It works in Certificates and in Akhnaton Devices – the old PIN stops working.', 'Done', ''); }
+function cuAll() { var m = JSON.parse(JSON.stringify(CU.map || {})); cuSeed(m); var dev = S.people || (S.data && S.data.users) || [];
+  return Object.keys(m).filter(function (id) { return !m[id].gone; }).map(function (id) { var d = dev.filter(function (p) { return p.id === id; })[0]; return { id: id, name: m[id].name, active: m[id].active !== false, role: d ? d.role : '', inDev: !!d, hasPin: !!m[id].h }; }); }
+function showPin(name, pin) { dialog('New PIN for ' + esc(name), '<div style="text-align:center;font-size:34px;font-weight:800;letter-spacing:8px;margin:10px 0;color:#13294B">' + esc(pin) + '</div>Give it to ' + esc(String(name).split(/\s+/)[0]) + '. It is for <b>Certificates only</b> – the first time they sign in with it, they choose their own PIN. Akhnaton Devices is not touched.', 'Done', ''); }
 function usersSheet() { if (!certAdmin()) return toast('Only an admin can open Users', true); var busy = false;
-  var load = function () { return refresh().then(function () { return rolesLoad(); }).catch(function (e) { toast(e.message, true); }); };
-  var body = function () { var us = ((S.data && S.data.users) || []).slice(), order = { admin: 0, writer: 1, none: 2 };
+  var load = function () { return cuFetch().catch(function (e) { toast(e.message, true); }); };
+  var body = function () { var us = cuAll(), order = { admin: 0, writer: 1, none: 2 };
     us.sort(function (a, b) { return certInfo(a).rm - certInfo(b).rm || (a.active === false) - (b.active === false) || order[certRoleOf(a)] - order[certRoleOf(b)] || String(a.name).localeCompare(b.name); });
-    return '<div class="small" style="margin-bottom:10px">Every person has two jobs: one in the <b>Devices app</b> and one in <b>Certificates</b>. Here you change the Certificates one; the name and PIN are the same in both apps.</div><div class="list">' + us.map(function (u) { var r = certRoleOf(u);
-      var ci = certInfo(u); return '<button class="row" data-us="' + esc(u.id) + '"' + (ci.rm ? ' style="opacity:.55"' : '') + '><span class="t"><b>' + esc(u.name) + (u.active === false ? ' <span style="color:#C2362B">(stopped)</span>' : '') + (ci.rm ? ' <span style="color:#6B7280">(removed from Certificates)</span>' : '') + '</b><small class="ujd"><span>Devices app: <b>' + esc(DROLE[u.role] || u.role || '—') + '</b></span><span>Certificates: <b>' + (ci.rm ? 'Removed' : CROLE[r] + (ci.custom ? ' (custom)' : '')) + '</b></span></small></span><span class="tpst ' + (r === 'admin' && !ci.rm ? 'ok' : r === 'none' || ci.rm ? 'no' : '') + '">' + (ci.rm ? 'Removed' : CROLE[r] + (ci.custom ? ' · Custom' : '')) + '</span></button>'; }).join('') + '</div>'; };
+    return '<div class="small" style="margin-bottom:10px">Certificates has its own list of people and PINs – nothing here changes Akhnaton Devices. The Devices job is shown for reference only.</div><div class="list">' + us.map(function (u) { var r = certRoleOf(u);
+      var ci = certInfo(u); return '<button class="row" data-us="' + esc(u.id) + '"' + (ci.rm ? ' style="opacity:.55"' : '') + '><span class="t"><b>' + esc(u.name) + (u.active === false ? ' <span style="color:#C2362B">(stopped)</span>' : '') + (ci.rm ? ' <span style="color:#6B7280">(removed from Certificates)</span>' : '') + '</b><small class="ujd"><span>Devices app: <b>' + esc(u.inDev ? DROLE[u.role] || u.role || '—' : 'not there') + '</b></span><span>Certificates: <b>' + (ci.rm ? 'Removed' : CROLE[r] + (ci.custom ? ' (custom)' : '')) + '</b></span></small></span><span class="tpst ' + (r === 'admin' && !ci.rm ? 'ok' : r === 'none' || ci.rm ? 'no' : '') + '">' + (ci.rm ? 'Removed' : CROLE[r] + (ci.custom ? ' · Custom' : '')) + '</span></button>'; }).join('') + '</div>'; };
   openSheet(function () { return { title: 'Users', body: body(), foot: '<button class="btn" id="usAdd">+ Add a person</button>', mount: function () {
-    $$('[data-us]').forEach(function (b) { b.onclick = function () { var u = ((S.data && S.data.users) || []).filter(function (x) { return x.id === b.dataset.us; })[0]; if (u) userEdit(u, function () { renderSheet(); }); }; });
+    $$('[data-us]').forEach(function (b) { b.onclick = function () { var u = cuAll().filter(function (x) { return x.id === b.dataset.us; })[0]; if (u) userEdit(u, function () { renderSheet(); }); }; });
     $('#usAdd').onclick = function () { userEdit(null, function () { renderSheet(); }); }; } }; });
   load().then(function () { if (sheetFn) renderSheet(); }); }
 function userEdit(u, done) { var ci0 = certInfo(u), f = { name: u ? u.name : '', role: u ? ci0.r : 'writer', p: Object.assign({}, u ? ci0.p : permDefaults('writer')), active: u ? u.active !== false : true, rm: u ? ci0.rm : false };
@@ -1362,7 +1401,7 @@ function userEdit(u, done) { var ci0 = certInfo(u), f = { name: u ? u.name : '',
     (f.rm ? '<div class="note warnbox" style="margin-top:10px">Removed from Certificates – still in Akhnaton Devices. <button class="btn sm" id="ueBk">Bring back</button></div>' : '') +
     '<div class="f"><span style="display:block;font-size:13px;color:var(--muted);margin:8px 0 6px">Permission in Certificates <b id="ueC" style="color:#B26A00">' + (isCustom() ? '· Custom' : '') + '</b></span><div class="tmseg" id="ueR">' + Object.keys(CROLE).map(function (k) { return '<button type="button" data-ur="' + k + '" class="' + (f.role === k ? 'on' : '') + '">' + CROLE[k] + '</button>'; }).join('') + '</div></div>' +
     '<div class="uperm">' + PERMS.map(function (x) { return '<label class="uprow"><input type="checkbox" data-up="' + x[0] + '"' + (f.p[x[0]] ? ' checked' : '') + (f.role === 'none' ? ' disabled' : '') + '><span>' + esc(x[1]) + '</span></label>'; }).join('') + '</div>' +
-    (u ? '<div class="cf" style="justify-content:flex-start;margin-top:12px"><button class="btn ghost sm" id="ueP">Reset PIN</button><button class="btn ghost sm" id="ueA">' + (f.active ? 'Stop this person' : 'Stopped – tap to bring back') + '</button>' + (f.rm ? '' : '<button class="btn ghost sm" id="ueRm" style="color:var(--danger)">Remove from Certificates</button>') + '</div><div class="small">Reset PIN and stopping work in Akhnaton Devices too. Removing is for Certificates only.</div>' : '<div class="small" style="margin-top:10px">The person is added to Akhnaton Devices as an Engineer and gets a PIN for both apps.</div>'); };
+    (u ? '<div class="cf" style="justify-content:flex-start;margin-top:12px"><button class="btn ghost sm" id="ueP">Reset PIN</button><button class="btn ghost sm" id="ueA">' + (f.active ? 'Stop this person' : 'Stopped – tap to bring back') + '</button>' + (f.rm ? '' : '<button class="btn ghost sm" id="ueRm" style="color:var(--danger)">Remove from Certificates</button>') + '</div><div class="small">All of these are for Certificates only – Akhnaton Devices is not touched.</div>' : '<div class="small" style="margin-top:10px">The person is added to Certificates only and gets a first PIN to sign in with.</div>'); };
   var value = function () { if (f.rm) return { r: f.role, rm: 1 }; if (!isCustom()) return f.role; var p = {}; PERMS.forEach(function (x) { p[x[0]] = !!f.p[x[0]]; }); return { r: f.role, p: p }; };
   var same = function (a, b) { return JSON.stringify(a) === JSON.stringify(b); };
   openSheet(function () { return { title: u ? esc(u.name) : 'Add a person', body: body(), foot: '<button class="btn" id="ueS">Save</button>', mount: function () {
@@ -1371,11 +1410,12 @@ function userEdit(u, done) { var ci0 = certInfo(u), f = { name: u ? u.name : '',
     $$('[data-up]').forEach(function (c) { c.onchange = function () { f.p[c.dataset.up] = c.checked; var e = $('#ueC'); if (e) e.textContent = isCustom() ? '· Custom' : ''; }; });
     var a = $('#ueA'); if (a) a.onclick = function () { f.active = !f.active; a.textContent = f.active ? 'Stop this person' : 'Stopped – tap to bring back'; };
     var bk = $('#ueBk'); if (bk) bk.onclick = function () { f.rm = false; renderSheet(); };
-    var rmB = $('#ueRm'); if (rmB) rmB.onclick = function () { dialog('Remove ' + esc(u.name) + ' from Certificates?', 'They can not open Certificates any more. Akhnaton Devices is not touched. You can bring them back from Users.', 'Remove').then(function (y) { if (!y) return; f.rm = true; rolesSet(u.id, value(), u.name, 'Removed ' + u.name + ' from Certificates').then(function () { closeSheet(); toast('Removed from Certificates'); done && done(); }).catch(function (e) { toast(e.message, true); }); }); };
-    var rp = $('#ueP'); if (rp) rp.onclick = function () { dialog('Give ' + esc(u.name) + ' a new PIN?', 'The old PIN stops working in Certificates and in Akhnaton Devices.', 'Reset PIN').then(function (y) { if (!y) return; req('resetPin', { userId: u.id }).then(function (r) { showPin(u.name, r.pin); syncLog(null, 'user', 'Reset the PIN of ' + u.name); }).catch(function (e) { toast(e.message, true); }); }); };
+    var rmB = $('#ueRm'); if (rmB) rmB.onclick = function () { dialog('Remove ' + esc(u.name) + ' from Certificates?', 'They are taken off the Certificates list and can not sign in any more. Akhnaton Devices is not touched.', 'Remove').then(function (y) { if (!y) return; f.rm = true; toast('Working…'); cuPut(function (m) { if (m[u.id]) { m[u.id].gone = true; m[u.id].active = false; m[u.id].h = ''; } }).then(function () { return rolesSet(u.id, value(), u.name, 'Removed ' + u.name + ' from Certificates'); }).then(function () { closeSheet(); toast('Removed from Certificates'); done && done(); }).catch(function (e) { toast(e.message, true); }); }); };
+    var rp = $('#ueP'); if (rp) rp.onclick = function () { dialog('Give ' + esc(u.name) + ' a new PIN?', 'The old Certificates PIN stops working. Akhnaton Devices is not touched.', 'Reset PIN').then(function (y) { if (!y) return; var np = newPin(); toast('Working…'); pinHash(u.id, np).then(function (h) { return cuPut(function (m) { var x = m[u.id] = m[u.id] || { name: u.name, active: true }; x.h = h; x.must = true; }); }).then(function () { showPin(u.name, np); syncLog(null, 'user', 'Reset the Certificates PIN of ' + u.name); }).catch(function (e) { toast(e.message, true); }); }); };
     $('#ueS').onclick = function () { var nm = String(f.name || '').trim(); if (!nm) return toast('Write the name', true); var b = $('#ueS'); b.disabled = true;
-      var chg = !u || nm !== u.name || f.active !== (u.active !== false), dev = chg ? req('saveUser', { user: u ? { id: u.id, name: nm, role: u.role, active: f.active } : { name: nm, role: 'engineer', active: true } }) : Promise.resolve({});
-      dev.then(function (r) { return refresh().then(function () { return r || {}; }); }).then(function (r) { var id = u ? u.id : (r.id || (r.user && r.user.id) || (((S.data && S.data.users) || []).filter(function (x) { return x.name === nm; })[0] || {}).id);
+      var nid = u ? u.id : 'C' + Date.now().toString(36).toUpperCase(), np = u ? '' : newPin(), chg = !u || nm !== u.name || f.active !== (u.active !== false);
+      var dev = !chg ? Promise.resolve({}) : (np ? pinHash(nid, np) : Promise.resolve('')).then(function (h) { return cuPut(function (m) { var x = m[nid] = m[nid] || { active: true }; x.name = nm; x.active = f.active; if (h) { x.h = h; x.must = true; } }); }).then(function () { return np ? { pin: np } : {}; });
+      dev.then(function (r) { r = r || {}; var id = nid;
         var cur = u ? ((SYNC.roles || {})[u.id] || certRoleOf(u)) : null, v = value(), setR = id && (!u || !same(v, cur)) ? rolesSet(id, v, nm) : Promise.resolve();
         return setR.then(function () { closeSheet(); if (r.pin) showPin(nm, r.pin); else toast('Saved'); done && done(); }); })
         .catch(function (e) { b.disabled = false; toast(e.message, true); }); }; } }; }); }
@@ -1479,7 +1519,7 @@ function syncPush() { if (!SYNC.on() || SYNC.busy) return Promise.resolve(); var
 function syncEditing() { var ae = document.activeElement; return !!sheetFn || !!(ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName) && !/^(q|lq|hq)$/.test(ae.id || '')); }
 function syncInPlace(loc, nx) { Object.keys(loc).forEach(function (k) { delete loc[k]; }); Object.assign(loc, nx); }
 /* one job from the server: new → added; untouched here → replaced; changed on both sides → merged (each side keeps its own certificates) */
-function syncApply(j) { if (/^__/.test(j.id)) { if (j.id === '__roles' && !j.deleted) { var r0 = certRoleOf(S.me); rolesTake(j); if (certRoleOf(S.me) !== r0) setTimeout(render, 0); } return false; } var loc = S.projects.filter(function (q) { return q.id === j.id; })[0];
+function syncApply(j) { if (/^__/.test(j.id)) { if (j.id === '__users' && !j.deleted) cuTake(j); if (j.id === '__roles' && !j.deleted) { var r0 = certRoleOf(S.me); rolesTake(j); if (certRoleOf(S.me) !== r0) setTimeout(render, 0); } return false; } var loc = S.projects.filter(function (q) { return q.id === j.id; })[0];
   if (j.deleted) { if (loc && syncHash(syncClean(loc)) === loc._syncH) { S.projects = S.projects.filter(function (q) { return q.id !== j.id; }); if (S.cur === j.id) S.cur = null; return true; } return false; }
   if (!j.json) return false; var rem; try { rem = JSON.parse(j.json); } catch (e) { return false; }
   if (!loc) { S.projects.push(rem); syncAdopt(rem, j.rev, j.updated); rem._byName = j.byName; rem._byUser = j.byUser; return true; }
