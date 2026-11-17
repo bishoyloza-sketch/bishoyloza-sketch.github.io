@@ -426,7 +426,7 @@ setInterval(function () { try { backFab(); } catch (e) {} }, 400);
 function mobSync() { var f = document.querySelector('.wiz-foot'), mt = document.getElementById('mtools'), on = f && (document.getElementById('cTab') || document.getElementById('mTab'));
   if (!on) { if (mt) mt.remove(); document.body.classList.remove('mt'); return; }
   if (!mt || mt.parentNode !== f) { if (mt) mt.remove(); mt = document.createElement('div'); mt.id = 'mtools';
-    mt.innerHTML = '<button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button><button type="button" data-mt="ds">Data sheet</button>';
+    mt.innerHTML = '<button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button>';
     f.insertBefore(mt, f.firstChild); mt.onclick = function (e) { var b = e.target.closest('[data-mt]'); if (!b) return; var k = b.dataset.mt;
       if (k === 'ds') return dsLibSheet(); var t = document.getElementById(k === 'cov' ? 'cTab' : 'mTab'); if (t) t.click(); }; }
   /* ‹ Previous and Next › side by side, like turning the pages of the certificates */
@@ -5808,13 +5808,13 @@ function libStats() { var all = dsLibAll(), ok = all.filter(function (e) { retur
   return { ni: all.length, ki: ok, nc: cos.length, kc: co }; }
 function libCan() { return !!(CFG.DS_URL || CL.on); }
 function libPop() { var old = document.getElementById('libPop'); if (old) { old.remove(); return; } var t = libStats(), L = tbLib(), lu = LS.get('dataUpdated', 0);
-  var row = function (ic, name, n, k, what) { var pc = n ? Math.round(k / n * 100) : 0; return '<div class="lprow"><div class="lpri">' + ic + '</div><div class="lprb"><div class="lprt"><b>' + name + '</b><span><b>' + n + '</b> total</span></div><div class="lpbar"><i style="width:' + pc + '%"></i></div><small>' + k + ' of ' + n + ' complete · ' + what + '</small></div></div>'; };
+  var row = function (ic, name, n, k, what, tab) { var pc = n ? Math.round(k / n * 100) : 0; return '<div class="lprow" data-lpt="' + tab + '" title="Open ' + name + '"><div class="lpri">' + ic + '</div><div class="lprb"><div class="lprt"><b>' + name + ' ›</b><span><b>' + n + '</b> total</span></div><div class="lpbar"><i style="width:' + pc + '%"></i></div><small>' + k + ' of ' + n + ' complete · ' + what + '</small></div></div>'; };
   var d = document.createElement('div'); d.id = 'libPop'; d.innerHTML = '<div class="lph"><b>Data library</b><span class="lpst lib-' + L.k + '"><i></i>' + esc(L.k === 'ok' ? 'Up to date' : L.k === 'run' ? 'Updating…' : 'Needs update') + '</span><button class="lpx" title="Close">✕</button></div>' +
-    row(tbIco('lib'), 'Instruments', t.ni, t.ki, 'range and resolution from the datasheet') + row(tbIco('users'), 'Customers', t.nc, t.kc, 'official name, address and phone') +
+    row(tbIco('lib'), 'Instruments', t.ni, t.ki, 'range and resolution from the datasheet', 'dev') + row(tbIco('users'), 'Customers', t.nc, t.kc, 'official name, address and phone', 'co') +
     '<div class="lpf"><small id="lpU">' + (UPD.run ? '<span class="spin dark"></span> ' + esc(UPD.msg) : lu ? 'Updated ' + new Date(lu).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not updated online yet') + '</small>' +
-    '<button class="lpbtn" id="lpOpen">Open</button><button class="lpbtn" id="lpUp"' + (UPD.run || !libCan() ? ' disabled title="' + (UPD.run ? 'Updating now' : 'Updates run from the Claude app or once the online datasheet search is set up') + '"' : '') + '>Update</button></div>';
+    '<button class="lpbtn" id="lpUp"' + (UPD.run || !libCan() ? ' disabled title="' + (UPD.run ? 'Updating now' : 'Updates run from the Claude app or once the online datasheet search is set up') + '"' : '') + '>Update</button></div>';
   document.body.appendChild(d); d.onclick = function (e) { e.stopPropagation(); }; d.querySelector('.lpx').onclick = function () { d.remove(); };
-  d.querySelector('#lpOpen').onclick = function () { d.remove(); dsLibSheet(); }; d.querySelector('#lpUp').onclick = function () { dataUpdateAll(); var u = document.getElementById('lpU'); if (u) u.innerHTML = '<span class="spin dark"></span> Updating in the background'; this.disabled = true; };
+  Array.prototype.forEach.call(d.querySelectorAll('[data-lpt]'), function (r) { r.onclick = function () { d.remove(); dsLibSheet(r.dataset.lpt); }; }); d.querySelector('#lpUp').onclick = function () { dataUpdateAll(); var u = document.getElementById('lpU'); if (u) u.innerHTML = '<span class="spin dark"></span> Updating in the background'; this.disabled = true; };
   setTimeout(function () { document.addEventListener('click', function cl() { var x = document.getElementById('libPop'); if (x) x.remove(); document.removeEventListener('click', cl); }); }, 0); }
 /* keep it updated without asking: once the library is a month old, the update runs by itself in the background */
 setTimeout(function libAuto() { try { if (S.session && !DEMO && libCan() && !UPD.run && Date.now() - (LS.get('dataUpdated', 0) || 0) > 30 * 864e5 && Date.now() - (LS.get('libAutoAt', 0) || 0) > 864e5) { LS.set('libAutoAt', Date.now()); dataUpdateAll(); } } catch (e) {} setTimeout(libAuto, 6e5); }, 20000);

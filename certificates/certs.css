@@ -1306,3 +1306,5 @@ body.hasTb #mtools button:hover{border-color:#13294B}
 .hopen .hbh .seg button em{font-style:normal;font-size:11.5px;opacity:.7;margin-left:4px}
 .hemp .lk{background:none;border:0;padding:0;color:#0B74C8;font:inherit;font-weight:700;cursor:pointer;text-decoration:underline}
 #cf #cfAll{flex:0 0 auto;min-width:90px}#cf #cbk[disabled]{opacity:.4}@media (max-width:760px){#cf #cfAll{min-width:0;flex:0.8 1 0;padding:0 4px}}
+.lprow{cursor:pointer;transition:border-color .12s,background .12s}.lprow:hover{border-color:#13294B;background:#F7FAFD}
+.lprow{cursor:pointer;transition:border-color .12s,background .12s}.lprow:hover{border-color:#13294B;background:#F7FAFD}
