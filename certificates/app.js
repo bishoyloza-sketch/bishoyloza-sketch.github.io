@@ -706,7 +706,13 @@ function renderLogin() {
       if (r.mustChange) { oldPin = dp; stage = 'new1'; pin = ''; draw(); return toast('Choose your own PIN now – it works in both apps'); }
       /* keep the Certificates copy the same as the Devices PIN */
       return pinHash(pick.id, dp).then(function (h) { return u && u.h === h && !u.must ? null : save(pick.id, dp, { name: (u && u.name) || pick.name }); }).catch(function () {}).then(function () { finish(dp); }); })
-      .catch(function (e) { if (u && u.h) return certCheck(u, e.message); fail(e.message); }); }
+      .catch(function (e) { var typed = pin, dp0 = LS.get('dpin:' + pick.id, '');
+        if (!/wrong pin/i.test(e.message) || !(u && u.h)) return fail(e.message);
+        /* the Certificates PIN: line Lab Devices up with it when the old Lab Devices PIN is known on this computer, then sign in */
+        pinHash(pick.id, typed).then(function (h) { if (h !== u.h) return fail(e.message);
+          var olds = [dp0, u.dtmp].filter(function (v, i, a) { return /^\d{4}$/.test(String(v || '')) && v !== typed && a.indexOf(v) === i; });
+          var go = function (i) { if (i >= olds.length) return certCheck(u, e.message); return Api.call({ action: 'changePin', userId: pick.id, pin: olds[i], payload: { newPin: typed } }).then(function () { LS.set('dpin:' + pick.id, typed); busy = false; toast('Lab Devices now has the same PIN'); finish(typed); }, function () { return go(i + 1); }); };
+          return go(0); }).catch(function () { fail(e.message); }); }); }
   draw();
   if (S.people && CU.map) {} cuFetch().then(function () { if (!pick) draw(); }).catch(function () {});
   Api.call({ action: 'people' }).then(function (p) { S.people = p; LS.set('people', p); if (!pick) draw(); }).catch(function (e) { if (!S.people && !(CU.map && Object.keys(CU.map).length)) toast('Cannot reach the server. Check the internet.', true); });
@@ -728,7 +734,7 @@ function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.
 }
 function boot() { undoInit(); render(); try { syncStart(); } catch (e) {} try { dsRemoteSync(); } catch (e) {} LOC.init().then(function () { if (!sheetFn) render(); }); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); devAutoSync(); }).catch(function (e) {
     /* the Devices app did not accept this person: stay signed in to Certificates and use the shared lab copy */
-    if (/PIN|sign in|not allowed|stopped/i.test(e.message)) { if (S.session) { S.session.noDev = true; S.session.dpin = ''; LS.set('session', S.session); LS.del('dpin:' + S.session.userId); } return labLoad().then(function () { if (!sheetFn) render(); }).catch(function () {}); }
+    if (/PIN|sign in|not allowed|stopped/i.test(e.message)) { if (S.session) { S.session.noDev = true; S.session.dpin = ''; LS.set('session', S.session); } return labLoad().then(function () { if (!sheetFn) render(); }).catch(function () {}); }
     toast(e.message, true); }); }
 
 /* ================= home ================= */

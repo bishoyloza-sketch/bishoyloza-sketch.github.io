@@ -448,10 +448,18 @@
         var key = self.keyOf(g.m, id), x = g.m[key]; if (!x || x.gone || !x.h) return false;
         return self.hash(key, pin).then(function (h) {
           if (h !== x.h) return false;
-          if (!x.dtmp) return 'differs';
-          return Api.call({ action: 'changePin', userId: id, pin: x.dtmp, payload: { newPin: pin } }).then(function () {
-            return self.put('__users', self.USERS, function (m) { if (!m[key]) return false; delete m[key].dtmp; }).then(function () { return true; });
-          });
+          /* this is the person's Certificates PIN: line Lab Devices up with it, using the old Lab Devices PIN kept on this computer
+             (the first PIN from the admin, or what Certificates / Lab Devices remembered from the last sign-in) */
+          var raw = function (k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }, old = [];
+          var add = function (v) { v = v == null ? '' : String(v); if (/^\d{4}$/.test(v) && v !== String(pin) && old.indexOf(v) < 0) old.push(v); };
+          add(x.dtmp); add(raw('akhc.dpin:' + id)); add(raw('akhc.dpin:' + key));
+          [raw('akhc.session'), raw('akh.session'), raw('akh.lastSession')].forEach(function (ss) { if (ss && (ss.userId === id || ss.userId === key)) { add(ss.dpin); add(ss.pin); } });
+          if (!old.length) return 'differs';
+          var tryOne = function (i) { if (i >= old.length) return 'differs';
+            return Api.call({ action: 'changePin', userId: id, pin: old[i], payload: { newPin: pin } }).then(function () {
+              return self.put('__users', self.USERS, function (m) { if (!m[key]) return false; delete m[key].dtmp; }).then(function () { try { localStorage.setItem('akhc.dpin:' + id, JSON.stringify(String(pin))); } catch (e) {} return true; });
+            }, function () { return tryOne(i + 1); }); };
+          return tryOne(0);
         });
       }).catch(function () { return false; });
     },
