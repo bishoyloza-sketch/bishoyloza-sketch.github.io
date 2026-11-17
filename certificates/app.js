@@ -378,7 +378,17 @@ var DEMO_DEV = [{ id: 'dv1', manufacturer: 'Druck', description: 'Digital Pressu
   { id: 'dv5', manufacturer: 'Fluke', description: 'Digital Stop Watch', model: 'SW-1', serial: 'Z1242G', range: '(0 : 600) min', calDue: '2027-04-09', category: 'Timer' }, { id: 'dv6', manufacturer: 'Testo', description: 'Differential Pressure Meter', model: '510', serial: 'DEMO-3365', range: '(0 : 1000) Pa', calDue: '2027-06-30', category: 'Pressure' }];
 function demoState() { return { companies: [DEMO.company], users: DEMO.people, devices: DEMO_DEV }; }
 function req(action, payload) { if (DEMO) return Promise.resolve(action === 'state' ? demoState() : action === 'people' ? DEMO.people : action === 'login' ? { user: DEMO.people[0] } : {}); return Api.call({ action: action, userId: S.session && S.session.userId, pin: S.session && (S.session.dpin || S.session.pin), payload: payload || {} }); }
-function refresh() { return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data);
+/* The lab data (companies, devices) comes from Akhnaton Devices, which needs that app's PIN. Whoever has it shares a copy on the jobs server,
+   so people whose Certificates PIN is different still get it – and are never signed out because of the other app. */
+var LAB = { rev: LS.get('labRev', null), h: LS.get('labH', '') };
+function labUse(d) { S.data = { companies: d.companies || [], users: d.users || [], devices: d.devices || [], at: d.at || Date.now() }; LS.set('cache', S.data); }
+function labShare(d) { if (!SYNC.on()) return; var j = JSON.stringify({ companies: d.companies, users: (d.users || []).map(function (u) { return { id: u.id, name: u.name, role: u.role, active: u.active }; }), devices: d.devices, at: Date.now() });
+  var h = syncHash(JSON.stringify([d.companies, d.devices, (d.users || []).length])); if (h === LAB.h && Date.now() - LS.get('labAt', 0) < 6 * 3600e3) return;
+  var put = function (rev) { return jcall('save', { meta: { id: '__lab', company: '(lab data copy – do not delete)', done: 0, total: 0 }, json: j, baseRev: rev }).then(function (r) { if (r.conflict) return put(r.rev); LAB.rev = r.rev; LAB.h = h; LS.set('labRev', r.rev); LS.set('labH', h); LS.set('labAt', Date.now()); }); };
+  put(LAB.rev).catch(function () {}); }
+function labLoad() { if (!SYNC.on()) return Promise.resolve(false); return jcall('list', { since: 0 }).then(function (r) { var j = (r.jobs || []).filter(function (x) { return x.id === '__lab' && !x.deleted; })[0]; if (!j) return false; try { labUse(JSON.parse(j.json)); LAB.rev = j.rev; return true; } catch (e) { return false; } }); }
+function refresh() { if (S.session && S.session.noDev) return labLoad().then(function () { return S.data; });
+  return req('state').then(function (d) { S.data = { companies: d.companies, users: d.users, devices: d.devices, at: Date.now() }; LS.set('cache', S.data); labShare(d);
   var dv = (d.users || []).filter(function (u) { return u.id === S.session.userId; })[0]; if (dv) S.me = Object.assign({}, dv, { name: ((CU.map || {})[dv.id] || {}).name || dv.name }); if (S.me) LS.set('me', S.me); return d; }); }
 /* ---- undo (any change) + recycle bin (anything deleted is kept 60 days) ---- */
 var UNDO = { st: [], rd: [], last: null, ids: null, t: 0, busy: false }, UNDO_MAX = 100;
@@ -562,7 +572,7 @@ function renderLogin() {
   document.addEventListener('keydown', window.__loginKeys);
   function fail(msg) { busy = false; pin = ''; draw(); var p = $('#pin'); if (p) p.classList.add('shake'); if (msg) toast(msg, true); }
   function finish(dpin) { var u = (CU.map || {})[pick.id] || {}, dev = (S.people || []).filter(function (p) { return p.id === pick.id; })[0] || {};
-    S.session = { userId: pick.id, pin: pin, dpin: dpin || (S.session && S.session.userId === pick.id ? S.session.dpin : '') || LS.get('dpin:' + pick.id, '') }; if (dpin) LS.set('dpin:' + pick.id, dpin); LS.set('session', S.session);
+    S.session = { userId: pick.id, pin: pin, noDev: false, dpin: dpin || (S.session && S.session.userId === pick.id ? S.session.dpin : '') || LS.get('dpin:' + pick.id, '') }; if (dpin) LS.set('dpin:' + pick.id, dpin); LS.set('session', S.session);
     S.me = { id: pick.id, name: u.name || pick.name, role: dev.role || u.dev || '' }; LS.set('me', S.me); document.removeEventListener('keydown', window.__loginKeys); boot(); }
   function save(id, p, extra) { return pinHash(id, p).then(function (h) { return cuPut(function (m) { var u = m[id] = m[id] || { name: pick.name, active: true }; u.h = h; u.must = false; u.at = new Date().toISOString(); Object.assign(u, extra || {}); }); }); }
   function next() {
@@ -572,7 +582,7 @@ function renderLogin() {
     if (u && u.h) return pinHash(pick.id, pin).then(function (h) { if (h !== u.h) return fail('Wrong PIN'); busy = false; if (u.must) { stage = 'new1'; pin = ''; draw(); return toast('Choose your own PIN now'); } finish(); });
     /* not set in Certificates yet: the Devices PIN is checked once, then kept as the Certificates PIN */
     Api.call({ action: 'login', userId: pick.id, pin: pin }).then(function (r) { busy = false; var dp = pin;
-      if (r.mustChange) { stage = 'new1'; pin = ''; draw(); return toast('Choose your Certificates PIN now'); }
+      if (r.mustChange) { LS.set('dpin:' + pick.id, dp); stage = 'new1'; pin = ''; draw(); return toast('Choose your Certificates PIN now'); }
       return save(pick.id, pin, { name: (u && u.name) || pick.name }).then(function () { finish(dp); }); }).catch(function (e) { fail(e.message); }); }
   draw();
   if (S.people && CU.map) {} cuFetch().then(function () { if (!pick) draw(); }).catch(function () {});
@@ -593,7 +603,10 @@ function render() { var P0 = S.cur && S.projects.filter(function (x) { return x.
   if (p.stage !== 'done') return renderWizard(p);
   return renderOverview(p);
 }
-function boot() { undoInit(); render(); try { syncStart(); } catch (e) {} try { dsRemoteSync(); } catch (e) {} LOC.init().then(function () { if (!sheetFn) render(); }); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) { if (/PIN|sign in/i.test(e.message)) return signOut(); toast(e.message, true); }); }
+function boot() { undoInit(); render(); try { syncStart(); } catch (e) {} try { dsRemoteSync(); } catch (e) {} LOC.init().then(function () { if (!sheetFn) render(); }); filesPing().then(function () { if (!sheetFn) render(); }); refresh().then(function () { if (!sheetFn) render(); }).catch(function (e) {
+    /* the Devices app did not accept this person: stay signed in to Certificates and use the shared lab copy */
+    if (/PIN|sign in|not allowed|stopped/i.test(e.message)) { if (S.session) { S.session.noDev = true; S.session.dpin = ''; LS.set('session', S.session); LS.del('dpin:' + S.session.userId); } return labLoad().then(function () { if (!sheetFn) render(); }).catch(function () {}); }
+    toast(e.message, true); }); }
 
 /* ================= home ================= */
 function msCard() { return dsRemind() + msCard0(); }
@@ -739,7 +752,7 @@ function companySheet(p) { var f = { name: W.q || '', official: '', code: '', gr
     mount: function () { $$('[data-f]').forEach(function (e) { e.oninput = function () { f[e.dataset.f] = e.value; }; });
       $$('[data-g]').forEach(function (b) { b.onclick = function () { f.group = b.dataset.g; renderSheet(); }; });
       $('#coSave').onclick = function () { if (!f.name.trim()) return toast('Write the company name', true); var b = $('#coSave'); b.disabled = true;
-        req('saveCompany', { company: f }).then(function (r) { return refresh().then(function () { return r; }); }).then(function (r) {
+        (S.session && S.session.noDev ? Promise.reject(new Error('Saving companies goes through Akhnaton Devices – sign in here once with your Devices PIN to do it')) : req('saveCompany', { company: f })).then(function (r) { return refresh().then(function () { return r; }); }).then(function (r) {
           var c = S.data.companies.filter(function (x) { return x.id === r.id; })[0]; if (c) { p.company = { id: c.id, name: c.name, official: c.official || '', code: c.code || '', group: c.group || '' }; p.deptSug = null; saveProjects(); }
           sheetFn = null; renderSheet(); toast('Company saved'); if (c) go(p, 'date'); else render();
         }).catch(function (e) { b.disabled = false; toast(e.message, true); }); }; } }; }); }
