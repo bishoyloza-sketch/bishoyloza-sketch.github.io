@@ -292,6 +292,16 @@
         });
       });
     }
+    /* the keyboard works too (numbers, numpad, Backspace, Esc) – like Certificates */
+    if (window.__loginKeys) document.removeEventListener('keydown', window.__loginKeys);
+    window.__loginKeys = function (e) {
+      if (!$('.login')) { document.removeEventListener('keydown', window.__loginKeys); window.__loginKeys = null; return; }
+      if (!pick) return;
+      if (/^\d$/.test(e.key)) { e.preventDefault(); if (pin.length < 4) { pin += e.key; draw(); if (pin.length === 4) tryLogin(); } }
+      else if (e.key === 'Backspace') { e.preventDefault(); pin = pin.slice(0, -1); draw(); }
+      else if (e.key === 'Escape') { pick = null; pin = ''; draw(); }
+    };
+    document.addEventListener('keydown', window.__loginKeys);
     draw();
     if (!S.people) loadPeople().then(draw).catch(function () { toast('Cannot reach the server. Check the internet.', true); });
     else loadPeople().then(function () { if (!pick) draw(); }).catch(function () {});
@@ -418,6 +428,17 @@
         });
       }).catch(function () {});
     },
+    /* name / stopped, changed here: the same in Certificates */
+    setInfo: function (id, name, active) {
+      if (!this.on() || !id) return Promise.resolve();
+      var self = this;
+      return self.put('__users', self.USERS, function (m) {
+        self.seed(m); var key = self.keyOf(m, id), x = m[key];
+        if (!x || x.gone) return false;
+        if (x.name === name && (x.active !== false) === !!active) return false;
+        x.name = name; x.active = !!active;
+      }).catch(function () {});
+    },
     /* a person made in Certificates and added here by itself: the first time they sign in here with their Certificates PIN,
        the first Devices PIN is changed to it – then it is one PIN. Answers true when that was done. */
     link: function (id, pin) {
@@ -503,6 +524,12 @@
     if (k === 'out') return signOut();
   }
   setInterval(function () { try { tbarPaint(); } catch (e) {} }, 1000);
+  /* PIN pads in sheets (choose / change PIN): the keyboard works too */
+  document.addEventListener('keydown', function (e) {
+    if (!document.getElementById('pin2') || (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))) return;
+    var k = /^\d$/.test(e.key) ? e.key : e.key === 'Backspace' ? '⌫' : null; if (!k) return;
+    var b = document.querySelector('.sheet [data-k="' + k + '"]'); if (b) { e.preventDefault(); b.click(); }
+  });
 
   /* ================= shell ================= */
   function render() {
@@ -2170,10 +2197,22 @@
         })().map(function (r) { return '<button data-r="' + r[0] + '" class="' + (f.role === r[0] ? 'on' : '') + '">' + r[1] + '</button>'; }).join('') + '</div></div>' +
         '<div class="note" style="margin-top:14px">Engineers request devices inside a job and move them between companies. Site supervisors also open jobs and follow data sheets. Lab keepers approve requests, check devices in and out, edit devices and mark data sheets. Admins manage everything. The super admin can do everything an admin does and is the only one who can change the super admin account — keep it for the general manager, to reset the admin PIN if it is forgotten.</div>' +
         (u && u.role === 'superadmin' && !can('super') ? '<div class="note warnbox">Only the super admin can change this account.</div>' : '') +
-        (u ? '<div class="seg"><button data-active class="' + (f.active ? '' : 'on') + '">' + (f.active ? 'Deactivate this person' : 'Inactive — tap to reactivate') + '</button><button data-reset>Reset PIN</button></div>' : '');
+        (u ? '<div class="seg"><button data-active class="' + (f.active ? '' : 'on') + '">' + (f.active ? 'Deactivate this person' : 'Inactive — tap to reactivate') + '</button><button data-reset>Reset PIN</button></div>' +
+          '<div class="f" style="margin-top:12px"><span style="display:block;font-size:14px;color:var(--muted);margin-bottom:6px">Set the PIN yourself (same PIN in Certificates)</span>' +
+          '<div style="display:flex;gap:8px"><input class="inp" id="spin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="4 digits" style="flex:1"><button class="btn sm" data-setpin>Set PIN</button></div></div>' : '');
       $('#nm', body).oninput = function (e) { f.name = e.target.value; };
       $$('[data-r]', body).forEach(function (b) { b.onclick = function () { f.role = b.dataset.r; $$('[data-r]', body).forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       var ac = $('[data-active]', body); if (ac) ac.onclick = function () { f.active = !f.active; ac.classList.toggle('on', !f.active); ac.textContent = f.active ? 'Deactivate this person' : 'Inactive — tap to reactivate'; };
+      var sp = $('#spin', body), spb = $('[data-setpin]', body);
+      if (sp) { sp.oninput = function () { sp.value = sp.value.replace(/\D/g, '').slice(0, 4); }; sp.onkeydown = function (e) { if (e.key === 'Enter') spb.click(); }; }
+      if (spb) spb.onclick = function () {
+        var np = sp.value; if (!/^\d{4}$/.test(np)) { sp.focus(); return toast('Write 4 digits', true); }
+        spb.disabled = true;
+        req('resetPin', { userId: u.id }).then(function (r) { return Api.call({ action: 'changePin', userId: u.id, pin: r.pin, payload: { newPin: np } }); })
+          .then(function () { return CERT.setPin(u.id, u.name, np, false); })
+          .then(function () { sp.value = ''; spb.disabled = false; toast(u.name + ': PIN set – the same in Lab Devices and Certificates'); })
+          .catch(function (e) { spb.disabled = false; toast(e.message, true); });
+      };
       var rs = $('[data-reset]', body); if (rs) rs.onclick = function () {
         askConfirm('Give ' + u.name + ' a new PIN? Their old PIN stops working.', 'Reset PIN', function () {
           req('resetPin', { userId: u.id }).then(function (r) { CERT.setPin(u.id, u.name, r.pin, true); showPin(u.name, r.pin); }).catch(function (e) { toast(e.message, true); });
@@ -2182,7 +2221,7 @@
       setFoot('<button class="btn" data-save>Save</button>');
       $('[data-save]').onclick = function () {
         req('saveUser', { user: f }).then(function (r) { return refresh(true).then(function () { return r; }); })
-          .then(function (r) { closeSheet(); after && after(); if (r.pin) { CERT.adopt(r.id, String(f.name).trim(), r.pin); showPin(f.name, r.pin); } else toast('Saved'); })
+          .then(function (r) { closeSheet(); after && after(); if (r.pin) { CERT.adopt(r.id, String(f.name).trim(), r.pin); showPin(f.name, r.pin); } else { CERT.setInfo(r.id || f.id, String(f.name).trim(), f.active !== false); toast('Saved – the same in Certificates'); } })
           .catch(function (e) { toast(e.message, true); });
       };
     });
