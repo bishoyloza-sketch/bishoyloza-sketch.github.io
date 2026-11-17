@@ -1153,3 +1153,16 @@ table.tpkv2 td{text-align:left;white-space:pre-line}
 .apl{display:flex;justify-content:center;padding:16px}
 .jhd{display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 4px;padding-bottom:3px;border-bottom:1px solid #E3E7ED}
 .jhd b{color:#13294B}.jhd small{color:#6B7280}
+/* ===== permissions: what a person may not use is hidden ===== */
+.uperm{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 14px;background:#fff;border:1px solid #E3E7ED;border-radius:12px;padding:10px 12px;margin-top:10px}
+.uprow{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}.uprow input{width:18px;height:18px}
+body.np-newjob #newP,body.np-newjob .newjob{display:none!important}
+body.np-certs #pvS{display:none!important}
+body.np-print #gW,body.np-print #gpPr,body.np-print #gpPdf,body.np-print #hPrint,body.np-print #pvPr,body.np-print #pvPdf,body.np-print #pvP,body.np-print #pvW,body.np-print #pvPdfP,body.np-print #pdS{display:none!important}
+body.np-letters #btL,body.np-letters #llet,body.np-letters [data-pp]{display:none!important}
+body.np-po #dOrdL,body.np-po #dOrd,body.np-po #oAtt,body.np-po #poRe,body.np-po #oLn{display:none!important}
+body.np-company #addCo,body.np-company #coSave{display:none!important}
+body.np-library [data-dle],body.np-library #dlNew,body.np-library #dlAll,body.np-library #lpUp,body.np-library #dlRun,body.np-library #dsRe{display:none!important}
+body.np-deljob [data-pd]{display:none!important}
+body.np-activity #actFab{display:none!important}
+body.np-users #usersB{display:none!important}
