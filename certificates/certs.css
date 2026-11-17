@@ -1169,3 +1169,62 @@ body.np-users #usersB{display:none!important}
 .ujd{display:flex;flex-wrap:wrap;gap:2px 14px}.ujd b{color:#13294B;font-weight:600}
 #busyPill{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:300;background:#13294B;color:#fff;padding:8px 16px;border-radius:999px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(19,41,75,.3)}
 #busyPill .spin{width:14px;height:14px;border-width:2px}
+/* ===== fixed toolbar (v263) ===== */
+#tbar{position:fixed;top:0;left:0;right:0;z-index:45;background:#13294B;color:#fff;box-shadow:0 2px 10px rgba(19,41,75,.18);font-family:Barlow,system-ui,sans-serif}
+#tbar .tbin{display:flex;align-items:center;gap:2px;height:52px;padding:0 10px;max-width:1500px;margin:0 auto}
+#tbar button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.tbb{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;border-radius:9px;font-size:14px!important;font-weight:600!important;white-space:nowrap;transition:background .12s}
+.tbb:hover{background:rgba(255,255,255,.12)}
+.tbb.ic{width:36px;padding:0;justify-content:center}
+.tbb[data-off]{opacity:.35;cursor:default}.tbb[data-off]:hover{background:none}
+.tbb em{font-style:normal;font-size:11.5px;background:rgba(255,255,255,.2);border-radius:999px;padding:1px 7px}
+.tbhome{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 10px 0 6px;border-radius:9px}
+.tbhome:hover{background:rgba(255,255,255,.1)}
+.tbhome img{height:22px}.tbhome span{font-weight:700;font-size:15.5px;padding-left:10px;border-left:1px solid rgba(255,255,255,.3)}
+.tbsep{width:1px;height:24px;background:rgba(255,255,255,.22);margin:0 6px}
+.tbcr{display:flex;align-items:baseline;gap:6px;min-width:0;max-width:34vw;white-space:nowrap;overflow:hidden}
+.tbcr button{font-size:14px!important;font-weight:600!important;opacity:.75;padding:0!important}.tbcr button:hover{opacity:1;text-decoration:underline}
+.tbcr i{font-style:normal;opacity:.5}.tbcr b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis}.tbcr small{font-size:12px;opacity:.65;overflow:hidden;text-overflow:ellipsis}
+.tbtools{display:flex;align-items:center;gap:2px;margin-left:10px;padding-left:10px;border-left:1px solid rgba(255,255,255,.2)}
+.tbsp{flex:1}
+.tbchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;background:rgba(255,255,255,.1);font-size:12.5px!important;font-weight:600!important;margin:0 3px;white-space:nowrap}
+.tbchip i{width:8px;height:8px;border-radius:50%;background:#3DDC84}
+.tbchip.off i{background:#F0B429}
+.tbchip.lib-old i,.tbchip.lib-later i{background:#F0B429}
+.tbchip.lib-run i{background:#7CC4FF;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.tbme{gap:7px}.tbme b{width:26px;height:26px;border-radius:50%;background:#fff;color:#13294B;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+#tbMenu,#tbUpd{position:absolute;right:12px;top:58px;background:#fff;color:#1b2d52;border:1px solid #c9d6ea;border-radius:14px;box-shadow:0 14px 34px rgba(19,41,75,.25);padding:8px;min-width:230px}
+#tbMenu .tbmh{padding:8px 10px 10px;border-bottom:1px solid #e3e9f2;margin-bottom:4px}#tbMenu .tbmh b{display:block;font-size:15px}#tbMenu .tbmh small{color:#5b6b82}
+#tbMenu button{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:8px;font-size:14px;font-weight:600;color:#1b2d52}
+#tbMenu button:hover{background:#EEF3F9}
+#tbUpd{width:310px;padding:14px 16px}#tbUpd b{display:block;font-size:14.5px}#tbUpd small{display:block;color:#5b6b82;margin:4px 0 10px;font-size:12.5px}#tbUpd div{display:flex;gap:8px}
+body.hasTb{padding-top:52px}
+body.hasTb #app .top .top-row,body.hasTb #app .top .homebtn,body.hasTb #app .top.tc,body.hasTb .demorib{display:none!important}
+body.hasTb #app .top{padding-top:4px}body.hasTb #app .top .ptitle{margin-top:6px}
+body.hasTb #undoFab,body.hasTb #redoFab,body.hasTb #libFab,body.hasTb #actFab,body.hasTb #backFab,body.hasTb .machtab,body.hasTb .hinst,body.hasTb .hfoot{display:none!important}
+body.hasTb .cvbar,body.hasTb .cvno,body.hasTb .selbar2{top:52px}
+@media (min-width:1100px){body.hasTb #pm>.cvbar,body.hasTb #pm>.prail{top:64px}}
+body.hasTb #libPop{position:fixed}
+#busyPill{top:62px}
+/* bottom bar of a certificate: Cover · Machine · Data sheet next to the main buttons */
+body.hasTb #mtools{display:flex;gap:6px}
+body.hasTb #mtools button{height:40px;border:1.5px solid #C9D4E2;background:#fff;color:#13294B;border-radius:10px;font:700 14px/1 Barlow,system-ui,sans-serif;padding:0 14px;white-space:nowrap;cursor:pointer}
+body.hasTb #mtools button:hover{border-color:#13294B}
+@media (min-width:761px){body.hasTb.mt .wiz-foot{flex-direction:row;align-items:center;gap:14px}body.hasTb.mt .wiz-foot #mtools{width:auto;max-width:none}}
+@media (max-width:1180px){.tbtools .tbb span,.tbchip span{display:none}.tbtools .tbb{width:36px;padding:0;justify-content:center}.tbchip{width:28px;padding:0;justify-content:center}.tbcr{max-width:26vw}}
+@media (max-width:760px){.tbhome span,.tbme span,.tbme svg,.tbcr small,.tbsep{display:none}.tbcr{max-width:30vw}.tbtools{margin-left:2px;padding-left:2px;border:0}#tbar .tbin{padding:0 4px;gap:0}.tbb.ic{width:32px}.tbtools .tbb{width:32px}#tbar [data-tb="out"].ic{display:none}body.hasTb #mtools button{flex:1;height:38px;padding:0 4px;font-size:13.5px}}
+#tbUpd .btn{height:34px;padding:0 14px;border-radius:9px;font-weight:700;font-size:13.5px;background:#13294B;color:#fff;border:1.5px solid #13294B}
+#tbUpd .btn.ghost{background:#fff;color:#13294B;border-color:#C9D4E2}
+#tbar.incr .tbtools .tbb span{display:none}#tbar.incr .tbtools .tbb{width:36px;padding:0;justify-content:center}
+#tbar.incr .tbcr{max-width:40vw}
+@media (max-width:1180px){#tbar.incr .tbcr{max-width:30vw}}
+.tbcr b{flex:none}.tbcr small{min-width:0}
+#tbMenu .tbmo{display:none}
+@media (max-width:760px){
+ #tbMenu .tbmo{display:block}
+ #tbar .tbcr,#tbar .rfbtn,#tbar .tbchip:not([data-tb]),#tbar .tbtools [data-tb="bin"],#tbar .tbtools [data-tb="users"],#tbar .tbtools [data-tb="act"]{display:none!important}
+ .tbhome{padding:0 4px}.tbhome img{height:18px}
+ .tbchip{margin:0 2px}
+ #tbMenu,#tbUpd{right:6px;left:6px;min-width:0;width:auto}
+}

@@ -421,15 +421,14 @@ function backFab() { var b = document.getElementById('backFab'); if (!b) { b = d
   b.className = (S.cur || sheetFn) && S.session !== false ? 'on' : ''; }
 setInterval(function () { try { backFab(); } catch (e) {} }, 400);
 /* phones: Back · Cover · Machine · Undo sit in one fixed row at the bottom (with the main buttons) instead of floating over the certificate */
-function mobSync() { var f = document.querySelector('.wiz-foot'), mob = window.matchMedia && window.matchMedia('(max-width: 760px)').matches, mt = document.getElementById('mtools');
-  if (!f || !mob) { if (mt) mt.remove(); document.body.classList.remove('mt'); return; }
+function mobSync() { var f = document.querySelector('.wiz-foot'), mt = document.getElementById('mtools'), on = f && (document.getElementById('cTab') || document.getElementById('mTab'));
+  if (!on) { if (mt) mt.remove(); document.body.classList.remove('mt'); return; }
   if (!mt || mt.parentNode !== f) { if (mt) mt.remove(); mt = document.createElement('div'); mt.id = 'mtools';
-    mt.innerHTML = '<button type="button" data-mt="back">‹ Back</button><button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button><button type="button" data-mt="undo">↶ Undo</button>';
+    mt.innerHTML = '<button type="button" data-mt="cov">Cover</button><button type="button" data-mt="mach">Machine</button><button type="button" data-mt="ds">Data sheet</button>';
     f.insertBefore(mt, f.firstChild); mt.onclick = function (e) { var b = e.target.closest('[data-mt]'); if (!b) return; var k = b.dataset.mt;
-      if (k === 'back') doBack(); else if (k === 'undo') doUndo(); else { var t = document.getElementById(k === 'cov' ? 'cTab' : 'mTab'); if (t) t.click(); } }; }
-  document.body.classList.add('mt'); var has = function (id) { return !!document.getElementById(id); }, uf = document.getElementById('undoFab');
-  mt.querySelector('[data-mt="cov"]').style.display = has('cTab') ? '' : 'none'; mt.querySelector('[data-mt="mach"]').style.display = has('mTab') ? '' : 'none';
-  mt.querySelector('[data-mt="undo"]').disabled = !(uf && uf.classList.contains('on')); }
+      if (k === 'ds') return dsLibSheet(); var t = document.getElementById(k === 'cov' ? 'cTab' : 'mTab'); if (t) t.click(); }; }
+  document.body.classList.add('mt'); var has = function (id) { return !!document.getElementById(id); };
+  mt.querySelector('[data-mt="cov"]').style.display = has('cTab') ? '' : 'none'; mt.querySelector('[data-mt="mach"]').style.display = has('mTab') ? '' : 'none'; }
 setInterval(function () { try { mobSync(); } catch (e) {} }, 300); window.addEventListener('resize', function () { try { mobSync(); } catch (e) {} });
 function undoFab() { var b = document.getElementById('undoFab'); if (!b) { b = document.createElement('button'); b.id = 'undoFab'; b.type = 'button'; b.title = 'Undo (Ctrl+Z)'; b.innerHTML = '↶ Undo'; b.onclick = doUndo; document.body.appendChild(b); }
   var r = document.getElementById('redoFab'); if (!r) { r = document.createElement('button'); r.id = 'redoFab'; r.type = 'button'; r.onclick = doRedo; document.body.appendChild(r); } r.className = UNDO.rd.length && S.session ? 'on' : ''; r.innerHTML = '↷ Redo' + (UNDO.rd.length ? ' <small>' + Math.min(UNDO.rd.length, 99) + '</small>' : ''); r.title = UNDO.rd.length ? 'Redo – ' + UNDO.rd.length + ' step' + (UNDO.rd.length > 1 ? 's' : '') + ' (Ctrl+Y)' : 'Nothing to redo';
@@ -526,6 +525,59 @@ var SHEET_LAST = null; function renderSheet() { var root = $('#sheet-root'); if 
 function closeSheet() { var gr = window.__gapRet, back = gr && gr.sheet && sheetFn === gr.sheet; sheetFn = null; renderSheet(); render(); if (back) { window.__gapRet = null; setTimeout(function () { gr.fn(); setTimeout(function () { gapDoneToast(gr.cert); }, 150); }, 30); } }
 
 /* ================= login ================= */
+/* ===== one toolbar fixed at the top of every screen (like Word): Akhnaton = home, the tools, undo/redo, library, SharePoint, the user ===== */
+var TB = { last: '', menu: false };
+function tbIco(n) { var P = {
+    home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>', back: '<path d="M15 18l-6-6 6-6"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+    lib: '<path d="M4 19V5a2 2 0 0 1 2-2h4v18H6a2 2 0 0 1-2-2z"/><path d="M10 3h4v18h-4z"/><path d="M15 4l4 1-3 16-4-1"/>',
+    bin: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/>', act: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+    undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>', redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+    out: '<path d="M15 4h4v16h-4"/><path d="M10 17l5-5-5-5M15 12H3"/>', ref: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>', down: '<path d="M6 9l6 6 6-6"/>' }[n] || '';
+  return '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P + '</svg>'; }
+function tbLib() { var lu = LS.get('dataUpdated', 0), later = LS.get('libLater', 0) || 0;
+  if (UPD.run) return { k: 'run', t: 'Updating library…' };
+  if (lu && Date.now() - lu < 30 * 864e5) return { k: 'ok', t: 'Library up to date' };
+  return { k: Date.now() < later ? 'later' : 'old', t: lu ? 'Library update ready' : 'Library: first update' }; }
+function tbCrumb() { var hd = document.querySelector('#app .top.tc .tct'); if (!hd || !S.cur) return ''; var co = hd.querySelector('#crCo'), b = hd.querySelector('.crumb b'), sm = hd.querySelector('small');
+  return '<span class="tbsep"></span><nav class="tbcr">' + (co ? '<button data-tb="crco">' + esc(co.textContent) + '</button><i>›</i>' : '') + (b ? '<b>' + esc(b.textContent) + '</b>' : '') + (sm && sm.textContent ? '<small>' + esc(sm.textContent) + '</small>' : '') + '</nav>'; }
+function tbarPaint() { var bar = document.getElementById('tbar');
+  if (!S.session || !document.querySelector('#app .shell')) { if (bar) bar.remove(); document.body.classList.remove('hasTb'); return; }
+  document.body.classList.add('hasTb');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'tbar'; document.body.appendChild(bar); bar.onclick = tbClick; document.addEventListener('click', function (e) { if (TB.menu && !e.target.closest('#tbMenu, [data-tb="me"]')) { TB.menu = false; TB.last = ''; tbarPaint(); } }); }
+  var L = tbLib(), sp = spOn() && !FILES.err, nb = binGet().length, me = S.me ? String(S.me.name || '').split(/\s+/)[0] : '', canBack = !!(S.cur || sheetFn);
+  var B = function (k, ico, txt, tip, cls) { return '<button class="tbb' + (cls ? ' ' + cls : '') + '" data-tb="' + k + '" title="' + esc(tip || txt) + '">' + tbIco(ico) + (txt ? '<span>' + txt + '</span>' : '') + '</button>'; };
+  bar.classList.toggle('incr', !!S.cur); var h = '<div class="tbin">' + (canBack ? B('back', 'back', '', 'Back one step (Esc)', 'ic') : '') +
+    '<button class="tbhome" data-tb="home" title="Home – all jobs"><img src="logo-en-light.png" alt="Akhnaton"><span>Certificates</span></button>' + tbCrumb() +
+    '<div class="tbtools">' + (can('newjob') ? B('new', 'plus', 'New job') : '') + B('lib', 'lib', 'Library', 'Data library – instruments and customers') +
+    B('bin', 'bin', 'Recycle bin' + (nb ? ' <em>' + nb + '</em>' : ''), 'Recycle bin') + (SYNC.on() && actAllowed() ? B('act', 'act', 'Activity', 'Team activity') : '') + (certAdmin() ? B('users', 'users', 'Users') : '') + '</div>' +
+    '<span class="tbsp"></span>' +
+    '<button class="tbb ic" data-tb="undo" title="' + (UNDO.st.length ? 'Undo – ' + UNDO.st.length + ' step' + (UNDO.st.length > 1 ? 's' : '') + ' (Ctrl+Z)' : 'Nothing to undo') + '"' + (UNDO.st.length ? '' : ' data-off') + '>' + tbIco('undo') + '</button>' +
+    '<button class="tbb ic" data-tb="redo" title="' + (UNDO.rd.length ? 'Redo – ' + UNDO.rd.length + ' (Ctrl+Y)' : 'Nothing to redo') + '"' + (UNDO.rd.length ? '' : ' data-off') + '>' + tbIco('redo') + '</button>' +
+    '<button class="tbchip lib-' + L.k + '" data-tb="libst" title="' + esc(L.t) + '"><i></i><span>' + esc(L.t) + '</span></button>' +
+    '<span class="tbchip' + (sp ? '' : ' off') + '" title="SharePoint"><i></i><span>' + (sp ? 'SharePoint' : 'Offline') + '</span></span>' +
+    '<button class="tbb ic rfbtn" title="Refresh – load the newest version">' + tbIco('ref') + '</button>' +
+    '<button class="tbb tbme" data-tb="me" title="' + esc(S.me ? S.me.name : '') + '"><b>' + esc((me || '?').charAt(0)) + '</b><span>' + esc(me) + '</span>' + tbIco('down') + '</button>' +
+    B('out', 'out', '', 'Sign out', 'ic') + '</div>' +
+    (TB.menu ? '<div id="tbMenu"><div class="tbmh"><b>' + esc(S.me ? S.me.name : '') + '</b><small>' + esc(CROLE[certRoleOf(S.me)] || '') + '</small></div><button class="tbmo" data-tb="bin">Recycle bin' + (nb ? ' (' + nb + ')' : '') + '</button>' + (certAdmin() ? '<button class="tbmo" data-tb="users">Users</button>' : '') + (SYNC.on() && actAllowed() ? '<button class="tbmo" data-tb="act">Team activity</button>' : '') + '<button data-tb="paper">Paper used</button><button data-tb="inst">Install the app / share the link</button><button data-tb="out">Sign out</button></div>' : '') +
+    (L.k === 'old' && !TB.menu && !S.cur && !sheetFn && !TB.updSeen ? '<div id="tbUpd"><b>' + (LS.get('dataUpdated', 0) ? 'The library is over a month old' : 'The library was never updated online') + '</b><small>Instrument datasheets and customer data – like Windows updates, it runs in the background</small><div><button class="btn sm" data-tb="updnow">Update now</button><button class="btn ghost sm" data-tb="updlater">Later</button></div></div>' : '');
+  if (h === TB.last) return; TB.last = h; bar.innerHTML = h; }
+function tbClick(e) { var b = e.target.closest('[data-tb]'); if (!b) return; var k = b.dataset.tb; if (b.hasAttribute('data-off')) return; e.stopPropagation();
+  var home = function (then) { if (S.cur || sheetFn) goHome(); if (then) setTimeout(then, 60); };
+  if (k === 'home') return goHome(); if (k === 'back') return doBack(); if (k === 'crco') { var c = document.querySelector('#app #crCo'); if (c) c.click(); return; }
+  if (k === 'new') return home(function () { var n = $('#newP'); if (n) n.click(); else newProject(); });
+  if (k === 'lib') { libPop(); var p = document.getElementById('libPop'), r = b.getBoundingClientRect(); if (p) { p.style.top = (r.bottom + 8) + 'px'; p.style.left = Math.max(8, Math.min(r.left, innerWidth - p.offsetWidth - 8)) + 'px'; p.style.right = 'auto'; p.style.bottom = 'auto'; } return; }
+  if (TB.menu && b.closest('#tbMenu')) { TB.menu = false; TB.last = ''; tbarPaint(); } if (k === 'bin') return binSheet(); if (k === 'act') return actPanel(); if (k === 'users') return usersSheet();
+  if (k === 'undo') return doUndo(); if (k === 'redo') return doRedo();
+  if (k === 'libst') { if (tbLib().k === 'later') { LS.del('libLater'); TB.last = ''; return tbarPaint(); } return b.parentNode.querySelector('[data-tb="lib"]') ? b.parentNode.querySelector('[data-tb="lib"]').click() : libPop(); }
+  if (k === 'updnow') { TB.updSeen = 1; dataUpdateAll(); toast('Library update started – it goes on in the background'); TB.last = ''; return tbarPaint(); }
+  if (k === 'updlater') { TB.updSeen = 1; LS.set('libLater', Date.now() + 3 * 864e5); TB.last = ''; return tbarPaint(); }
+  if (k === 'me') { TB.menu = !TB.menu; TB.last = ''; return tbarPaint(); }
+  TB.menu = false; TB.last = '';
+  if (k === 'out') { tbarPaint(); return signOut(); }
+  if (k === 'paper') return home(function () { var x = $('#paperB'); if (x) x.click(); });
+  if (k === 'inst') return installSheet(); }
+setInterval(function () { try { tbarPaint(); } catch (e) {} }, 300);
 /* ===== "Working…": whenever something you pressed waits for a server or a file, a small pill says so (background refreshes stay quiet) ===== */
 (function () { var n = 0, act = 0, t = null, pill = function (on) { var e = document.getElementById('busyPill'); if (on) { if (!e) { e = document.createElement('div'); e.id = 'busyPill'; e.innerHTML = '<span class="spin"></span> Working…'; document.body.appendChild(e); } } else if (e) e.remove(); };
   ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, function () { act = Date.now(); }, true); });
@@ -592,7 +644,7 @@ function signOut() { S.session = null; S.me = null; LS.del('session'); LS.del('m
 
 /* ================= app shell ================= */
 function top(title, sub, extra) {
-  return (DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton"><span class="bdiv"></span><span class="bname"><small>Akhnaton</small><b>Certificates</b></span></div>' +
+  return '<div class="top"><div class="top-row"><div class="brand"><img src="logo-en-light.png" alt="Akhnaton"><span class="bdiv"></span><span class="bname"><small>Akhnaton</small><b>Certificates</b></span></div>' +
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i>' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></div>' +
     (S.cur ? '<button class="homebtn" id="goHome2"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Home</button>' : '') +
     (title ? '<div class="ptitle">' + title + '</div>' : '') + (sub ? '<div class="hello" style="margin-top:4px">' + sub + '</div>' : '') + (extra || '') + '</div>'; }
@@ -642,7 +694,7 @@ function renderHome() { var HM = HOME, now = new Date(), Y = HM.yr || now.getFul
   var hr = now.getHours(), hi = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening', me = S.me ? String(S.me.name || '').split(/\s+/)[0] : '';
   var prog = function (p) { var L = certsOf(p), n = L.filter(function (x) { return x.saved; }).length; return { n: n, t: L.length }; };
   var jobRow = function (p) { var g = prog(p), inf = p.info || {}; return '<div class="hjob" data-p="' + p.id + '"><div class="hjt"><b>' + esc(coName(p)) + '</b><small>' + esc([inf.cal ? fmtD(inf.cal) : '', p.dept || ''].filter(Boolean).join(' · ') || 'not started') + '</small>' + syncJobLine(p) + '</div><div class="hjp"><span>' + g.n + ' / ' + g.t + '</span><div class="hpbar"><i style="width:' + (g.t ? Math.round(g.n / g.t * 100) : 0) + '%"></i></div></div>' + (can('deljob') ? '<button class="lx" data-pd="' + p.id + '" title="Delete this job">✕</button>' : '') + '</div>'; };
-  $('#app').innerHTML = '<div class="shell hshell">' + ((DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top tc"><div class="top-row"><img class="tclogo" src="logo-en-light.png" alt="Akhnaton" style="height:26px"><div class="tct"><b>Certificates</b><small>Akhnaton calibration lab</small></div><span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span><button class="rfbtn" title="Refresh – load the newest version">↻</button></div></div>') + '<main>' + (spOn() ? dsRemind() : msCard()) +
+  $('#app').innerHTML = '<div class="shell hshell">' + ('<div class="top tc"><div class="top-row"><img class="tclogo" src="logo-en-light.png" alt="Akhnaton" style="height:26px"><div class="tct"><b>Certificates</b><small>Akhnaton calibration lab</small></div><span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span><button class="rfbtn" title="Refresh – load the newest version">↻</button></div></div>') + '<main>' + (spOn() ? dsRemind() : msCard()) +
     '<div class="hhead"><div><div class="hhi">' + hi + (me ? ', ' + esc(me) : '') + '</div><div class="hdt">' + now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · Calibration lab</div></div><div class="hact"><button class="btn" id="newP">+ New job</button>' + (last ? '<button class="btn ghost" data-p="' + last.id + '">Continue ' + esc(coName(last)) + ' ›</button>' : '') + '</div></div>' +
     '<section class="hblk hopen"><div class="hbh"><b>Open jobs</b><span>' + open.length + '</span></div>' + (open.length ? open.map(jobRow).join('') : '<div class="hemp">No open jobs – start one with “New job”.</div>') + '</section>' +
     '<div class="hstats"><section class="hblk hsm"><div class="hbh"><b>Certificates</b><select class="hsel" id="hYr">' + yl.map(function (y) { return '<option' + (y === Y ? ' selected' : '') + '>' + y + '</option>'; }).join('') + '</select></div><div class="hnums"><div><b>' + yr.length.toLocaleString() + '</b><small>' + (Y === now.getFullYear() ? 'this year' : 'in ' + Y) + '</small></div>' + (thisM != null ? '<div><b>' + thisM + '</b><small>this month' + (prevM ? ' · ' + MS[now.getMonth() - 1] + ' ' + prevM : '') + '</small></div>' : '') + '</div>' +
@@ -4772,7 +4824,7 @@ function wlHead(p, no, title) { var inf = p.info || {};
   return '<div class="wlt">' + esc(title || 'Calibration Certificate') + '</div><div class="wlno">CERTIFICATE NO.: ' + esc(no || '—') + '</div>' +
     '<table class="wlinfo"><tr><th>DATE OF ISSUE:</th><td>' + esc(fmtD(inf.iss)) + '</td><th>CUSTOMER ID:</th><td>' + esc(p.company.code || '') + '</td></tr><tr><th>CUSTOMER:</th><td colspan="3">' + esc(p.company.official || p.company.name) + '</td></tr></table>'; }
 function topC(title, sub, co) {
-  return (DEMO ? '<div class="demorib">TRIAL VERSION – sample data, nothing is saved to SharePoint · <a href="./">open the real app</a></div>' : '') + '<div class="top tc"><div class="top-row"><button class="homebtn hb2" id="goHome2" title="Home – all jobs"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Home</span></button><img class="tclogo" data-home src="logo-en-light.png" alt="Akhnaton" title="Home – all jobs"><div class="tct"><nav class="crumb">' + (co ? '<button id="crCo">' + co + '</button><span>›</span>' : '') + '<b>' + title + '</b></nav><small>' + sub + '</small></div>' +
+  return '<div class="top tc"><div class="top-row"><button class="homebtn hb2" id="goHome2" title="Home – all jobs"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Home</span></button><img class="tclogo" data-home src="logo-en-light.png" alt="Akhnaton" title="Home – all jobs"><div class="tct"><nav class="crumb">' + (co ? '<button id="crCo">' + co + '</button><span>›</span>' : '') + '<b>' + title + '</b></nav><small>' + sub + '</small></div>' +
     '<span class="sync' + (spOn() && !FILES.err ? '' : ' off') + '" title="SharePoint"><i></i><span class="synct">' + (spOn() && !FILES.err ? 'SharePoint' : 'Offline') + '</span></span><button class="rfbtn" title="Refresh – load the newest version">↻</button></div></div>'; }
 document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; var ov = document.querySelector('.sopov'); if (ov) { ov.remove(); e.preventDefault(); return; } if (typeof sheetFn !== 'undefined' && sheetFn && !document.querySelector('.dlg, .dialog')) { e.preventDefault(); closeSheet(); try { render(); } catch (x) {} return; } var he = document.getElementById('hEdit2'); if (he && !document.querySelector('.dlg')) { e.preventDefault(); he.click(); } });
 function hubAddBind(p) { var he = $('#hEdit2'); if (he) he.onclick = function () { p.hubEdit = false; p.hubSel = {}; saveProjects(); render(); };
