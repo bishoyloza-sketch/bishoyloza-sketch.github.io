@@ -1638,3 +1638,4 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .cexp{display:inline-flex;border:1px solid #C9D6E8;border-radius:10px;overflow:hidden;background:#fff}.cexp button{border:0;border-left:1px solid #E3E9F2;background:#fff;padding:0 12px;height:36px;font:inherit;font-size:13.5px;font-weight:600;color:#13294B;cursor:pointer}.cexp button:first-child{border-left:0}.cexp button:hover{background:#F4F9FE}
 .updc{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E3E9F2;border-radius:12px;padding:10px 14px;margin:12px 0;font-size:13.5px;color:#33445C}.updc .updi{width:32px;height:32px;border-radius:50%;background:#E6F1FB;display:inline-flex;align-items:center;justify-content:center;flex:none}.updc .updt{flex:1}.updc small{color:#8695A8}.updc .upde{color:#A32D2D}
 .updrow{display:none}
+.eqtb td.eqres small{display:block;color:#8695A8;font-size:11px}
