@@ -1629,3 +1629,4 @@ body.hasNV .donebar{top:89px!important}
 .spd{max-width:460px}.spol{display:flex;flex-direction:column;gap:8px;margin:12px 0}
 .spo{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:1px solid #DCE3EE;background:#fff;border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit;width:100%}.spo:hover{border-color:#185FA5;background:#F4F9FE}.spo b{font-size:14.5px;color:#13294B}.spo small{font-size:12.5px;color:#5B6B80;margin-top:2px}
 .spr{display:flex;gap:8px;align-items:center;font-size:13.5px;color:#33445C;margin:4px 0 6px}.sptg.rst{padding:1px 5px}
+.tpsg{margin-left:6px;border:1px solid #F0D9A0;background:#FFF8E6;color:#7A5200;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600;cursor:pointer}
