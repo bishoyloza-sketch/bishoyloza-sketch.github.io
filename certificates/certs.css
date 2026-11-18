@@ -1585,3 +1585,4 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .hjr .hjac{display:flex;justify-content:flex-end}.hjr .hjfx,.hjt2 .hjfx{white-space:nowrap;writing-mode:horizontal-tb;width:auto}
 .hjr .hjdl .lx{position:static}
 @media (max-width:760px){.hjr{grid-template-columns:minmax(0,1.6fr) 1fr 110px 28px!important}.hjr>span:nth-child(5){display:none}}
+.hjtabs{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;margin-top:0}.hjtabs::-webkit-scrollbar{display:none}
