@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v346';
+var APP_V = 'v347';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1286,14 +1286,14 @@ function wItems(p) {
       : it.old && (it.old.status === 'missing' || it.old.status === 'error') && (it.code || it.prevCert) ? '<span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">No old cert</span>'
       : iss.length ? '<span class="pill" style="--s-fg:var(--service);--s-bg:var(--service-soft)">' + (hasData(it) ? 'Missing data' : 'Photo only') + '</span>' : '') + '<span class="iacts"><button class="ia" data-ie="' + it.id + '">Edit</button><button class="ia del" data-ix="' + it.id + '" title="Remove">×</button></span></div>'; };
   var sb = p.sugBat;
-  $('#wm').innerHTML = '<div class="sec" style="margin-top:2px"><h2>Add the codes</h2><small>choose one way</small></div><div class="cats three">' +
-    '<button data-a="month" class="hl">' + I.visit + '<b>Suggested</b><small>' + (sb ? (sb.n ? sb.n + ' batches · ' + MON[sb.m] + ' ' + sb.y : 'Nothing in ' + MON[sb.m] + ' ' + sb.y) : spOn() ? 'Checking last year…' : 'Same month last year') + '</small></button>' +
+  $('#wm').innerHTML = '<div class="sec" style="margin-top:2px"><h2>Add the codes</h2><small>choose one way</small></div><div class="cats two">' +
+    '<button data-a="attach" class="hl"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9"/></svg><b>Attach a file</b><small>The customer\'s list – PDF, Word or Excel</small></button>' +
     '<button data-a="desc"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><b>Search</b><small>Description, code or cert. no. · any year or month</small></button>' +
-    '<button data-a="photo">' + I.cam + '<b>Photo</b><small>Opens the camera</small></button></div>' +
-    '<div class="cf" style="margin-top:8px"><button class="btn sm" data-a="letters">Search the letters</button><button class="btn sm" data-a="files">Drop certificate files</button><button class="btn sm" data-a="paste">Paste many codes / cert. nos.</button><button class="btn ghost sm" data-a="excel">Excel template</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
-    (p.items.length ? '<div class="codesum"><span><b>' + p.items.length + '</b> certificate' + (p.items.length === 1 ? '' : 's') + ' in this job' + (need ? ' · <span class="cnd">' + need + ' need data</span>' : '') + '</span><button class="btn ghost sm" id="toList">Open the job list ›</button></div>' : '<div class="empty"><b>No codes yet</b>Use Suggested, Search or Photo above.</div>');
+    '</div>' +
+    '<div class="acts4"><button class="btn ghost sm" data-a="letters">Search the letters</button><button class="btn ghost sm" data-a="files">Drop certificate files</button><button class="btn ghost sm" data-a="paste">Paste many codes</button><button class="btn ghost sm" data-a="add">+ Type an item</button></div>' +
+    (p.items.length ? '<div class="codesum"><span><b>' + p.items.length + '</b> certificate' + (p.items.length === 1 ? '' : 's') + ' in this job' + (need ? ' · <span class="cnd">' + need + ' need data</span>' : '') + '</span><button class="btn ghost sm" id="toList">Open the job list ›</button></div>' : '<div class="empty"><b>No codes yet</b>Attach the customer\'s list or search above.</div>');
   $$('[data-ph]').forEach(function (im) { IDB.get(im.dataset.ph).then(function (d) { if (d) im.src = d; }); });
-  $$('[data-a]').forEach(function (b) { b.onclick = function () { var k = b.dataset.a; if (k === 'month' || k === 'code' || k === 'cert' || k === 'desc') { if (!spOn()) return toast('SharePoint is not connected', true); return lySearch(p, k); } if (k === 'letters' && !spOn()) return toast('SharePoint is not connected', true); ({ photo: photoChoice, excel: excelSheet, add: addChoice, paste: pasteSheet, files: dropSheet, letters: lettersSheet })[k](p); }; });
+  $$('[data-a]').forEach(function (b) { b.onclick = function () { var k = b.dataset.a; if (k === 'month' || k === 'code' || k === 'cert' || k === 'desc') { if (!spOn()) return toast('SharePoint is not connected', true); return lySearch(p, k); } if (k === 'letters' && !spOn()) return toast('SharePoint is not connected', true); ({ attach: attachSheet, photo: photoChoice, excel: excelSheet, add: addChoice, paste: pasteSheet, files: dropSheet, letters: lettersSheet })[k](p); }; });
   $$('[data-it]').forEach(function (b) { b.onclick = function () { itemSheet(p, b.dataset.it); }; });
   $$('[data-ie]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); itemSheet(p, b.dataset.ie); }; });
   $$('[data-ix]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); delItem(p, b.dataset.ix, render); }; });
@@ -1494,6 +1494,114 @@ function xlImport(p, file) { needExcel().then(function () { return file.arrayBuf
     if (itemIssues(it).length) incomplete++; p.items.push(it); n++; });
   saveProjects(); queueOld(p); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>' + (incomplete ? '<div class="note amber">' + incomplete + ' of them have missing or wrong data (range, unit or resolution) – they are marked “Missing data”.</div>' : '');
 }).catch(function (e) { var x = $('#xMsg'); if (x) x.innerHTML = '<div class="note warnbox">' + esc(e.message || e) + '</div>'; }); }
+
+/* ===== Attach file: read a customer's list (PDF / Word / Excel) → machines + items ===== */
+var IMP_ROLES = [['ref', /reference|rationale/i], ['crit', /accept|criteria|toleran|limit/i], ['pts', /point|cal(ibration)?\.?\s*range|test\s*range/i], ['sn', /^s\.?\s*n\.?$|serial|s\/n|instrument\s*s\.?\s*n/i], ['man', /manuf|make|brand|vendor/i], ['model', /model/i],
+  ['range', /range/i], ['code', /code|tag|asset|^id$|id\s*no/i], ['loc', /location|area|room|dep/i], ['name', /name|desc|instrument|equipment|item|device/i]];
+function impRole(h) { h = String(h || '').replace(/\s+/g, ' ').trim(); if (!h || h.length > 60) return ''; for (var i = 0; i < IMP_ROLES.length; i++) if (IMP_ROLES[i][1].test(h)) return IMP_ROLES[i][0]; return ''; }
+function impHeader(cells) { var r = {}, n = 0; cells.forEach(function (c, i) { var k = impRole(c); if (k && r[k] == null) { r[k] = i; n++; } }); return n >= 2 && (r.code != null || r.name != null) ? r : null; }
+/* table rows (array of cell arrays) → records */
+function impTable(rows) { var out = [], H = null;
+  rows.forEach(function (cells) { var h = impHeader(cells); if (h) { H = h; return; } if (!H) return; var g = function (k) { return H[k] == null ? '' : String(cells[H[k]] == null ? '' : cells[H[k]]).replace(/\s+/g, ' ').trim(); };
+    var rec = { name: g('name'), code: g('code'), man: g('man'), model: g('model'), pts: g('pts'), crit: g('crit'), sn: g('sn'), range: g('range'), loc: g('loc') }; if (rec.code || rec.name) out.push(rec); });
+  return out; }
+/* PDF: text with positions → rows by line, cells by the header's columns */
+function impPdf(file) { return needPdf().then(function () { return file.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (pdf) {
+  var pages = [], next = function (i) { if (i > pdf.numPages) return Promise.resolve(pages); return pdf.getPage(i).then(function (pg) { return pg.getTextContent(); }).then(function (tc) { pages.push(tc.items.filter(function (t) { return String(t.str).trim(); }).map(function (t) { return { s: t.str, x: t.transform[4], y: t.transform[5], w: t.width || 0 }; })); return next(i + 1); }); };
+  return next(1); }).then(function (pages) { var recs = [], txt = [];
+  pages.forEach(function (its) { var L = []; its.sort(function (a, b) { return b.y - a.y || a.x - b.x; }).forEach(function (t) { var l = L[L.length - 1]; if (l && Math.abs(l.y - t.y) < 3.2) l.t.push(t); else L.push({ y: t.y, t: [t] }); });
+    L.forEach(function (l) { l.t.sort(function (a, b) { return a.x - b.x; }); txt.push(l.t.map(function (t) { return t.s; }).join(' ')); });
+    /* header: the line (plus the next 2 lines, for headers written on 2-3 lines) that names the columns */
+    var hi = -1, cols = null; for (var i = 0; i < L.length && hi < 0; i++) { var grp = [], li; for (li = i; li < Math.min(L.length, i + 3); li++) grp = grp.concat(L[li].t); grp.sort(function (a, b) { return a.x - b.x; });
+      var cells = [], last = null; grp.forEach(function (t) { var near = cells.filter(function (c) { return t.x < c.x1 + 6 && t.x + t.w > c.x0 - 6; })[0]; if (near) { near.s += ' ' + t.s; near.x0 = Math.min(near.x0, t.x); near.x1 = Math.max(near.x1, t.x + t.w); } else cells.push({ s: t.s, x0: t.x, x1: t.x + t.w }); last = t; });
+      cells.sort(function (a, b) { return a.x0 - b.x0; }); var h = impHeader(cells.map(function (c) { return c.s; })); if (h && Object.keys(h).length >= 3) { hi = i; cols = cells.map(function (c, k) { return { k: Object.keys(h).filter(function (r) { return h[r] === k; })[0] || '', x0: c.x0 }; }); var hy = L[i].y; while (hi + 1 < L.length && hy - L[hi + 1].y < 22 && L[hi + 1].t.every(function (t) { return impRole(t.s) || /^(to be|calibrated|criteria|for|of|no\.?|s\.?n\.?)$/i.test(String(t.s).trim()); })) hi++; } }
+    if (!cols) return;
+    var colOf = function (x) { var c = 0; for (var j = 0; j < cols.length; j++) if (x >= cols[j].x0 - 8) c = j; return cols[c].k; };
+    var cur = null; L.slice(hi + 1).forEach(function (l) { var cell = {}; l.t.forEach(function (t) { var k = colOf(t.x); if (!k) return; cell[k] = (cell[k] ? cell[k] + ' ' : '') + t.s; });
+      if (/^\s*(page \d|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(l.t.map(function (t) { return t.s; }).join(' '))) return;
+      if (cell.code || (!cur && cell.name)) { cur = { name: '', code: '', man: '', model: '', pts: '', crit: '', sn: '', range: '', loc: '' }; recs.push(cur); }
+      if (!cur) return; Object.keys(cell).forEach(function (k) { if (cur[k] == null) return; var v = String(cell[k]).replace(/\s+/g, ' ').trim(), tight = /^(code|model|sn)$/.test(k) && /[A-Za-z0-9\/\-.]$/.test(cur[k]) && !/\s/.test(v); cur[k] = cur[k] ? cur[k] + (tight ? '' : ' ') + v : v; }); }); });
+  return recs.length ? recs : impText(txt.join('\n')); }); }
+/* text only (no columns found): the codes split the records */
+var IMP_CODE = /\b([A-Z]{1,5}\d{0,3}[-.]\d{1,5}[A-Z]?(?:\s*\/\s*[A-Z]{1,5}[-.]?\s?\d{1,3})?)\b/g;
+function impText(t) { var recs = [], m, idx = []; t = String(t || '').replace(/[ \t]*\n[ \t]*/g, '   ').replace(/\u00a0/g, ' '); IMP_CODE.lastIndex = 0; while ((m = IMP_CODE.exec(t))) idx.push({ c: m[1].replace(/\s+/g, ''), i: m.index, e: m.index + m[0].length });
+  var hasKids = {}, anySlash = idx.some(function (o) { return /\//.test(o.c); }); idx.forEach(function (o) { var p = o.c.split('/')[1] ? o.c.split('/')[0] : ''; if (p) hasKids[impKey(p)] = 1; });
+  idx = idx.filter(function (o) { return /\//.test(o.c) || !anySlash || hasKids[impKey(o.c)]; });
+  var segs = function (x) { return String(x).split(/\s{2,}/).map(function (v) { return v.trim(); }).filter(Boolean); };
+  idx.forEach(function (o, k) { var nx = idx[k + 1], after = t.slice(o.e, nx ? nx.i : t.length), isItem = /\//.test(o.c), sg = segs(after);
+    if (nx && !/\//.test(nx.c) && sg.length > 1) sg.pop(); /* the next machine's name sits just before its code */
+    var before = segs(t.slice(k ? idx[k - 1].e : 0, o.i)), r = { code: o.c, name: '', man: '', model: '', pts: '', crit: '', sn: '', range: '', loc: '' };
+    if (!isItem) { r.name = before.length ? before[before.length - 1] : ''; r.man = sg[0] || ''; r.model = sg[1] || ''; recs.push(r); return; }
+    r.name = sg.shift() || ''; sg.forEach(function (v) { if (!r.pts && /\(.*\d.*\)|\d+\s*points?/i.test(v) && !/±/.test(v)) r.pts = v; else if (!r.crit && /±/.test(v)) r.crit = v.replace(/\s+\S*\d{4,}\S*$/, ''); else if (!r.man && !/\d{3,}/.test(v) && !/^n\.?a$/i.test(v) && !/according/i.test(v)) r.man = v; else if (!r.model && !/according/i.test(v) && !/^n\.?a$/i.test(v)) r.model = v; });
+    recs.push(r); });
+  return recs; }
+/* Word: tables of word/document.xml */
+function needZip() { return window.JSZip ? Promise.resolve() : loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); }
+function impDocx(file) { return needZip().then(function () { return file.arrayBuffer(); }).then(function (b) { return JSZip.loadAsync(b); }).then(function (z) { return z.file('word/document.xml').async('string'); }).then(function (x) {
+  var d = new DOMParser().parseFromString(x, 'application/xml'), W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', rows = [];
+  Array.prototype.forEach.call(d.getElementsByTagNameNS(W, 'tr'), function (tr) { rows.push(Array.prototype.map.call(tr.getElementsByTagNameNS(W, 'tc'), function (tc) { return Array.prototype.map.call(tc.getElementsByTagNameNS(W, 't'), function (t) { return t.textContent; }).join(' '); })); });
+  var r = impTable(rows); return r.length ? r : impText(Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return p.textContent; }).join('\n')); }); }
+function impXlsx(file) { return needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) { var all = [];
+  wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); all = all.concat(impTable(rows)); }); return all; }); }
+/* ---- understanding the values ---- */
+function impNum(s) { var v = String(s).replace(/,(?=\d{3}\b)/g, '').match(/-?\d+(?:\.\d+)?/); return v ? v[0] : ''; }
+var IMP_UNIT = /(?:^|[\s(\d\/])(°\s?C|°\s?F|%\s?RH|rpm|bar|mbar|psi|kpa|pa|kg|g|gm|mm|m\/s|l\/min|lpm|µs\/cm|us\/cm|ms\/cm|ppm|ph|v|a|hz|s|min|hr|lux|db|n\.?m|%)\b/i;
+function impUnit(s) { var m = String(s || '').match(IMP_UNIT); if (!m) return ''; var u = m[1].replace(/\s/g, ''); return ({ '°c': '°C', '°f': '°F', '%rh': '%RH', rpm: 'RPM', kg: 'kg', g: 'g', gm: 'g', bar: 'bar', mbar: 'mbar', pa: 'Pa', kpa: 'kPa', psi: 'psi', mm: 'mm', 'm/s': 'm/s', 'µs/cm': 'µS/cm', 'us/cm': 'µS/cm', 'ms/cm': 'mS/cm', ph: 'pH', v: 'V', a: 'A', hz: 'Hz', s: 's', min: 'min', lux: 'lux', db: 'dB', '%': '%' })[u.toLowerCase()] || u; }
+function impRange(s) { var m = String(s || '').match(/\(?\s*(-?\d+(?:\.\d+)?)\s*(?::|to|-|–|~)\s*(-?\d+(?:\.\d+)?)\s*([^)]*)\)?/i); return m ? { a: m[1], b: m[2], u: impUnit(m[3]) || impUnit(s) } : null; }
+function impPts(s) { s = String(s || ''); if (!s || /^n\.?a\.?$/i.test(s.trim())) return null; var inP = s.match(/\(([^)]*)\)?/), body = inP ? inP[1] : s; if (/[:]|\bto\b/.test(body) && !/,/.test(body)) return null;
+  var nums = (body.match(/-?\d+(?:\.\d+)?/g) || []).filter(function (v, i, a) { return a.indexOf(v) === i; }); if (/^\s*\d+\s*points?/i.test(s) && nums.length && inP) nums = (inP[1].match(/-?\d+(?:\.\d+)?/g) || []);
+  return nums.length >= 2 ? { pts: nums, u: impUnit(body) || impUnit(s) } : null; }
+function impLim(s, unit) { s = String(s || '').replace(/\s+/g, ' '); var m = s.match(/±\s*(\d+(?:\.\d+)?)\s*(%)?\s*(of\s*)?(f\.?\s?s\.?|full\s*(scale|range)|reading|rdg|span)?\s*([^\s,;]*)/i); if (!m) return null;
+  var v = m[1], pc = !!m[2], what = (m[4] || '').toLowerCase(); if (pc) return { type: /read|rdg/.test(what) ? 'rdg' : 'fs', val: v, unit: '' };
+  return { type: 'abs', val: v, unit: impUnit(m[6]) || impUnit(s) || unit || '' }; }
+function impKey(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+/* records → { machines: [{name, code, man, model, sn, items:[…]}], units: […] } */
+function impBuild(recs) { var codeOf = function (r) { return String(r.code || '').replace(/\s+/g, '').replace(/\/$/, ''); }, M = {}, order = [], units = [];
+  var parentOf = function (c) { var m = c.match(/^(.+?)\/(.+)$/); return m ? m[1] : ''; };
+  var kids = {}; recs.forEach(function (r) { var p = parentOf(codeOf(r)); if (p) kids[impKey(p)] = 1; });
+  recs.forEach(function (r) { var c = codeOf(r); if (!c && !r.name) return; var p = parentOf(c);
+    var nm = String(r.name || '').replace(/\s+/g, ' ').trim(), rg = impRange(r.range) || impRange((nm.match(/\(([^)]*\d[^)]*)\)/) || [])[0]) || (impPts(r.pts) ? null : impRange(r.pts)), pt = impPts(r.pts), sn = /^n\.?\s?a\.?$|^-+$/i.test(String(r.sn).trim()) ? '' : String(r.sn || '').trim();
+    var u = (pt && pt.u) || (rg && rg.u) || impUnit((nm.match(/\(([^)]*)\)/) || [''])[0]) || '';
+    var it = { code: c, description: nm.replace(/\s*\([^)]*\d[^)]*\)\s*$/, '').trim() || nm, manufacturer: r.man || '', model: r.model || '', serial: sn, unit: u, rMin: rg ? rg.a : '', rMax: rg ? rg.b : '', pts: pt ? pt.pts : null, lim: impLim(r.crit, u), crit: r.crit || '', loc: r.loc || '' };
+    if (!p && kids[impKey(c)]) { var mk = impKey(c); if (!M[mk]) { M[mk] = { name: nm || c, code: c, man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(mk); } return; }
+    if (p) { var pk = impKey(p); if (!M[pk]) { M[pk] = { name: p, code: p, items: [] }; order.push(pk); } M[pk].items.push(it); return; }
+    units.push(it); });
+  return { machines: order.map(function (k) { return M[k]; }), units: units }; }
+function impRead(file) { var n = String(file.name || '').toLowerCase(); return /\.pdf$/.test(n) ? impPdf(file) : /\.docx$/.test(n) ? impDocx(file) : /\.xlsx$/.test(n) ? impXlsx(file) : Promise.reject(new Error('Choose a PDF, Word (.docx) or Excel (.xlsx) file')); }
+/* the sheet: pick a file → see the machines and items found → add them */
+function attachSheet(p) { var st = { busy: 0, res: null, err: '', file: null, off: {} };
+  var go = function (f) { st.file = f; st.busy = 1; st.err = ''; st.res = null; renderSheet();
+    var n = String(f.name || '').toLowerCase(), job = /\.xlsx$/.test(n) ? needExcel().then(function () { return f.arrayBuffer(); }).then(function (b) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(b).then(function () { return wb; }); }).then(function (wb) { var ws = wb.getWorksheet('Items') || wb.worksheets[0], hd = ws.getRow(1).values.map(function (v) { return cellStr(v).trim().toLowerCase(); }).join('|'); return /range from/.test(hd) && /machine/.test(hd) ? 'tpl' : impXlsx(f); }) : impRead(f);
+    job.then(function (r) { if (r === 'tpl') { closeSheet(); excelSheet(p); return setTimeout(function () { xlImport(p, f); }, 300); } st.busy = 0; st.res = impBuild(r || []); if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in this file. Is it a list of instruments with a Code column?'; renderSheet(); })
+      .catch(function (e) { st.busy = 0; st.err = (e && e.message) || String(e); renderSheet(); }); };
+  var have = {}; p.items.forEach(function (i) { if (i.code) have[impKey(i.code)] = 1; });
+  var line = function (it, mi, ii) { var k = mi + ':' + ii, dup = it.code && have[impKey(it.code)], meta = [it.manufacturer, it.model, it.serial ? 'S/N ' + it.serial : ''].filter(Boolean).join(' · '), req = [it.rMin !== '' && it.rMax !== '' ? '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || '') : '', it.pts ? it.pts.join(' · ') + ' ' + (it.unit || '') : '', it.crit].filter(Boolean).join('  |  ');
+    return '<label class="imi' + (dup ? ' dup' : '') + '"><input type="checkbox" data-imk="' + k + '"' + (dup || st.off[k] ? '' : ' checked') + (dup ? ' disabled' : '') + '><span class="imc">' + esc(it.code || '—') + '</span><span class="imd"><b>' + esc(it.description || '') + '</b>' + (meta ? '<small>' + esc(meta) + '</small>' : '') + (req ? '<small class="imr">' + esc(req) + '</small>' : '') + '</span>' + (dup ? '<em>already in the job</em>' : '') + '</label>'; };
+  var count = function () { var n = 0; if (!st.res) return 0; st.res.machines.forEach(function (m, mi) { m.items.forEach(function (it, ii) { if (!(it.code && have[impKey(it.code)]) && !st.off[mi + ':' + ii]) n++; }); }); st.res.units.forEach(function (it, ii) { if (!(it.code && have[impKey(it.code)]) && !st.off['u:' + ii]) n++; }); return n; };
+  var renderSheet = function () { openSheet(function () { var R = st.res, n = count();
+    var body = '<div class="imdrop" id="imDrop"><div class="imic">📎</div><b>' + (st.file ? esc(st.file.name) : 'Choose the customer\'s list') + '</b><small>PDF · Word · Excel – the machines, their items, codes, makers, models, serials, points and acceptance criteria are read from it</small><button class="btn" id="imPick">' + (st.file ? 'Choose another file' : 'Choose a file') + '</button></div>' +
+      (st.busy ? '<div class="note"><span class="spin dark" style="width:14px;height:14px;border-width:2px"></span> Reading ' + esc(st.file.name) + '…</div>' : '') + (st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : '') +
+      (R ? '<div class="imsum"><b>' + R.machines.length + '</b> machine' + (R.machines.length === 1 ? '' : 's') + ' · <b>' + (R.machines.reduce(function (a, m) { return a + m.items.length; }, 0) + R.units.length) + '</b> items found</div>' +
+        R.machines.map(function (m, mi) { return '<div class="imm"><div class="imh"><span class="imc">' + esc(m.code) + '</span><b>' + esc(m.name) + '</b><small>' + esc([m.man, m.model, m.sn ? 'S/N ' + m.sn : ''].filter(Boolean).join(' · ')) + '</small><button class="btn ghost sm" data-imall="' + mi + '">' + m.items.length + ' item' + (m.items.length === 1 ? '' : 's') + '</button></div>' + m.items.map(function (it, ii) { return line(it, mi, ii); }).join('') + '</div>'; }).join('') +
+        (R.units.length ? '<div class="imm"><div class="imh"><b>Separate instruments</b></div>' + R.units.map(function (it, ii) { return line(it, 'u', ii); }).join('') + '</div>' : '') : '');
+    return { wide: 1, title: 'Attach a file', body: body, foot: '<button class="btn ghost" id="imX">Cancel</button>' + (R ? '<button class="btn" id="imGo"' + (n ? '' : ' disabled') + '>Add ' + n + ' item' + (n === 1 ? '' : 's') + '</button>' : ''),
+      mount: function () { $('#imPick').onclick = function () { pickFiles('.pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').then(function (fs) { if (fs.length) go(fs[0]); }); };
+        var dz = $('#imDrop'); dz.ondragover = function (e) { e.preventDefault(); dz.classList.add('on'); }; dz.ondragleave = function () { dz.classList.remove('on'); }; dz.ondrop = function (e) { e.preventDefault(); dz.classList.remove('on'); var f = e.dataTransfer.files[0]; if (f) go(f); };
+        $('#imX').onclick = closeSheet;
+        $$('[data-imk]').forEach(function (c) { c.onchange = function () { if (c.checked) delete st.off[c.dataset.imk]; else st.off[c.dataset.imk] = 1; var b = $('#imGo'), k = count(); if (b) { b.textContent = 'Add ' + k + ' item' + (k === 1 ? '' : 's'); b.disabled = !k; } }; });
+        $$('[data-imall]').forEach(function (b) { b.onclick = function () { var mi = b.dataset.imall, ks = $$('[data-imk^="' + mi + ':"]').filter(function (c) { return !c.disabled; }), on = ks.some(function (c) { return !c.checked; }); ks.forEach(function (c) { c.checked = on; if (on) delete st.off[c.dataset.imk]; else st.off[c.dataset.imk] = 1; }); var k = count(), g = $('#imGo'); if (g) { g.textContent = 'Add ' + k + ' item' + (k === 1 ? '' : 's'); g.disabled = !k; } }; });
+        var g = $('#imGo'); if (g) g.onclick = function () { var n2 = impAdd(p, st.res, st.off, have); closeSheet(); toast(n2 + ' items added from ' + st.file.name); render(); }; } }; }); };
+  renderSheet(); }
+function impAdd(p, R, off, have) { var n = 0, mk = function (it, mid) { var x = newItem({ machineId: mid || '', kind: mid ? 'machine-item' : 'unit', code: it.code, description: it.description, manufacturer: it.manufacturer, model: it.model, serial: it.serial, unit: it.unit, rMin: it.rMin, rMax: it.rMax, resUnit: it.unit, dept: (p.depts || [])[0] || '', src: 'list' });
+    if (it.lim) { x.lim = it.lim; x.limFrom = 'customer'; } if (it.pts && it.pts.length) x.reqPts = it.pts.slice(); if (it.crit) x.reqCrit = it.crit;
+    if (!x.code) { startManual(x); if (x.lim) x.old.fields.limits = limText(x); } p.items.push(x); n++; return x; };
+  p.machines = p.machines || [];
+  R.machines.forEach(function (m, mi) { var its = m.items.filter(function (it, ii) { return !(it.code && have[impKey(it.code)]) && !off[mi + ':' + ii]; }); if (!its.length) return;
+    var M0 = p.machines.filter(function (x) { return (x.code && impKey(x.code) === impKey(m.code)) || (m.name !== m.code && x.name === m.name); })[0];
+    if (!M0) { M0 = { id: uid(), name: m.name || m.code, code: m.code, dept: (p.depts || [])[0] || '', manufacturer: m.man || '', model: m.model || '', serial: m.sn || '' }; p.machines.push(M0); }
+    its.forEach(function (it) { mk(it, M0.id); }); });
+  R.units.forEach(function (it, ii) { if (!(it.code && have[impKey(it.code)]) && !off['u:' + ii]) mk(it, ''); });
+  saveProjects(); queueOld(p); return n; }
 
 /* ================= project (after setup): Overview · Old certs · Readings · Details ================= */
 var PT = { tab: 'over' };
@@ -3456,7 +3564,8 @@ document.addEventListener('click', function (e) { var b = e.target.closest && e.
 function gdPaint() { try { document.body.classList.add('gdadm'); } catch (e) {} }
 setInterval(gdPaint, 1000);
 function sugNice(v, span, dec) { var st = Math.pow(10, Math.floor(Math.log10(Math.abs(span) || 1)) - 1), r = Math.round(v / st) * st; return +r.toFixed(Math.min(6, Math.max(dec, 0))); }
-function sugPlan(it) { var useR = it.crFromPts && !it.calUser && isNum(it.rMin) && isNum(it.rMax), lo = !useR && isNum(it.cMin) ? numv(it.cMin) : isNum(it.rMin) ? numv(it.rMin) : null, hi = !useR && isNum(it.cMax) ? numv(it.cMax) : isNum(it.rMax) ? numv(it.rMax) : null;
+function sugPlan(it) { var P0 = sugPlan0(it); if (it && it.reqPts && it.reqPts.length >= 2) { var P1 = P0 && !P0.err ? Object.assign({}, P0) : { dirs: 1 }; P1.err = ''; P1.points = it.reqPts.slice(); P1.why = 'The points the customer asked for in their list'; return P1; } return P0; }
+function sugPlan0(it) { var useR = it.crFromPts && !it.calUser && isNum(it.rMin) && isNum(it.rMax), lo = !useR && isNum(it.cMin) ? numv(it.cMin) : isNum(it.rMin) ? numv(it.rMin) : null, hi = !useR && isNum(it.cMax) ? numv(it.cMax) : isNum(it.rMax) ? numv(it.rMax) : null;
   if (lo == null || hi == null || hi <= lo) return { err: 'Write the Cal. Range (or the Range) first.' };
   var k = itKind(it), u = it.unit || '', span = hi - lo, dec = isNum(it.res) ? (String(it.res).split('.')[1] || '').length : 1, res = isNum(it.res) ? numv(it.res) : 0, N = function (v) { return sugNice(v, span, dec); }, U = function (a) { return a.filter(function (v, i, A) { return A.indexOf(v) === i; }); }, at = function (fr) { return fr.map(function (f) { return f === 0 ? lo : f === 1 ? hi : N(lo + span * f); }); };
   var P = { kind: k || 'General', unit: u, dirs: 1, points: [], why: [], tests: [], ref: '' };
