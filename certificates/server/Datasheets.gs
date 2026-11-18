@@ -18,7 +18,7 @@
  *
  * Free tier (Google, Nov 2026): Gemini 2.5 Flash with Google Search – 500 searches a day, free.
  */
-var MODEL = 'gemini-2.5-flash';
+var MODEL = 'gemini-3.8-flash';
 
 function setup() {
   var pr = PropertiesService.getScriptProperties();
