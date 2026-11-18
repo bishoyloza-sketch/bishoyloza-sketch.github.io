@@ -1677,3 +1677,8 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 @media (max-width:760px){.cats.four{grid-template-columns:1fr 1fr}}@media (max-width:420px){.cats.four button{min-height:104px}}
 
 .acts4 .btn{white-space:normal;line-height:1.25;padding:8px 10px}
+
+#wm.ddon .cats.four [data-a="attach"],#wm.ddon .cats.four [data-a="oldc"]{outline:2px dashed #185FA5;outline-offset:-2px;background:#F4F9FE}
+#wm .cats.four .ddhit{background:#E3F0FC!important;box-shadow:0 0 0 4px rgba(24,95,165,.15)}
+.imcin{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;border:1px solid #F0C36D;background:#FFF8E8;color:#13294B;border-radius:6px;padding:3px 7px;width:150px}
+.imi em.ocr{color:#B26A00}
