@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v349';
+var APP_V = 'v350';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1122,19 +1122,15 @@ function suggestDepts(p) {
     saveProjects(); return p.deptSug; }); }
 function wDept(p) {
   var sug = p.deptSug, sel = p.depts || [];
-  if (!sug && spOn() && !W.busy) { W.busy = true; suggestDepts(p).catch(function (e) { toast(e.message, true); p.deptSug = { list: [], plans: [], err: e.message }; }).then(function () { W.busy = false; if (p.stage === 'dept') render(); }); }
-  var names = (sug ? sug.list.map(function (s) { return s.name; }) : []).concat(sel.filter(function (d) { return !sug || !sug.list.some(function (s) { return s.name === d; }); }));
+  if (!sug && spOn() && !W.busy) { W.busy = true; suggestDepts(p).catch(function (e) { p.deptSug = { list: [], plans: [], err: e.message }; }).then(function () { W.busy = false; if (p.stage === 'dept') render(); }); }
+  /* earlier jobs of the same company in the app also count */
+  var mine = []; S.projects.forEach(function (q) { if (q !== p && q.company && p.company && (q.company.id ? q.company.id === p.company.id : q.company.name === p.company.name)) (q.depts || []).forEach(function (d) { if (mine.indexOf(d) < 0) mine.push(d); }); });
+  var names = []; (sug ? sug.list.map(function (s) { return s.name; }) : []).concat(mine, sel).forEach(function (n) { if (n && names.indexOf(n) < 0) names.push(n); });
+  var where = sug && sug.list.length ? 'From this company\'s certificates' + (sug.list.some(function (s) { return s.years && s.years.length; }) ? ' of earlier years' : '') : mine.length ? 'From this company\'s earlier jobs' : '';
   $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3>' + (p.company.official ? '<div class="meta" dir="auto">' + esc(p.company.official) + '</div>' : '') + '</div>' +
-    (!spOn() ? '<div class="note">Connect SharePoint on the home screen to get suggestions from earlier years. You can still type the departments.</div>'
-      : !sug ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking at earlier years on SharePoint…</b>Certificates and folders of this company.</div>'
-      : '<div class="sec" style="margin-top:4px"><h2>Suggested</h2><small>' + (sug.files || 0) + ' files checked</small></div>' + (sug.err ? '<div class="note warnbox">' + esc(sug.err) + '</div>' : '')) +
-    (names.length ? '<div class="list">' + names.map(function (n) { var s = sug && sug.list.filter(function (x) { return x.name === n; })[0], on = sel.indexOf(n) >= 0;
-      return '<div class="row' + (on ? ' sel' : '') + '"><button class="check" data-d="' + esc(n) + '" style="border:2px solid ' + (on ? 'var(--blue)' : 'var(--line)') + ';' + (on ? 'background:var(--blue)' : '') + '">' + (on ? '✓' : '') + '</button><span class="t" data-d2="' + esc(n) + '"><b>' + esc(n) + '</b>' +
-        (s ? '<small>Seen in ' + s.n + ' file' + (s.n > 1 ? 's' : '') + (s.years.length ? ' · ' + s.years.join(', ') : '') + ' · from ' + s.from + '</small>' : '<small>Added by you</small>') + '</span><button class="icon-btn" data-ed="' + esc(n) + '" style="color:var(--muted)">' + I.edit + '</button></div>'; }).join('') + '</div>'
-      : (sug && spOn() ? '<div class="empty"><b>No departments found in earlier years</b>Type one below, or skip.</div>' : '')) +
-    (sug && sug.plans && sug.plans.length ? '<div class="small" style="margin-top:8px">Plans seen before: ' + sug.plans.map(esc).join(', ') + '</div>' : '') +
-    '<div class="sec"><h2>Add a department</h2></div><div class="orow" style="display:flex;gap:8px"><input class="inp" id="nd" placeholder="e.g. Production, Utilities, Labs"><button class="btn" id="ndA" style="flex:none">Add</button></div>' +
-    (spOn() && sug ? '<div class="cf"><button class="btn ghost sm" id="reS" style="flex:none">Search again</button></div>' : '');
+    '<div class="card dpc"><div class="dpl">Department</div><div class="dpi"><input class="inp" id="nd" placeholder="Type a department…" autocomplete="off"><button class="btn" id="ndA">Add</button></div>' +
+    (names.length ? '<div class="dpchips">' + names.map(function (n) { var on = sel.indexOf(n) >= 0; return '<button class="dpchip' + (on ? ' on' : '') + '" data-d="' + esc(n) + '">' + (on ? '✓ ' : '') + esc(n) + '</button>'; }).join('') + '</div>' : '') +
+    '<div class="dph">' + (spOn() && !sug ? '<span class="spin dark" style="width:12px;height:12px;vertical-align:-2px"></span> Looking at this company\'s earlier certificates…' : where ? esc(where) + ' · tap one or more' : 'Type the department, or skip') + '</div></div>';
   var tog = function (n) { var i = sel.indexOf(n); if (i >= 0) sel.splice(i, 1); else sel.push(n); p.depts = sel; saveProjects(); wDept(p); };
   $$('[data-d]').forEach(function (b) { b.onclick = function () { tog(b.dataset.d); }; }); $$('[data-d2]').forEach(function (b) { b.onclick = function () { tog(b.dataset.d2); }; });
   $$('[data-ed]').forEach(function (b) { b.onclick = function () { var old = b.dataset.ed;
@@ -1142,6 +1138,7 @@ function wDept(p) {
     $('#edOk').onclick = function () { var v = $('#edv').value.trim(); $('#dlg-root').innerHTML = ''; if (!v) return; if (sug) sug.list.forEach(function (s) { if (s.name === old) s.name = v; }); var i = sel.indexOf(old); if (i >= 0) sel[i] = v; else sel.push(v); p.depts = sel; saveProjects(); wDept(p); };
     $('#edDel').onclick = function () { $('#dlg-root').innerHTML = ''; if (sug) sug.list = sug.list.filter(function (s) { return s.name !== old; }); p.depts = sel.filter(function (x) { return x !== old; }); saveProjects(); wDept(p); }; }; });
   $('#ndA').onclick = function () { var v = $('#nd').value.trim(); if (!v) return; if (sel.indexOf(v) < 0) sel.push(v); p.depts = sel; saveProjects(); wDept(p); };
+  $('#nd').onkeydown = function (e) { if (e.key === 'Enter') $('#ndA').click(); };
   var rs = $('#reS'); if (rs) rs.onclick = function () { p.deptSug = null; wDept(p); };
   foot(p, sel.length ? 'Next' : 'Next', sel.length > 0, function () { p.deptSkip = false; go(p, 'type'); }, '<button class="btn ghost" id="wSkip">Skip</button>');
   $('#wSkip').onclick = function () { p.depts = []; p.deptSkip = true; go(p, 'type'); };
@@ -1200,15 +1197,18 @@ function wOrder(p) {
   if (!of && spOn() && !W.busy) { W.busy = true; findOrderFiles(p).catch(function (e) { toast(e.message, true); p.orderFiles = { list: [], nums: [], err: e.message }; }).then(function () { W.busy = false; if (p.stage === 'order') render(); }); }
   var chosen = o.fileName ? '<div class="card bar" style="--c:var(--office)"><h3>' + (o.auto ? 'Found – please confirm' : 'Chosen') + '</h3><div class="meta" style="word-break:break-word"><b>' + esc(o.fileName) + '</b>' + (o.number ? ' · No. ' + esc(o.number) : '') + (o.attached ? ' · attached by you' + (o.uploaded ? ' · saved on SharePoint' : '') : '') + '</div>' + ((o.items || []).length ? '<div class="small" style="margin-top:4px">PO read: ' + o.items.length + ' line' + (o.items.length > 1 ? 's' : '') + ' · ' + poFmt(poSum(p).sub) + ' without VAT</div>' : '') + ((o.b64 || o.webUrl) ? '<div class="cf" style="justify-content:flex-start;margin-top:6px"><button class="btn ghost sm" id="oVw">View</button>' + ((o.items || []).length ? '<button class="btn ghost sm" id="oLn">Lines</button>' : '') + '</div>' : '') +
       '<div class="cf">' + (o.webUrl ? '<a class="btn ghost sm" href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">Open</a>' : '') + (o.auto ? '<button class="btn sm" id="oConf">Yes, this one</button>' : '') + '<button class="btn ghost sm" id="oClr">Choose another</button></div></div>' : '';
-  $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3><div class="meta">' + esc(tname) + (p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></div>' + chosen +
-    (!spOn() ? '<div class="note warnbox">SharePoint is not connected yet, so the ' + esc(tname) + ' can\'t be found on the share. ' + (isPO ? 'You can attach it below.' : 'You can skip this for now.') + '</div>'
+  var poTop = isPO && !(o.fileName && !o.auto) ? '<div class="poopt on"><span class="poic">📎</span><div class="pob"><b>Attach the PO now</b><small>PDF or a photo – its lines are read and checked with you. Saved on SharePoint in ' + esc(ORDER_FOLDER + '/' + p.company.name) + '.</small><div class="podrop" id="oDrop"><span>Drop the PO here</span><button class="btn sm" id="oAtt">Choose the PO</button></div></div></div>' +
+    '<button class="poopt" id="oLater"><span class="poic">⏱</span><div class="pob"><b>Later</b><small>Go on with the work. The job shows <span class="potag">PO missing</span> and the letter asks for it before it is made.</small></div></button>' +
+    (spOn() ? '<div class="sec" style="margin-top:14px"><h2>Or pick it from SharePoint</h2></div>' : '') : '';
+  $('#wm').innerHTML = '<div class="card bar"><h3>' + esc(p.company.name) + '</h3><div class="meta">' + esc(tname) + (p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></div>' + chosen + poTop +
+    (!spOn() ? (isPO ? '' : '<div class="note warnbox">SharePoint is not connected yet, so the ' + esc(tname) + ' can\'t be found on the share. ' + (isPO ? 'Attach it above, or choose Later.' : 'You can skip this for now.') + '</div>')
       : !of ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking on SharePoint for the ' + esc(tname) + ' of this company…</b></div>'
       : (of.err ? '<div class="note warnbox">' + esc(of.err) + '</div>' : '') +
         (o.fileName && !o.auto ? '' : '<div class="sec" style="margin-top:4px"><h2>On SharePoint</h2><small>' + of.list.length + ' files</small></div>' +
         (of.list.length ? '<div class="list">' + of.list.map(function (f, i) { var on = o.fileId === f.id;
           return '<div class="row' + (on ? ' sel' : '') + '"><button class="check" data-f="' + i + '" style="' + (on ? 'background:var(--blue);border-color:var(--blue)' : '') + '">' + (on ? '✓' : '') + '</button><span class="t" data-f2="' + i + '"><b>' + esc(f.name) + '</b><small>' + esc([f.number && 'No. ' + f.number, f.folder, fmtDate(f.mod)].filter(Boolean).join(' · ')) + '</small></span>' + fileActs(i) + '</div>'; }).join('') + '</div>'
-          : '<div class="empty"><b>No ' + esc(tname) + ' found on SharePoint</b>' + (isPO ? 'Attach it below.' : 'You can skip this for now.') + '</div>'))) +
-    (isPO || p.orderType === 'offer' ? '<div class="sec"><h2>Not on SharePoint?</h2></div><div class="cf" style="margin-top:0"><button class="btn ghost" id="oAtt">Attach the ' + (isPO ? 'PO' : 'document') + ' (PDF or photo)</button></div>' +
+          : '<div class="empty"><b>No ' + esc(tname) + ' found on SharePoint</b>' + (isPO ? 'Attach it above, or choose Later.' : 'You can skip this for now.') + '</div>'))) +
+    (p.orderType === 'offer' ? '<div class="sec"><h2>Not on SharePoint?</h2></div><div class="cf" style="margin-top:0"><button class="btn ghost" id="oAtt">Attach the document (PDF or photo)</button></div>' +
       '<div class="small" style="margin-top:6px">It will be saved on SharePoint in <b>' + esc(ORDER_FOLDER + '/' + p.company.name) + '</b>.</div>' : '') +
     (spOn() && of ? '<div class="cf"><button class="btn ghost sm" id="reF" style="flex:none">Search again</button></div>' : '');
   var setO = function (x) { p.order = x; saveProjects(); wOrder(p); okNext(); };
@@ -1217,17 +1217,13 @@ function wOrder(p) {
   var cf = $('#oConf'); if (cf) cf.onclick = function () { o.auto = false; setO(o); }; if ($('#oVw')) $('#oVw').onclick = function () { poView(p); }; if ($('#oLn')) $('#oLn').onclick = function () { poSheet(p, function () { wOrder(p); }); };
   var cl = $('#oClr'); if (cl) cl.onclick = function () { setO(null); };
   var rf = $('#reF'); if (rf) rf.onclick = function () { p.orderFiles = null; if (p.order && p.order.auto) p.order = null; W.busy = false; wOrder(p); };
-  var at = $('#oAtt'); if (at) at.onclick = function () { pickFiles('application/pdf,image/*').then(function (fs) { if (!fs.length) return; var f = fs[0];
-    var keep = (/^image\//.test(f.type) ? shrink(f, 2000, 0.85) : new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(f); }));
-    keep.then(function (d) { var key = 'order-' + p.id; return IDB.put(key, d).then(function () { return key; }); }).then(function (key) {
-      var rec = { attached: true, photo: key, fileName: f.name, number: '' };
-      var rd = function () { if (/\.pdf$/i.test(f.name)) poLoad(p, f).then(function () { try { wOrder(p); } catch (x) {} }); };
-      if (!spOn()) { setO(rec); rd(); return toast('Attached – it will be saved on SharePoint once it is connected'); }
-      toast('Saving…'); return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; setO(rec); rd(); toast('Saved'); })
-        .catch(function (e) { setO(rec); rd(); if (LOC.on && !CL.on) return locAllow(function () { return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; setO(rec); toast('Saved in the SharePoint folder ✓'); }); }); toast(e.message + ' – the PO is kept with the job', true); }); }); }); };
+  var attachF = function (f) { if (!f) return; poAttachFile(p, f, function () { if (p.stage === 'order' && !sheetFn) { try { wOrder(p); } catch (x) {} } }); };
+  var at = $('#oAtt'); if (at) at.onclick = function () { pickFiles('application/pdf,image/*').then(function (fs) { attachF(fs[0]); }); };
+  var odz = $('#oDrop'); if (odz) { odz.ondragover = function (e) { e.preventDefault(); odz.classList.add('on'); }; odz.ondragleave = function () { odz.classList.remove('on'); }; odz.ondrop = function (e) { e.preventDefault(); odz.classList.remove('on'); attachF(e.dataTransfer.files[0]); }; }
+  var ol = $('#oLater'); if (ol) ol.onclick = function () { p.order = { skipped: true, later: true }; saveProjects(); go(p, 'items'); };
   var must = false; /* PO: choose from SharePoint, attach it, or skip for now */
   var has = function () { var x = p.order || {}; return !!(x.fileName && !x.auto); };
-  foot(p, has() ? 'Next' : 'Next without PO', true, function () { if (!has() && p.order && p.order.auto) { p.order.auto = false; } if (!has() && !(p.order && p.order.fileName)) p.order = { skipped: true }; go(p, 'items'); }, '');
+  foot(p, has() ? 'Next' : (isPO ? 'Later ›' : 'Next without PO'), true, function () { if (!has() && p.order && p.order.auto) { p.order.auto = false; } if (!has() && !(p.order && p.order.fileName)) p.order = { skipped: true, later: isPO }; go(p, 'items'); }, '');
   var sk = $('#wSkip'); if (sk) sk.onclick = function () { p.order = { skipped: true }; go(p, 'items'); };
   function okNext() { var b = $('#wn'); if (b) b.disabled = !(has() || !must); }
 }
@@ -1275,7 +1271,7 @@ function itemIssues(it) { /* empty list = complete */
   return e; }
 function rangeText(it) { if ((it.qs || []).length) { var rq = qLines(it, 'range'); return rq === 'N/A' ? '' : rq; } if (!isNum(it.rMin) || !isNum(it.rMax)) return ''; return '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || ''); }
 function calText(it) { if (isNum(it.cMin) && isNum(it.cMax)) return '(' + it.cMin + ' : ' + it.cMax + ') ' + (it.unit || ''); return rangeText(it) ? 'Full range' : ''; }
-function wItems(p) {
+function wItems(p) { if (p.orderType === 'po') setTimeout(function () { if (S.cur === p.id && p.stage === 'items') try { poOverCheck(p, function () { if (S.cur === p.id && p.stage === 'items' && !sheetFn) render(); }); } catch (e) {} }, 400);
   p.items = p.items || []; p.machines = p.machines || []; setTimeout(function () { queueOld(p); }, 0);
   if (spOn() && !p.sugBat && !p.sugBusy) { p.sugBusy = 1; var cd1 = s2d((p.info && p.info.cal) || '') || new Date(), mo1 = p.sugMonth || { y: cd1.getFullYear() - 1, m: cd1.getMonth() }; certBatches(p, mo1.y, mo1.m).then(function (l) { p.sugBat = { y: mo1.y, m: mo1.m, n: l.length }; }).catch(function () { p.sugBat = { y: mo1.y, m: mo1.m, n: 0 }; }).then(function () { p.sugBusy = 0; saveProjects(); if (S.cur === p.id && p.stage === 'items' && !sheetFn) render(); }); }
   var loose = p.items.filter(function (i) { return !i.machineId; }), need = p.items.filter(function (i) { return itemIssues(i).length; }).length;
@@ -1988,12 +1984,13 @@ function poParse(text) { var t = String(text || '').replace(/\s*\|\s*/g, ' ').re
   var num = (String(text).match(/Order\s*Number\s*:?\s*([A-Z]?\d{5,})/i) || [])[1] || '', dt = (String(text).match(/Issue\s*Date\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i) || [])[1] || '';
   return { lines: out, number: num, date: dt }; }
 function poRead(file) { /* a File/Blob → { lines, number, date, b64 } */
+  if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic)$/i.test(file.name || '')) return shrink(file, 2200, 0.9).then(ocrText).then(function (t) { var r = poParse(t || ''); r.b64 = ''; return r; }).catch(function () { return { lines: [], b64: '' }; });
   return file.arrayBuffer().then(function (buf) { var b64 = ''; if (buf.byteLength < 600000) { var u = new Uint8Array(buf), s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); b64 = btoa(s); }
     return LOC.pdf(buf.slice(0)).then(function (pages) { var r = poParse(pages.slice(0, 2).map(function (pg) { return pg.join('\n'); }).join('\n')); r.b64 = b64; return r; }).catch(function () { return { lines: [], b64: b64 }; }); }); }
 function poReadSP(o) { return pdfPages(o.driveId, o.fileId).then(function (pages) { return poParse(pages.slice(0, 2).map(function (pg) { return Array.isArray(pg) ? pg.join('\n') : String(pg); }).join('\n')); }); }
 /* the words that tell an item apart (calibration, for, the… say nothing) */
 var PO_STOP = { calibration: 1, calibrate: 1, for: 1, and: 1, the: 1, of: 1, in: 1, on: 1, to: 1, with: 1, each: 1, service: 1, services: 1, test: 1, testing: 1, item: 1, items: 1, rooms: 1, room: 1, loop: 0 };
-function poWords(s) { var w = String(s || '').toLowerCase().replace(/([a-z])\s+(\d)/g, '$1$2').split(/[^a-z0-9؀-ۿ]+/).filter(function (x) { return x.length > 1 && !PO_STOP[x]; }).map(function (x) { return x.length > 4 ? x.replace(/(es|s)$/, '') : x; }); var o = {}; w.forEach(function (x) { o[x] = 1; }); return o; }
+function poWords(s) { var w = String(s || '').toLowerCase().replace(/([a-z])\s+(\d)/g, '$1$2').split(/[^a-z0-9؀-ۿ]+/).filter(function (x) { return x.length > 1 && !PO_STOP[x]; }).map(function (x) { return x.length > 4 ? x.replace(/(es|s)$/, '').replace(/e$/, '') : x; }); var o = {}; w.forEach(function (x) { o[x] = 1; }); return o; }
 function poScore(line, it, mName) { var a = poWords(line.desc), b = poWords([it.description, it.code, mName, (it.old && it.old.fields && it.old.fields.description) || ''].join(' ')), s = 0; Object.keys(a).forEach(function (k) { if (b[k]) s += /\d/.test(k) ? 3 : 1; }); return s; }
 /* every certificate gets a PO line (or none = extra); a line takes no more certificates than its quantity */
 function poAuto(p) { var o = p.order || {}, L = (o.items || []).filter(function (l) { return !l.vat; }), use = {}, its = certList(p), mach = {}; (p.machines || []).forEach(function (m) { mach[m.id] = m.name; });
@@ -2037,9 +2034,91 @@ function poSheet(p, done) { var o = p.order = p.order || {}; o.items = o.items |
       if ($('#poV')) $('#poV').onclick = function () { poView(p); };
       if ($('#poRe')) $('#poRe').onclick = function () { var pr = o.b64 ? poRead(new Blob([Uint8Array.from(atob(o.b64), function (c) { return c.charCodeAt(0); })])) : poReadSP(o); toast('Reading the PO…'); pr.then(function (r) { if (!(r.lines || []).length) return toast('No lines found in this PDF – type them here', true); o.items = r.lines; if (r.number && !o.number) o.number = r.number; certList(p).forEach(function (it) { it.poSet = 0; }); poAuto(p); commit(); renderSheet(); toast(r.lines.length + ' lines read'); }).catch(function (e) { toast(e.message, true); }); };
       $('#poOk').onclick = function () { commit(); closeSheet(); done && done(); }; } }; }, function () { done && done(); }); }
+/* ===== a PO line that groups several kinds ("5 temperature and 2 pressure – 10,000"): split it, show it, the user confirms ===== */
+var PO_KINDS = [[/data\s*logg|لوجر|داتا/i, 'Data logger'], [/thermo-?hygro|hygro|humid|رطوب/i, 'Humidity'], [/temp|حرار|thermo|rtd|pt\s?100|thermocouple/i, 'Temperature'], [/differential|dp\b|pressure|press\b|gauge|manometer|ضغط|بريشر|مانومتر/i, 'Pressure gauge'], [/balanc|scale|ميزان|موازين/i, 'Balance'], [/weights?\b|mass(es)?\b|أوزان|اوزان|سنج/i, 'Weights'], [/timer|stop\s?watch|تايمر|ساع/i, 'Timer'], [/rpm|tacho|speed|سرع/i, 'Speed (RPM)'], [/conduct/i, 'Conductivity'], [/\bph\b/i, 'pH meter'], [/flow/i, 'Flow'], [/volt|amp|current|multimeter|electric|كهرب/i, 'Electrical'], [/velocity|air\s?speed|anemo/i, 'Air velocity'], [/particle/i, 'Particle counter'], [/sound|noise/i, 'Sound level'], [/lux|light/i, 'Light (lux)']];
+function poKind(s) { for (var i = 0; i < PO_KINDS.length; i++) if (PO_KINDS[i][0].test(s)) return PO_KINDS[i][1]; return ''; }
+function poSplitGuess(desc, qty) { var t = String(desc || '').replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }).replace(/\d{1,3}(,\d{3})+(\.\d+)?|\d+\.\d+/g, ' ').replace(/\b(19|20)\d\d\b/g, ' ');
+  var segs = t.split(/\s*(?:\+|,|،|;|&|\band\b|\s+و\s*|(?:^|\s)و(?=\d))\s*/i).filter(function (x) { return x && x.trim(); }), parts = [];
+  segs.forEach(function (sg) { var m = sg.match(/(?:^|[^\w.\-\/])(\d{1,3})(?![\w.\-\/]*\s*(?:bar|psi|°|c\b|kg|g\b|mm|ml|l\b|%|rpm|v\b|a\b|ms))/i) || sg.match(/^(\d{1,3})\b/); var k = poKind(sg);
+    if (m && k && +m[1] > 0) { var ex = parts.filter(function (x) { return x.kind === k; })[0]; if (ex) ex.qty += +m[1]; else parts.push({ kind: k, qty: +m[1] }); } });
+  if (parts.length >= 2) return parts;
+  if (parts.length === 1 && (qty == null || qty <= 1) && parts[0].qty > 1) return parts;
+  return null; }
+function poLineTotal(l) { return l.total != null ? l.total : (l.qty != null && l.price != null ? l.qty * l.price : null); }
+function poSplitPrice(p, parts, total) { var pl = plGet(p), rows = pl ? pl.rows : [];
+  parts.forEach(function (x) { if (x.fixed) return; var r = rows.length ? rowFor({ description: x.kind, code: '' }, rows) : null; x.base = r ? poNum(r.price) : null; });
+  var free = parts.filter(function (x) { return !x.fixed; }); if (!free.length) return 'manual';
+  var known = free.every(function (x) { return x.base > 0; }), fixedSum = parts.reduce(function (a, x) { return a + (x.fixed ? x.qty * x.price : 0); }, 0);
+  if (total == null) { free.forEach(function (x) { x.price = x.base || null; }); return known ? 'pricelist' : 'none'; }
+  var left = total - fixedSum, w = free.reduce(function (a, x) { return a + x.qty * (known ? x.base : 1); }, 0);
+  free.forEach(function (x) { x.price = w ? Math.round((known ? x.base : 1) * left / w) : 0; });
+  var s = parts.reduce(function (a, x) { return a + x.qty * (x.price || 0); }, 0), d = Math.round((total - s) * 100) / 100, lst = free[free.length - 1];
+  if (d && lst) lst.price = Math.round((lst.price + d / lst.qty) * 100) / 100;
+  return known ? 'pricelist' : 'even'; }
+function poGrouped(p) { return ((p.order || {}).items || []).filter(function (l) { return !l.vat && l.grp && !l.grpOk; }); }
+function poDetectGroups(p) { ((p.order || {}).items || []).forEach(function (l) { if (l.vat || l.from || l.grpOk || l.grp) return; var g = poSplitGuess(l.desc, l.qty); if (g) { l.grp = g; l.grpHow = poSplitPrice(p, l.grp, poLineTotal(l)); } }); }
+/* confirmed: the grouped line becomes one line per kind (2 → 2.1, 2.2), every certificate then takes its own line */
+function poSplitApply(p, l, parts, how) { var o = p.order, at = o.items.indexOf(l), tot = poLineTotal(l); if (at < 0) return; o.splitFrom = o.splitFrom || {}; var orig = JSON.parse(JSON.stringify(l)); delete orig.grp; o.splitFrom[l.no] = orig;
+  var kids = parts.filter(function (x) { return x.qty > 0; }).map(function (x, i) { return { no: l.no + '.' + (i + 1), desc: x.kind + ' – from line ' + l.no, qty: x.qty, uom: l.uom, price: x.price, cur: l.cur, total: x.price != null ? Math.round(x.qty * x.price * 100) / 100 : null, from: l.no, how: how, grpOk: 1 }; });
+  o.items.splice.apply(o.items, [at, 1].concat(kids)); certList(p).forEach(function (it) { if (it.poLine === l.no) { it.poLine = null; it.poSet = 0; } else if (!it.poSet) it.poLine = null; });
+  poAuto(p); poApply(p); saveProjects(); return tot; }
+function poKeepOne(p, l, parts) { var n = parts.reduce(function (a, x) { return a + x.qty; }, 0), tot = poLineTotal(l); l.qty = n; if (tot != null) { l.price = Math.round(tot / n * 100) / 100; l.total = tot; } l.grpOk = 1; l.oneLine = parts.map(function (x) { return x.qty + ' ' + x.kind; }).join(' + '); delete l.grp; poAuto(p); poApply(p); saveProjects(); }
+function poSplitUndo(p, no) { var o = p.order || {}, orig = (o.splitFrom || {})[no]; if (!orig) return; var at = -1; o.items = o.items.filter(function (l, i) { if (l.from === no) { if (at < 0) at = i; return false; } return true; }); orig.grpOk = 0; orig.grp = null; o.items.splice(at < 0 ? o.items.length : at, 0, orig); delete o.splitFrom[no]; poDetectGroups(p); saveProjects(); }
+/* the offer's lines give the unit prices of the kinds */
+function poOfferPrices(parts, lines) { var n = 0; parts.forEach(function (x) { var best = null, bs = 0; lines.forEach(function (ol) { if (ol.vat || ol.price == null) return; var k = poKind(ol.desc), s = k === x.kind ? 5 : 0; if (s > bs) { bs = s; best = ol; } }); if (best) { x.price = best.price; x.fixed = 1; n++; } }); return n; }
+function poSplitSheet(p, l, done) { var parts0 = JSON.parse(JSON.stringify(l.grp || [{ kind: '', qty: 1 }])), st = { mode: 'view', parts: parts0, how: l.grpHow || 'pricelist', pick: 'offer', note: '' }, tot = poLineTotal(l), cur = l.cur || 'EGP';
+  var sum = function () { return st.parts.reduce(function (a, x) { return a + (x.qty || 0) * (x.price || 0); }, 0); };
+  var HOW = { pricelist: 'Unit prices: the price list, adjusted so the line still adds up to ' + poFmt(tot) + '.', even: 'No price list for these – the line is shared equally per piece. Attach the offer or write the prices if they differ.', offer: 'Unit prices: from the price offer.', manual: 'Written by you.', none: 'No prices yet.' };
+  var table = function (ed) { var ok = tot == null || Math.abs(sum() - tot) < 0.51;
+    return '<table class="pstb"><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit</th><th class="n">Total</th>' + (ed ? '<th></th>' : '') + '</tr>' + st.parts.map(function (x, i) { return '<tr><td>' + (ed ? '<input class="inp" data-psk="' + i + '" value="' + esc(x.kind) + '" placeholder="e.g. Temperature">' : esc(x.kind)) + '</td><td class="n">' + (ed ? '<input class="inp n" data-psq="' + i + '" value="' + (x.qty || '') + '" inputmode="numeric">' : x.qty) + '</td><td class="n">' + (ed ? '<input class="inp n" data-psp="' + i + '" value="' + (x.price == null ? '' : x.price) + '" inputmode="decimal">' : poFmt(x.price)) + '</td><td class="n">' + poFmt((x.qty || 0) * (x.price || 0)) + '</td>' + (ed ? '<td><button class="ia" data-psx="' + i + '">✕</button></td>' : '') + '</tr>'; }).join('') +
+      '<tr class="tot"><td>Line ' + esc(l.no) + '</td><td class="n">' + st.parts.reduce(function (a, x) { return a + (x.qty || 0); }, 0) + '</td><td></td><td class="n">' + poFmt(sum()) + (tot == null ? '' : ok ? ' <span class="pok">✓</span>' : ' <span class="pbad">≠ ' + poFmt(tot) + '</span>') + '</td>' + (ed ? '<td></td>' : '') + '</tr></table>' + (ed ? '<button class="lk" id="psAdd">+ another item</button>' : ''); };
+  var OPTS = [['offer', '📑', 'Attach the price offer', 'Best when the offer lists the items – their unit prices are taken from it.', 1], ['manual', '✏️', 'I\'ll write the split', 'A small table: item, quantity, price' + (tot != null ? ' – the total is checked against ' + poFmt(tot) : '') + '.'], ['pricelist', '⚖️', 'Split by the price list', 'Quantities from the line, prices from the price list' + (tot != null ? ', scaled to ' + poFmt(tot) : '') + '.'], ['one', '▭', 'Keep it one line', 'One price for every piece' + (tot != null ? ' – ' + poFmt(tot) + ' shared equally' : '') + '.']];
+  openSheet(function () { var raw = '<div class="psraw">"' + esc(l.desc) + (tot != null ? ' – ' + poFmt(tot) + ' ' + esc(cur) : '') + '"</div>';
+    if (st.mode === 'opts') return { title: 'How should line ' + esc(l.no) + ' be split?', body: raw + '<div class="psopts">' + OPTS.map(function (o2) { return '<button class="psopt' + (st.pick === o2[0] ? ' on' : '') + '" data-pso="' + o2[0] + '"><span class="psr"></span><span class="psi">' + o2[1] + '</span><span><b>' + o2[2] + (o2[4] ? ' <em>recommended</em>' : '') + '</b><small>' + o2[3] + '</small></span></button>'; }).join('') + '</div>',
+      foot: '<button class="btn ghost" id="psB">‹ Back</button><button class="btn" id="psGo">' + ({ offer: 'Choose the offer ›', manual: 'Write it ›', pricelist: 'Split it ›', one: 'Keep one line ✓' })[st.pick] + '</button>',
+      mount: function () { $('#psB').onclick = function () { st.mode = 'view'; renderSheet(); }; $$('[data-pso]').forEach(function (b) { b.onclick = function () { st.pick = b.dataset.pso; renderSheet(); }; });
+        $('#psGo').onclick = function () { var k = st.pick;
+          if (k === 'one') { poKeepOne(p, l, st.parts); closeSheet(); toast('Line ' + l.no + ' kept as one line'); return done && done(); }
+          if (k === 'manual') { st.mode = 'edit'; st.how = 'manual'; st.parts.forEach(function (x) { x.fixed = 1; }); return renderSheet(); }
+          if (k === 'pricelist') { st.parts.forEach(function (x) { delete x.fixed; }); st.how = poSplitPrice(p, st.parts, tot); st.mode = 'view'; return renderSheet(); }
+          pickFiles('application/pdf,image/*').then(function (fs) { if (!fs.length) return; st.note = '<span class="spin dark"></span> Reading the offer…'; st.mode = 'view'; renderSheet();
+            poRead(fs[0]).then(function (r) { st.parts.forEach(function (x) { delete x.fixed; }); var n = poOfferPrices(st.parts, r.lines || []); if (n) { var left = st.parts.filter(function (x) { return !x.fixed; }); if (left.length) poSplitPrice(p, st.parts, tot); st.how = 'offer'; st.note = n === st.parts.length ? '' : (st.parts.length - n) + ' item' + (st.parts.length - n > 1 ? 's' : '') + ' not found in the offer – from the price list.'; }
+              else { st.note = 'The offer did not list these items – choose another way.'; st.mode = 'opts'; } renderSheet(); }).catch(function () { st.note = 'The offer could not be read – choose another way.'; st.mode = 'opts'; renderSheet(); }); }); }; } };
+    var ed = st.mode === 'edit', ok = tot == null || Math.abs(sum() - tot) < 0.51, good = st.parts.length && st.parts.every(function (x) { return x.kind && x.qty > 0; });
+    return { title: 'PO line ' + esc(l.no) + (ed ? ' – write the split' : ' – this is how I read it'), body: raw + table(ed) + '<div class="small" style="margin-top:8px">' + (st.note || HOW[st.how] || '') + '</div>' + (!ok && !ed ? '<div class="note warnbox" style="margin-top:8px">The items add up to ' + poFmt(sum()) + ', the line says ' + poFmt(tot) + '.</div>' : ''),
+      foot: (ed ? '<button class="btn ghost" id="psB">‹ Back</button>' : '<button class="btn ghost" id="psNo">Not right…</button>') + '<button class="btn" id="psOk"' + (good ? '' : ' disabled') + '>' + (ed ? 'Use this split ✓' : 'Yes, that\'s it ✓') + '</button>',
+      mount: function () { var re = function () { var y = $('.sheet .sbody') ? $('.sheet .sbody').scrollTop : 0; renderSheet(); };
+        if ($('#psNo')) $('#psNo').onclick = function () { st.mode = 'opts'; renderSheet(); }; if ($('#psB')) $('#psB').onclick = function () { st.mode = 'opts'; renderSheet(); };
+        $$('[data-psk]').forEach(function (e) { e.onchange = function () { st.parts[+e.dataset.psk].kind = e.value.trim(); re(); }; }); $$('[data-psq]').forEach(function (e) { e.onchange = function () { st.parts[+e.dataset.psq].qty = parseInt(e.value, 10) || 0; re(); }; }); $$('[data-psp]').forEach(function (e) { e.onchange = function () { st.parts[+e.dataset.psp].price = poNum(e.value); re(); }; });
+        $$('[data-psx]').forEach(function (b) { b.onclick = function () { st.parts.splice(+b.dataset.psx, 1); re(); }; }); if ($('#psAdd')) $('#psAdd').onclick = function () { st.parts.push({ kind: '', qty: 1, price: null, fixed: 1 }); re(); };
+        $('#psOk').onclick = function () { if (ed && !ok && tot != null) return dialog('The total is not ' + poFmt(tot), 'The items add up to ' + poFmt(sum()) + '. Use it anyway?', 'Use it').then(function (y) { if (!y) return; poSplitApply(p, l, st.parts, st.how); closeSheet(); toast('Line ' + l.no + ' split into ' + st.parts.length); done && done(); });
+          poSplitApply(p, l, st.parts, st.how); closeSheet(); toast('Line ' + l.no + ' split into ' + st.parts.length + ' line' + (st.parts.length > 1 ? 's' : '')); done && done(); }; } }; }, function () { done && done(); }); }
+/* more certificates of a kind than the PO line orders → ask once per certificate */
+function poOverList(p) { var o = p.order || {}, L = (o.items || []).filter(function (l) { return !l.vat && !l.grp; }); if (!L.length) return []; poAuto(p); var its = certList(p), mach = {}, use = {}, out = []; (p.machines || []).forEach(function (m) { mach[m.id] = m.name; }); its.forEach(function (it) { if (it.poLine != null) use[it.poLine] = (use[it.poLine] || 0) + 1; });
+  its.forEach(function (it) { if (it.poLine != null || it.poSet || it.poOverAsk) return; var best = null, bs = 0; var ik = poKind((it.description || '') + ' ' + (mach[it.machineId] || '')); L.forEach(function (l) { var s = poScore(l, it, mach[it.machineId]) + (ik && poKind(l.desc) === ik ? 2 : 0); if (s > bs) { bs = s; best = l; } }); if (best && bs >= 2 && best.qty != null && (use[best.no] || 0) >= best.qty) out.push({ it: it, l: best, n: use[best.no] || 0 }); }); return out; }
+function poOverAsk(p, list, done) { var x = list[0]; if (!x) return done && done(); var it = x.it, l = x.l, k = poKind(l.desc) || 'items', st = { c: 'xq' };
+  var dr = $('#dlg-root'), draw = function () { dr.innerHTML = '<div class="dlg"><div class="snt spd pod"><div class="podh"><span class="podi">!</span><div><h3>Over the purchase order</h3><small>' + esc((it.code || '') + ' · ' + (it.description || '')) + '</small></div></div>' +
+    '<p>Line ' + esc(l.no) + ' has <b>' + l.qty + ' ' + esc(k.toLowerCase()) + '</b> – this is the <b>' + (x.n + 1) + (x.n + 1 === 2 ? 'nd' : x.n + 1 === 3 ? 'rd' : 'th') + '</b>.</p><div class="podbar"><i style="width:100%"></i></div><div class="podn">' + (x.n + 1) + ' of ' + l.qty + ' · ' + (x.n + 1 - l.qty) + ' over</div>' +
+    '<div class="spol">' + [['xq', 'Put it on the extras offer', 'A separate price offer letter for what is not in the PO.'], ['fix', 'It is in the PO – fix the line', 'Change line ' + l.no + ' to ' + (x.n + 1) + '.'], ['keep', 'Keep it on line ' + l.no, 'The letter will show ' + (x.n + 1) + ' on a line ordered for ' + l.qty + '.']].map(function (o2) { return '<button class="spo' + (st.c === o2[0] ? ' on' : '') + '" data-pov="' + o2[0] + '"><b>' + o2[1] + '</b><small>' + o2[2] + '</small></button>'; }).join('') + '</div>' +
+    (list.length > 1 ? '<label class="small" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="poAll"> The same for the other ' + (list.length - 1) + '</label>' : '') + '<div class="cf"><button class="btn" id="poOk">OK</button></div></div></div>';
+    $$('[data-pov]').forEach(function (b) { b.onclick = function () { st.c = b.dataset.pov; draw(); }; });
+    $('#poOk').onclick = function () { var all = $('#poAll') && $('#poAll').checked, set = all ? list : [x];
+      set.forEach(function (y) { var t = y.it; t.poOverAsk = 1; t.poSet = 1; if (st.c === 'xq') { t.poLine = null; t.letterId = 'xq'; } else { t.poLine = y.l.no; t.letterId = ''; if (st.c === 'fix') y.l.qty = Math.max(y.l.qty || 0, (use2(y.l.no)) + 1); else t.poOver = 1; } });
+      poApply(p); saveProjects(); dr.innerHTML = ''; var rest = list.filter(function (y) { return set.indexOf(y) < 0; }); if (rest.length) { rest = poOverList(p); return poOverAsk(p, rest, done); } done && done(); }; };
+  var use2 = function (no) { return certList(p).filter(function (t) { return t.poLine === no; }).length; };
+  draw(); }
+function poOverCheck(p, done) { if (p.orderType !== 'po' || $('#dlg-root').innerHTML || sheetFn) return; var L = poOverList(p); if (L.length) poOverAsk(p, L, done); }
+/* attach a PO (PDF or photo) to the job: kept, saved on SharePoint, read, grouped lines checked */
+function poAttachFile(p, f, after) { var keep = (/^image\//.test(f.type) ? shrink(f, 2000, 0.85) : new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(f); }));
+  return keep.then(function (d) { var key = 'order-' + p.id; return IDB.put(key, d).then(function () { return key; }); }).then(function (key) {
+    var rec = { attached: true, photo: key, fileName: f.name, number: '' }; p.order = rec; saveProjects(); after && after();
+    var rd = function () { toast('Reading the PO…'); return poLoad(p, f).then(function () { after && after(); var gr = poGrouped(p); if (gr.length) setTimeout(function () { poSplitSheet(p, gr[0], after); }, 200); }); };
+    if (!spOn()) { toast('Attached – it will be saved on SharePoint once it is connected'); return rd(); }
+    return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; saveProjects(); return rd(); })
+      .catch(function (e) { if (LOC.on && !CL.on) locAllow(function () { return uploadOrder(p, f).then(function (it) { rec.uploaded = true; rec.webUrl = it.webUrl; rec.fileId = it.id; saveProjects(); toast('Saved in the SharePoint folder ✓'); }); }); else toast(e.message + ' – the PO is kept with the job', true); return rd(); }); }); }
 /* after a PO file is attached or chosen: read its lines and match the certificates */
 function poLoad(p, file) { var o = p.order || {}, pr = file ? poRead(file) : (o.fileId && o.driveId ? poReadSP(o) : Promise.resolve(null));
-  return pr.then(function (r) { if (!r) return; if (r.b64) o.b64 = r.b64; if ((r.lines || []).length) { o.items = r.lines; if (r.number) o.number = o.number || r.number; if (r.date) o.date = o.date || r.date; certList(p).forEach(function (it) { it.poSet = 0; }); poAuto(p); poApply(p); toast('PO read: ' + r.lines.length + ' line' + (r.lines.length > 1 ? 's' : '') + ' – the prices follow it'); } saveProjects(); }).catch(function () {}); }
+  return pr.then(function (r) { if (!r) return; if (r.b64) o.b64 = r.b64; if ((r.lines || []).length) { o.items = r.lines; if (r.number) o.number = o.number || r.number; if (r.date) o.date = o.date || r.date; certList(p).forEach(function (it) { it.poSet = 0; }); poDetectGroups(p); poAuto(p); poApply(p); toast('PO read: ' + r.lines.length + ' line' + (r.lines.length > 1 ? 's' : '') + ' – the prices follow it'); } saveProjects(); }).catch(function () {}); }
 
 /* a PO job: the PO is found by itself (its number in Calibration Orders, or the best PO file of the company), read, and every certificate takes its line and price – what is not in the PO goes to a separate letter */
 function poEnsure(p) { if (p.orderType !== 'po') return Promise.resolve(); var o = p.order || {};
@@ -3851,6 +3930,63 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !autoDone(genDefa
   /* the receipt letter: who signs it and where its prices come from */
   var gl = $('#gLet'); if (gl) gl.onclick = function () { openSheet(function () { var pl = plGet(p); return { title: 'Receipt letter', body: '<div class="small" style="margin-bottom:8px">Prices from: <b>' + esc(pl ? pl.name : 'no price list yet') + '</b>' + (pl ? ' (' + pl.rows.length + ' prices)' : '') + ' · <a href="#" id="plCh2">change</a></div><div class="dgrid">' + signerFields(g) + '</div>', foot: '<button class="btn ghost" id="glP">Fill prices</button><button class="btn" id="glX">Done</button>',
       mount: function () { bindSigner(g, function () { renderSheet(); }); $('#glX').onclick = function () { closeSheet(); tGen(p); }; $('#glP').onclick = function () { closeSheet(); pricesThen(p, function () { if (S.cur === p.id && !sheetFn) tGen(p); }, true); }; $('#plCh2').onclick = function (e) { e.preventDefault(); plSheet(p, function () { tGen(p); }); }; } }; }); };
+  genBoxes(p);
+}
+/* ===== Make files: four boxes – Job details · Certificates · Pricing & letter · Files – each confirmed in turn ===== */
+function genBoxes(p) { var pm = $('#pm'); if (!pm || pm.querySelector('.gbx')) return; var kids = [].slice.call(pm.children); if (!kids.length) return;
+  var g = genDefaults(p), inf = p.info || {}, L = certList(p), iss = genIssues(p), conf = p.gConf = p.gConf || {}, isPO = p.orderType === 'po', o = p.order || {};
+  var jobRx = /^(Calibration date|Date of issue|Work order date|Calibrated by|First certificate number)$|date/i, jobIss = iss.filter(function (t) { return jobRx.test(t) && !/without a reference|old certificate/i.test(t); }), certIss = iss.filter(function (t) { return jobIss.indexOf(t) < 0; });
+  var noRef = p.items.filter(function (it) { return !(it.refs || []).length; }).length, sugR = p.items.filter(function (it) { return it.refAuto; }).length, phOpen = (function () { try { var c = {}; phList(p).forEach(function (x) { c[x.code] = 1; }); return Object.keys(c).length; } catch (e) { return 0; } })();
+  var noPrice = L.filter(function (it) { return !String(g.prices[it.id] || '').trim(); }).length, total = L.reduce(function (a, it) { return a + (poNum(g.prices[it.id]) || 0); }, 0), grp = isPO ? poGrouped(p) : [], over = []; try { over = isPO ? poOverList(p) : []; } catch (e) {}
+  var hasPO = !!(o.items || []).length, poMiss = isPO && !hasPO, ps = hasPO ? poSum(p) : null, extras = isPO ? poExtra(p).length : 0;
+  var row = function (k, txt, act, id) { return '<div class="gbr"><span class="gbi ' + k + '">' + (k === 'g' ? '✓' : k === 'o' ? '!' : k === 'q' ? '?' : '!') + '</span><span class="gbt">' + txt + '</span>' + (act ? '<button class="lk" ' + id + '>' + act + '</button>' : '') + '</div>'; };
+  var B = {
+    job: { n: 1, t: 'Job details', red: jobIss.length, sum: [dmy(inf.cal), (p.depts || []).join(', '), inf.tech, g.approver, g.interval, isPO ? (hasPO || o.fileName ? 'PO ' + (o.number || o.fileName || '') : 'PO missing') : (TYPES[p.orderType] || [''])[0]].filter(function (x) { return x && x !== '—'; }).join(' · '),
+      rows: jobIss.map(function (t) { return row('r', esc(t), 'Fix ›', 'data-gbj="1"'); }) },
+    certs: { n: 2, t: 'Certificates', red: certIss.length, orange: phOpen + (sugR ? 1 : 0), sum: L.length + ' certificate' + (L.length === 1 ? '' : 's') + (L.length ? ' · ' + (L[0].certNo || '') + (L.length > 1 && L[L.length - 1].certNo ? ' → ' + L[L.length - 1].certNo : '') : ''),
+      rows: [noRef ? row('r', '<b>' + noRef + ' without a reference</b> <em>· the standard is not chosen</em>', 'Fix ›', 'data-gbg="refs"') : sugR ? row('o', '<b>' + sugR + ' reference' + (sugR > 1 ? 's' : '') + ' suggested</b> <em>· not confirmed yet</em>', 'Review ›', 'data-gbg="refs"') : row('g', 'Every certificate has a reference'),
+        certIss.filter(function (t) { return !/without a reference/.test(t); }).length ? row('r', '<b>' + certIss.filter(function (t) { return !/without a reference/.test(t); }).map(esc).join(' · ') + '</b>', 'See ›', 'data-gbs=".issbox"') : '',
+        phOpen ? row('o', '<b>' + phOpen + ' print last year\'s readings</b> <em>· keep, leave out or type them</em>', 'Choose ›', 'data-gbs=".phbox"') : row('g', 'New readings decided for every certificate'),
+        row('g', 'Covers grouped · ' + genGroups(p).length + ' cover' + (genGroups(p).length === 1 ? '' : 's'), 'See ›', 'data-gbs=".ltbw"')] },
+    price: { n: 3, t: 'Pricing & letter', red: (poMiss ? 1 : 0), block: grp.length, orange: grp.length + (over.length ? 1 : 0) + (noPrice ? 1 : 0), sum: [isPO ? (hasPO ? 'PO ' + (o.number || '') + ' · ' + o.items.filter(function (l) { return !l.vat; }).length + ' lines' : 'PO missing') : '', noPrice ? noPrice + ' without a price' : poFmt(total) + ' ' + (((o.items || [])[0] || {}).cur || 'EGP'), 'receipt letter' + (extras ? ' + extras offer' : '')].filter(Boolean).join(' · '),
+      rows: (isPO ? [poMiss ? row('r', '<b>PO missing</b> <em>· the letter follows the PO</em>', 'Attach the PO ›', 'data-gbpo="1"') : row('g', 'PO ' + esc(o.number || o.fileName || '') + ' · ' + o.items.filter(function (l) { return !l.vat; }).length + ' lines read', 'Open the PO ›', 'data-gbps="1"')]
+          .concat(grp.map(function (l) { return row('q', '<b>Line ' + esc(l.no) + ' is grouped:</b> "' + esc(l.desc) + '"<br><em>Understood as ' + esc(l.grp.map(function (x) { return x.qty + ' ' + x.kind; }).join(' + ')) + '. Right?</em>', 'Check ›', 'data-gbgr="' + esc(l.no) + '"'); }))
+          .concat(over.length ? [row('o', '<b>' + over.length + ' certificate' + (over.length > 1 ? 's' : '') + ' over the PO</b> <em>· more than the line orders</em>', 'Decide ›', 'data-gbov="1"')] : []) : [])
+        .concat([noPrice ? row('o', '<b>' + noPrice + ' without a price</b>' + (plGet(p) ? ' <em>· ' + esc(plGet(p).name) + '</em>' : ''), 'Fill prices ›', 'data-gbc="#gPr"') : row('g', 'Prices · ' + (plGet(p) ? esc(plGet(p).name) + ' · ' : '') + 'total ' + poFmt(total) + (ps && ps.sub ? (total > ps.sub + 0.5 ? ' <em class="pbad">· over the PO (' + poFmt(ps.sub) + ')</em>' : ' <em>· within the PO</em>') : ''), 'Prices ›', 'data-gbc="#gPr"'),
+          row('g', 'Receipt letter · ' + (L.length - extras) + ' item' + (L.length - extras === 1 ? '' : 's') + (extras ? ' · <b>' + extras + ' extra' + (extras > 1 ? 's' : '') + '</b> on a separate price offer' : ' · no extras'), 'See the letter ›', 'data-gblt="1"'),
+          row('g', 'Signed by ' + esc(g.signer || g.approver || '—'), 'Letter settings ›', 'data-gbc="#gLet"')]) },
+    files: { n: 4, t: 'Files', sum: 'Preview · Print · Export · Labels' } };
+  var ks = ['job', 'certs', 'price'], ok = function (k) { return !!conf[k] && !B[k].red; }, allOk = ks.every(ok);
+  if (!p.gBox || (ok(p.gBox) && p.gBox !== 'files' && !p.gBoxPin)) p.gBox = ks.filter(function (k) { return !ok(k); })[0] || 'files';
+  var host = document.createElement('div'); host.className = 'gbxs';
+  var mk = function (k) { var b = B[k], open = p.gBox === k, good = k === 'files' ? allOk : ok(k), lock = k === 'files' && !allOk, st = b.red ? '<span class="gbp r">' + b.red + ' to fix</span>' : b.orange ? '<span class="gbp o">' + b.orange + ' to check</span>' : k !== 'files' && !good ? '<span class="gbp b">to confirm</span>' : '';
+    var el = document.createElement('div'); el.className = 'gbx' + (open ? ' open' : '') + (good && !open ? ' ok' : '') + (lock ? ' lock' : '');
+    el.innerHTML = '<div class="gbh" data-gbo="' + k + '"><span class="gbn">' + (good ? '✓' : b.n) + '</span><span class="gbtt"><b>' + b.n + ' · ' + b.t + '</b><small>' + (lock ? 'opens when 1 – 3 are confirmed · ' : '') + esc(b.sum || '') + '</small></span>' + st + (good && !open && k !== 'files' ? '<span class="lk">Edit</span>' : '') + '</div>' + (open || k === 'files' ? '<div class="gbb">' + (b.rows ? '<div class="gbl">' + b.rows.join('') + '</div>' : '') + '<div class="gbm"></div>' + (k !== 'files' ? '<div class="gbf">' + (ok(k) ? '<span class="gbdone">✓ Confirmed</span>' : '') + '<button class="btn" data-gbcf="' + k + '"' + (b.red || b.block ? ' disabled title="' + (b.red ? 'Fix the red ones first' : 'Check the grouped PO line first') + '"' : '') + '>' + (ok(k) ? 'Next ›' : 'Confirm ' + b.t.toLowerCase().replace(' & letter', '') + ' ✓') + '</button></div>' : '') + '</div>' : '');
+    host.appendChild(el); return el.querySelector('.gbm'); };
+  var mJob = mk('job'), mCert = mk('certs'), mPr = mk('price'), mFiles = mk('files');
+  var outAt = kids.findIndex(function (k) { return k.classList.contains('gout') || k.classList.contains('g3'); });
+  kids.forEach(function (k, i) { var dest = outAt >= 0 && i >= outAt ? mFiles : k.classList.contains('gsum') ? mJob : mCert; if (dest) dest.appendChild(k); else k.style.display = 'none'; });
+  var gt = host.querySelector('.gtools'); if (gt) [].slice.call(gt.querySelectorAll('#gLet,#gPr')).forEach(function (b) { b.style.display = 'none'; if (mPr) {} });
+  if (!mJob || !mCert || !mPr) { var park = document.createElement('div'); park.style.display = 'none'; host.appendChild(park); kids.forEach(function (k) { if (!k.parentNode || k.parentNode === pm) park.appendChild(k); }); }
+  /* the covers table: shown on demand */
+  var cvT = host.querySelector('.ltbw'), cvS = cvT && cvT.previousElementSibling; if (cvT && !p.gCovers) { cvT.style.display = 'none'; if (cvS && cvS.classList.contains('sec')) cvS.style.display = 'none'; }
+  pm.innerHTML = ''; pm.appendChild(host);
+  var re = function () { var y = window.scrollY; tGen(p); window.scrollTo(0, y); };
+  $$('[data-gbo]').forEach(function (h) { h.onclick = function () { p.gBox = h.dataset.gbo; p.gBoxPin = 1; saveProjects(); re(); }; });
+  $$('[data-gbcf]').forEach(function (b) { b.onclick = function () { var k = b.dataset.gbcf; if (B[k].red || B[k].block) return toast(B[k].red ? 'Fix the red ones first' : 'Check the grouped PO line first', true); conf[k] = Date.now(); p.gBoxPin = 0; p.gBox = ks.filter(function (x) { return !ok(x); })[0] || 'files'; saveProjects(); tGen(p); var t = $('.gbx.open'); if (t) t.scrollIntoView({ block: 'start', behavior: 'smooth' }); }; });
+  $$('[data-gbj]').forEach(function (b) { b.onclick = function () { var e = $('#gEd'); if (e) e.click(); else gotoStep(p, 'det'); }; });
+  $$('[data-gbg]').forEach(function (b) { b.onclick = function () { gotoStep(p, b.dataset.gbg); }; });
+  $$('[data-gbs]').forEach(function (b) { b.onclick = function () { var sel = b.dataset.gbs; if (sel === '.ltbw') { p.gCovers = !p.gCovers; saveProjects(); return re(); } var t = $('#pm ' + sel); if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }; });
+  $$('[data-gbc]').forEach(function (b) { b.onclick = function () { var t = $(b.dataset.gbc); if (t) t.click(); }; });
+  $$('[data-gblt]').forEach(function (b) { b.onclick = function () { if (poMiss) return toast('Attach the PO first – the letter follows it', true); exportSheet(p); setTimeout(function () { var x = $('[data-w="letter"]'); if (x) x.click(); }, 40); }; });
+  $$('[data-gbpo]').forEach(function (b) { b.onclick = function () { pickFiles('application/pdf,image/*').then(function (fs) { if (fs[0]) poAttachFile(p, fs[0], function () { if (S.cur === p.id && p.tab === 'gen' && !sheetFn) re(); }); }); }; });
+  $$('[data-gbps]').forEach(function (b) { b.onclick = function () { poSheet(p, re); }; });
+  $$('[data-gbgr]').forEach(function (b) { b.onclick = function () { var l = poGrouped(p).filter(function (x) { return String(x.no) === b.dataset.gbgr; })[0]; if (l) poSplitSheet(p, l, re); }; });
+  $$('[data-gbov]').forEach(function (b) { b.onclick = function () { poOverAsk(p, poOverList(p), re); }; });
+  /* Files before everything is confirmed: say what is open, then go on if wanted */
+  var g3 = host.querySelector('.gbx.lock'); if (g3) g3.addEventListener('click', function (e) { var t = e.target.closest && e.target.closest('#gPv,#gPrint,#gExp,#gLbl'); if (!t || p._gbGo) return; e.stopPropagation(); e.preventDefault();
+    var open = ks.filter(function (k) { return !ok(k); }).map(function (k) { return B[k].n + ' · ' + B[k].t + (B[k].red ? ' (' + B[k].red + ' to fix)' : ' (not confirmed)'); });
+    dialog('Not everything is confirmed', open.map(esc).join('<br>') + '<br><br>' + (t.id === 'gPv' ? 'A preview is fine – go on?' : 'Make the files anyway?'), 'Go on', 'Back').then(function (y) { if (!y) return; p._gbGo = 1; try { t.click(); } finally { p._gbGo = 0; } }); }, true);
 }
 /* ===== calibration labels: A4 sheet of 44 stickers (Riklabel L48-25 · 48.5 × 25.4 mm, 4 × 11) – everything stays inside each sticker ===== */
 /* Riklabel L48-25 – the maker's own Word settings: label 48.5 × 25.4 mm, pitch = label (no gaps), 4 across × 11 down, side margin 8 mm, top margin 8.65 mm */
@@ -5499,7 +5635,7 @@ function renderOverview(p) {
   bindStepBar(p); bindHome();
   if (p.tab === 'det' || p.tab === 'certs' || p.tab === 'refs') { $('#cf').innerHTML = '<button class="btn blue" id="bh">‹ Back to the certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
   if (p.tab === 'gen') { $('#cf').innerHTML = '<button class="btn ghost" id="bh">‹ Certificates</button>'; $('#bh').onclick = function () { toHub(p); }; }
-  if (p.tab === 'cert' && hub) return tHub(p);
+  if (p.tab === 'cert' && hub) { tHub(p); if (p.orderType === 'po') setTimeout(function () { if (S.cur === p.id && p.tab === 'cert' && p.ci == null) try { poOverCheck(p, function () { if (S.cur === p.id && p.tab === 'cert' && p.ci == null && !sheetFn) tHub(p); }); } catch (e) {} }, 400); return; }
   ({ certs: tCerts, refs: tRefs, det: tDet, cert: tCertEd, gen: tGen })[p.tab](p);
 }
 function openProjectPage(p) { if (!p.company) return; if (p.stage !== 'done') p.wizStage = p.stage; p.stage = 'done'; p.tab = 'cert'; p.ci = null; p.reached = Math.max(p.reached || 0, FIDX.cert); saveProjects(); }
