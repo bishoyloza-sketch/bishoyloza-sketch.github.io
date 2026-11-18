@@ -1606,3 +1606,6 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .bxst{display:inline-flex;align-items:center;gap:6px}.bxst button{width:28px;height:28px;border:1px solid #C9D6E8;border-radius:8px;background:#fff;font-size:16px;line-height:1;cursor:pointer;color:#13294B}.bxst b{min-width:18px;text-align:center;color:#13294B}.bxst small{color:#8695A8;font-size:12px}
 .bxadd{border:1px dashed #9FB3CC;background:#fff;border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;color:#185FA5;cursor:pointer}
 .rt.bt td.pt input.pin{border:0;border-bottom:2px solid #F0D98A!important;border-radius:0;min-width:60px;background:transparent}.rt.bt tr td{border-top:1px solid #EEF1F5}
+.sgnote.warn{background:#FFF1EC;border-color:#F3C2AE;color:#7A2E12}.sgnote.warn .lk{font-weight:600}
+body.gdadm .rgi:placeholder-shown::placeholder{color:#B26A00;opacity:.85;font-style:italic;font-weight:500}
+body.gdadm .rt.bt input.pin:placeholder-shown::placeholder{color:#B26A00;opacity:.85;font-style:italic}
