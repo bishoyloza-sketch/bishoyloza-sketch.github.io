@@ -1609,3 +1609,6 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .sgnote.warn{background:#FFF1EC;border-color:#F3C2AE;color:#7A2E12}.sgnote.warn .lk{font-weight:600}
 body.gdadm .rgi:placeholder-shown::placeholder{color:#B26A00;opacity:.85;font-style:italic;font-weight:500}
 body.gdadm .rt.bt input.pin:placeholder-shown::placeholder{color:#B26A00;opacity:.85;font-style:italic}
+.rgmode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#F6F8FB;border:1px solid #E3E9F2;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:#33445C}.rgmode .sp{flex:1}.rgmode>span:first-child{font-weight:600;color:#13294B}
+.rgmn{background:#EEF5FD;border-radius:8px;padding:6px 10px;margin:-4px 0 10px;color:#0C447C}.rgi.rgs{font-weight:600}
+.rgbar.rmx .rgg:nth-child(3),.rgbar.rmx .rgg:nth-child(4),.rgbar.rmx .ckl{display:none}
