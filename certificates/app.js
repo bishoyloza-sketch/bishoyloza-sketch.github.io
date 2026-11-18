@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v336';
+var APP_V = 'v337';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -3126,7 +3126,7 @@ function accCheck(p, it) { if (rMode(it) !== 'read') return { ok: false, off: fa
   var vals = raw.map(cv); if (cr) { vals.push(cv(cr.lo)); vals.push(cv(cr.hi)); } if (!raw.length) why.push('no calibration points');
   var lo = E.seg[0][0], hi = E.seg[E.seg.length - 1][1], cmc = 0, eps = 1e-9;
   if (key === 'pres') { var neg = vals.filter(function (v) { return v < -eps; }); if (neg.length) { var vE = ACC_SCOPE.vac; neg.forEach(function (v) { if (v < vE.seg[0][0] - eps) why.push(fmtAcc(v, E.base) + ' is below the vacuum range (−0.9 bar)'); }); cmc = Math.max(cmc, vE.seg[0][2]); } vals = vals.filter(function (v) { return v >= -eps; }); }
-  vals.forEach(function (v) { if (key === 'bal' && Math.abs(v) < eps) return; if (v < lo - eps || v > hi + eps) { why.push(fmtAcc(v, E.base) + ' is outside ' + fmtAcc(lo, E.base) + ' … ' + fmtAcc(hi, E.base)); return; }
+  vals.forEach(function (v) { if (key === 'bal' && Math.abs(v) < eps) return; if (v < lo - eps || v > hi + eps) { if (!why.__oor) { why.__oor = []; why.push(''); why.__at = why.length - 1; } why.__oor.push(fmtAcc(v, E.base)); why[why.__at] = 'the point' + (why.__oor.length > 1 ? 's ' : ' ') + why.__oor.join(', ') + (why.__oor.length > 1 ? ' are' : ' is') + ' above the accredited range of ' + E.name + ' (' + fmtAcc(lo, E.base) + ' to ' + fmtAcc(hi, E.base) + ')'; return; }
     E.seg.forEach(function (sg, i) { if ((i === 0 ? v >= sg[0] - eps : v > sg[0] + eps) && v <= sg[1] + eps) cmc = Math.max(cmc, sg[2]); }); });
   var pl = /site/i.test(ensureInfo(p).eLoc || '') ? 'site' : 'lab'; if (E.place !== 'both' && E.place !== pl) why.push(E.name + ' is accredited ' + (E.place === 'site' ? 'on site only' : 'in the lab only') + ' – this job is ' + (pl === 'site' ? 'on site' : 'in the lab'));
   var nz = function (x) { return String(x || '').toUpperCase().replace(/[\s.\-\/]/g, ''); }, rs = refsUsed(p, [it]); if (!rs.length) why.push('no reference standard chosen');
@@ -3136,7 +3136,7 @@ function accCheck(p, it) { if (rMode(it) !== 'read') return { ok: false, off: fa
 function accOkPrint(p, it) { try { if (tpOn(it) || sqOn(it) || isSteam(it) || isFilterGen(it) || (typeof isTestItem === 'function' && isTestItem(it))) return false; return !!ACC_IMG && accCheck(p, it).ok; } catch (e) { return false; } }
 function accGroup(p, items) { return !!items.length && items.every(function (it) { return accOkPrint(p, it); }); }
 function accSym() { return '<img class="accsym" src="' + ACC_IMG + '" alt="EGAC accredited – ' + esc(ACC_NO) + '">'; }
-function fmtAcc(v, u) { return (Math.round(v * 1e6) / 1e6) + ' ' + u; }
+function fmtAcc(v, u) { if (u === 'g' && Math.abs(v) >= 1000) { v = v / 1000; u = 'kg'; } return (Math.round(v * 1e6) / 1e6) + ' ' + u; }
 /* the CMC in the item's own unit (an estimated uncertainty never goes below it) */
 function accCmcIn(it) { var p = accProj(it); if (!p) return null; var r; try { r = accCheck(p, Object.assign({}, it, { unc: '', accOff: 0 })); } catch (e) { return null; } if (!r || !r.cmc) return null; var one = accConv(1, it.uncUnit || it.resUnit || r.unit, r.base, true); return one ? r.cmc / one : null; }
 /* expanded uncertainty: the value typed for the item; if none, a sensible estimate from the kind, resolution and range (marked as an estimate on screen until it is edited) */
