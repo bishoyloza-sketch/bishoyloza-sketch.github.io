@@ -1586,3 +1586,14 @@ button.eqk{text-align:left;font:inherit;color:inherit;width:100%}
 .hjr .hjdl .lx{position:static}
 @media (max-width:760px){.hjr{grid-template-columns:minmax(0,1.6fr) 1fr 110px 28px!important}.hjr>span:nth-child(5){display:none}}
 .hjtabs{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;margin-top:0}.hjtabs::-webkit-scrollbar{display:none}
+.kvt .split.su{display:flex!important;flex-wrap:nowrap!important;gap:6px;min-width:0;width:100%}
+.kvt .split.su input.pin.num{flex:1 1 0!important;min-width:0!important;width:auto!important}
+.kvt .split.su select.pin.unit,.kvt .split.su .uchip{flex:0 0 76px!important;width:76px!important;max-width:76px!important;min-width:0!important;height:34px;border-radius:8px;padding:0 22px 0 8px!important;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.kvt .split.su .uchip{display:inline-flex;align-items:center;padding:0 8px!important;background:#EEF3FA;border:1px solid #C9D6E8;color:var(--navy);font-size:14px;font-weight:500;box-sizing:border-box}
+.kvt .split.su .uchip.none{color:#9AA6B5;font-weight:400}
+.isr.su{display:flex;flex-wrap:nowrap;gap:8px;min-width:0}.isr.su .inp{flex:1 1 0;min-width:0;width:auto}
+.isr.su select.inp.un,.isr.su .uchip{flex:0 0 84px;width:84px;max-width:84px;min-width:0}
+.isr.su .uchip{display:inline-flex;align-items:center;justify-content:center;height:40px;box-sizing:border-box;border-radius:10px;background:#EEF3FA;border:1px solid #C9D6E8;color:#13294B;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
+.isr.su .uchip.none{color:#9AA6B5;font-weight:400}
+.isr.su .inp{width:0!important;min-width:40px}
+.isr.su{min-width:330px}@media (max-width:700px){.isr.su{min-width:0}}
