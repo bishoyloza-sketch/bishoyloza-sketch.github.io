@@ -1648,3 +1648,5 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .xtw .rt th{background:#F6F8FB;color:#33445C;font-size:12.5px;font-weight:600;padding:8px 6px;border-bottom:1px solid #E3E9F2}
 .xtw .rt td{padding:5px!important;border-bottom:1px solid #F0F3F7}
 .xtw h5{font-size:14px;color:#13294B;margin:18px 0 8px}
+
+.spd .scv{margin:-4px 0 10px;font-weight:600;color:var(--ink,#1f2a44);background:#F4F7FB;border-radius:8px;padding:6px 10px}
