@@ -1733,3 +1733,13 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .podrop{margin-top:10px;border:2px dashed #B9CBE0;border-radius:12px;padding:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;color:#5B6B82;font-size:13.5px}
 .podrop.on{border-color:#185FA5;background:#E3F0FC}
 .gbh .lk{color:#185FA5;font-weight:600;font-size:14px}
+
+.holtag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;background:#FFF1DC;color:#B26A00;margin-right:4px;white-space:nowrap}
+.lehd{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13.5px;margin-bottom:6px;color:#5B6B82}
+.letb{width:100%;border-collapse:collapse;font-size:13.5px}.letb th{font-size:11px;color:#6B7A90;text-align:left;font-weight:700;padding:6px;border-bottom:1px solid #E3E8EF;white-space:nowrap}
+.letb td{padding:7px 6px;border-bottom:1px dashed #EDF1F5;vertical-align:middle}.letb td.l small{display:block;color:#6B7A90;font-size:11.5px}.letb .n{text-align:right;white-space:nowrap}
+.letb input.n{width:92px;text-align:right;padding:6px 8px}.letb tr.sel{background:#F4F9FE}.letb tr.sur{background:#FFFBF2}.letb tr.tot td{font-weight:800;border-top:2px solid #13294B;border-bottom:0}
+.holb{border:1px solid #CBD5E1;background:#fff;border-radius:14px;padding:4px 10px;font-size:12px;font-weight:600;color:#6B7A90;cursor:pointer;white-space:nowrap;font-family:inherit}
+.holb.on{background:#FFF1DC;border-color:#F0C36D;color:#B26A00}
+.lesb{position:sticky;bottom:0;margin-top:10px;flex-wrap:wrap}
+.hrr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
