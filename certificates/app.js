@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v337';
+var APP_V = 'v338';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2920,13 +2920,13 @@ function dsRef(p, it) { var g = genDefaults(p); if (g.dsr[it.id] != null && Stri
 function ptRows(p, it) { /* new readings; if missing or OUT → last year's readings as placeholder */
   var o = it.old, rows = [], ph = [];
   var RM = rMode(it); if (RM !== 'read' && !genOn(it)) { (o.points || []).forEach(function (q, i) { var v = (it.nv || {})[i] || {}, ref = String(v.ref || '').trim(), st = String(v.set || q.setting || '').trim(); if (!String(q.point == null ? '' : q.point).trim() && !ref && !st) return; if (!ref) ph.push({ point: q.point || st, why: 'no new reading' }); rows.push({ point: q.point, set: st, ref: ref, cells: [], limit: '', st: ref ? 'Measured' : '' }); }); return { rows: rows, ph: ph }; }
-  (o.points || []).forEach(function (q, i) { var dirs = o.dirs === 2 ? [1, 2] : [1], row = { point: q.point, limit: ptLimit(it, q), cells: [] }, out = false, nvi = (it.nv || {})[i] || {};
+  (o.points || []).forEach(function (q, i) { var dirs = o.dirs === 2 ? [1, 2] : [1], row = { point: lead0(q.point), limit: ptLimit(it, q), cells: [] }, out = false, nvi = (it.nv || {})[i] || {};
     /* a blank point (no point value, nothing typed, nothing from last year) is not printed at all */
     if (!String(q.point == null ? '' : q.point).trim() && !String(nvi.ref || nvi.reading || '').trim() && !String(q.ref || q.reading || '').trim()) return;
     dirs.forEach(function (dr) { var r = evalPt(it, i, dr), v = (it.nv || {})[i + (dr === 2 ? 'd' : '')] || {};
       var ok = r.ref != null && r.rd != null && r.res !== 'OUT', d = resDec(it);
       if (!ok) { ph.push({ point: q.point + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), why: r.res === 'OUT' ? 'OUT' : 'no new reading', reading: r.rd, dev: r.dev, lim: r.lim }); if (r.res === 'OUT') out = true; }
-      row.ref = ok ? v.ref : q.ref;
+      row.ref = lead0(ok ? v.ref : q.ref);
       var oRd = dr === 2 ? q.reading2 : q.reading, oDv = dr === 2 ? q.deviation2 : q.deviation;
       /* last year's certificate had the reading but its deviation was not read: work it out (reading − reference) */
       if (!ok && !String(oDv == null ? '' : oDv).trim() && isNum(oRd) && isNum(q.ref) && !isTimer(it)) { var dd = Math.max(decOf(String(oRd)), decOf(String(q.ref))); oDv = (numv(oRd) - numv(q.ref)).toFixed(dd); if (/^-0(\.0+)?$/.test(oDv)) oDv = oDv.slice(1); }
@@ -5160,7 +5160,10 @@ function itemDecs(p, it) { var o = it.old || { points: [] }, dR = resDec(it), id
   var dRef = rr.length ? Math.max.apply(null, rr.map(decOf)) : (colDec('ref') != null ? colDec('ref') : dR), dPt = colDec('point'); if (dPt == null) dPt = dRef != null ? dRef : dR; return { dR: dR, dRef: dRef, dPt: dPt }; }
 function normItem(p, it) { var o = it.old; if (!o || !(o.points || []).length || genOn(it) || isTimer(it)) return; var D = itemDecs(p, it), dR = D.dR, dRef = D.dRef, dPt = D.dPt;
   o.points.forEach(function (q, i) { if (dPt != null && isNum(q.point)) q.point = padTo(q.point, dPt); [i, i + 'd'].forEach(function (k) { var v = it.nv && it.nv[k]; if (!v) return; if (dRef != null && isNum(v.ref)) v.ref = padTo(v.ref, dRef); if (dR != null && isNum(v.reading)) v.reading = padTo(v.reading, dR); }); }); }
-function padTo(v, d) { if (d == null || !isNum(v)) return v; var s = String(v).trim().replace(',', '.'); return decOf(s) < d ? numv(s).toFixed(d) : s; }
+function lead0(v) { return typeof v === 'string' ? v.replace(/^(\s*[-+]?)\.(\d)/, '$10.$2') : v; }
+function padTo(v, d) { v = lead0(v); if (d == null || !isNum(v)) return v; var s = String(v).trim().replace(',', '.'); return decOf(s) < d ? numv(s).toFixed(d) : s; }
+/* a number typed as .1 or .58 means 0.1 / 0.58 – fixed in every box when you leave it (also inside the certificate page) */
+document.addEventListener('blur', function (e) { var t = e.composedPath ? e.composedPath()[0] : e.target; if (!t || t.tagName !== 'INPUT' || /^(date|checkbox|radio|file|search)$/i.test(t.type || '')) return; var v = t.value, nv = lead0(v); if (nv !== v && /^\s*[-+]?0\.\d+\s*$/.test(nv)) { t.value = nv; t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); } }, true);
 /* datasheet resolutions of the lab references (looked up once from the makers' specifications; the reference's own resolution, not the unit under test) */
 var REF_RES = [
   [/5825|5815|9565/, { Pa: 0.1 }],                                   // TSI DP-Calc 5825 / 9565-P: 0.1 Pa (0.001 inH2O)
@@ -5588,7 +5591,7 @@ function deriveRes(it) { var o = it.old; if (!o || !(o.points || []).length || i
 function applyRes(it) { var d = resDec(it); if (d == null || !it.nv) return 0; var n = 0; it.rounded = it.rounded || {};
   Object.keys(it.nv).forEach(function (k) { var v = it.nv[k]; if (!v || !isNum(v.reading)) return; var s0 = String(v.reading).trim().replace(',', '.'); if (decOf(s0) === d) return;
     var nv = numv(s0).toFixed(d); if (nv !== s0) { if (it.rounded[k] == null) it.rounded[k] = s0; v.reading = nv; n++; } }); it.resApplied = String(it.res); return n; }
-function fmtRes(v, d) { return d != null && isNum(v) ? numv(v).toFixed(d) : (v == null ? '' : v); }
+function fmtRes(v, d) { v = lead0(v); return d != null && isNum(v) ? numv(v).toFixed(d) : (v == null ? '' : v); }
 
 function intervalMonths(t) { t = String(t || '').toLowerCase(); var m; if (/\bone\s*year|^\s*1\s*y/.test(t)) return 12; if ((m = t.match(/(\d+(?:\.\d+)?)\s*(month|mon|m\b)/))) return Math.round(+m[1]); if ((m = t.match(/(\d+(?:\.\d+)?)\s*(year|yr|y\b)/))) return Math.round(+m[1] * 12); if (/six\s*month|half/.test(t)) return 6; if (/two\s*year/.test(t)) return 24; return 0; }
 function itInterval(p, it) { var g = genDefaults(p); return it.interval || (g.interval && g.interval !== 'Custom' ? g.interval : 'One Year'); }
