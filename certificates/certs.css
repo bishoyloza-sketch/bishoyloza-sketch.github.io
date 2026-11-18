@@ -1666,3 +1666,14 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .imi.dup{opacity:.55}.imi em{font-size:11.5px;color:#B26A00;font-style:normal;white-space:nowrap}
 .acts4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 12px}.acts4 .btn{min-height:40px;border-radius:10px;background:#fff;border:1px solid #DCE3EE;color:#13294B;font-weight:600}.acts4 .btn:hover{border-color:#185FA5;color:#185FA5}
 @media (max-width:640px){.acts4{grid-template-columns:1fr 1fr}}
+
+.cats.two.three3{grid-template-columns:repeat(3,1fr)}@media (max-width:640px){.cats.two.three3{grid-template-columns:1fr}}
+.acts4{grid-template-columns:repeat(3,1fr)}
+.imfl{display:flex;flex-direction:column;gap:4px;margin:10px 0}.imfl>div{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid #E1E7F0;border-radius:10px;background:#fff}.imfl small{color:#5B6B80}
+
+.cats.four{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.cats.four button{padding:16px 12px 14px;min-height:118px;border-radius:14px;border:1px solid #DCE3EE;background:#fff;box-shadow:0 1px 2px rgba(19,41,75,.06);transition:border-color .15s,box-shadow .15s,transform .15s}
+.cats.four button:hover{border-color:#185FA5;box-shadow:0 6px 18px rgba(24,95,165,.14);transform:translateY(-1px)}.cats.four button b{font-size:15.5px;color:#13294B}.cats.four button small{font-size:12.3px;color:#5B6B80;line-height:1.35}.cats.four button svg{color:#185FA5}
+.acts4{grid-template-columns:repeat(2,minmax(0,220px));justify-content:center}
+@media (max-width:760px){.cats.four{grid-template-columns:1fr 1fr}}@media (max-width:420px){.cats.four button{min-height:104px}}
+
+.acts4 .btn{white-space:normal;line-height:1.25;padding:8px 10px}
