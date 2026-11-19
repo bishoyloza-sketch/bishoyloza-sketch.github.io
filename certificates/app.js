@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v380';
+var APP_V = 'v381';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1298,7 +1298,7 @@ function wItems(p) { if (p.orderType === 'po') setTimeout(function () { if (S.cu
   $('#wm').innerHTML = '<div class="sec" style="margin-top:2px"><h2>Add the codes</h2><small>choose one way</small></div><div class="cats four">' +
     '<button data-a="desc"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><b>Search</b><small>Description, code or cert. no. · any year or month</small></button>' +
     '<button data-a="add"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg><b>Add</b><small>Type an item or a machine yourself</small></button>' +
-    '<button data-a="attach"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9"/></svg><b>Attach files</b><small>The customer\'s list – PDF, Word, Excel or a photo · or drop it here</small></button>' +
+    '<button data-a="attach"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9"/></svg><b>Attach files</b><small>The customer\'s list or last year\'s receipt letter – PDF, Word, Excel or a photo · or drop it here</small></button>' +
     '<button data-a="oldc"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M9 13l2 2 4-4"/></svg><b>Attach certificates</b><small>Certificates from earlier work – Word or PDF · or drop them here</small></button>' +
     '</div>' +
     '<div class="acts4"><button class="btn ghost sm" data-a="letters">Search the letters</button><button class="btn ghost sm" data-a="paste">Paste codes / cert. nos.</button></div>' +
@@ -1541,6 +1541,7 @@ function impPdf(file) { return needPdf().then(function () { return file.arrayBuf
   var pages = [], next = function (i) { if (i > pdf.numPages) return Promise.resolve(pages); return pdf.getPage(i).then(function (pg) { return pg.getTextContent(); }).then(function (tc) { pages.push(tc.items.filter(function (t) { return String(t.str).trim(); }).map(function (t) { return { s: t.str, x: t.transform[4], y: t.transform[5], w: t.width || 0 }; })); return next(i + 1); }); };
   return next(1).then(function (pg) { pg.pdf = pdf; return pg; }); }).then(function (pages) { var recs = [], txt = [];
   if (!pages.some(function (its) { return its.length; })) return impPdfOcr(pages.pdf);
+  var gr = impPdfGrid(pages); if (gr) { IMP_KIND = 'pdfgrid'; return gr; }
   pages.forEach(function (its) { var L = []; its.sort(function (a, b) { return b.y - a.y || a.x - b.x; }).forEach(function (t) { var l = L[L.length - 1]; if (l && Math.abs(l.y - t.y) < 3.2) l.t.push(t); else L.push({ y: t.y, t: [t] }); });
     L.forEach(function (l) { l.t.sort(function (a, b) { return a.x - b.x; }); txt.push(l.t.map(function (t) { return t.s; }).join(' ')); });
     /* header: the line (plus the next 2 lines, for headers written on 2-3 lines) that names the columns */
@@ -1568,9 +1569,39 @@ function impPdf(file) { return needPdf().then(function () { return file.arrayBuf
         out = out.replace(/\s+/g, ' ').trim(); var dm = out.match(/^(.{3,}?) \1$/); r[k] = dm ? dm[1] : out; });
       if (r.code || r.name) recs.push(r); }); });
   return recs.length ? recs : impText(txt.join('\n')); }); }
+/* PDF of a plan with the machine and its items side by side ("Instrument Name · Instrument code · Calibration Item · Item Code" – Eva): the table is rebuilt row by row on the item codes;
+   the machine cells (merged, written once in the middle) go to the machine whose item codes start with its code, or whose rows they sit beside */
+function impPdfGrid(pages) { IMP_ALL += '\n' + pages.map(function (pg) { return pg.map(function (t) { return t.s; }).join(' '); }).join('\n'); var head = null, rows = [], t2 = function (x) { return String(x || '').replace(/\s+/g, ' ').trim(); };
+  pages.forEach(function (its) { var L = []; its.slice().sort(function (a, b) { return b.y - a.y || a.x - b.x; }).forEach(function (t) { var l = L[L.length - 1]; if (l && Math.abs(l.y - t.y) < 3.2) l.t.push(t); else L.push({ y: t.y, t: [t] }); });
+    var hi = -1, cells = null; for (var i = 0; i < L.length && hi < 0; i++) { var grp = []; for (var li = i; li < Math.min(L.length, i + 3); li++) grp = grp.concat(L[li].t); grp.sort(function (a, b) { return a.x - b.x; });
+      var cs = []; grp.forEach(function (t) { var nr = cs.filter(function (c) { return t.x < c.x1 + 6 && t.x + t.w > c.x0 - 6; })[0]; if (nr) { nr.s += ' ' + t.s; nr.x0 = Math.min(nr.x0, t.x); nr.x1 = Math.max(nr.x1, t.x + t.w); } else cs.push({ s: t.s, x0: t.x, x1: t.x + t.w }); });
+      cs.sort(function (a, b) { return a.x0 - b.x0; }); var hs = cs.map(function (c) { return t2(c.s).toLowerCase(); });
+      var ic = hs.findIndex(function (x) { return /^item code/.test(x); }), mc = hs.findIndex(function (x) { return /^instrument code|^equipment code|^machine code/.test(x); }), mn = hs.findIndex(function (x) { return /^instrument name|^equipment name|^machine name/.test(x); });
+      if (ic >= 0 && mc >= 0 && mn >= 0) { hi = li - 1; cells = cs; } }
+    if (!cells) return; if (!head) head = cells.map(function (c) { return t2(c.s); });
+    var cx = cells.map(function (c) { return (c.x0 + c.x1) / 2; }), colOf = function (t) { var x = t.x + (t.w || 0) / 2, c = 0; for (var j = 1; j < cx.length; j++) if (x >= (cx[j - 1] + cx[j]) / 2) c = j; return c; };
+    var hl = head.map(function (x) { return x.toLowerCase(); }), IC = hl.findIndex(function (x) { return /^item code/.test(x); }), MC = hl.findIndex(function (x) { return /^instrument code|^equipment code|^machine code/.test(x); }), MN = hl.findIndex(function (x) { return /^instrument name|^equipment name|^machine name/.test(x); }), NO = hl.findIndex(function (x) { return /^no\.?$|^s\.?n\.?$/.test(x); });
+    var body = L.filter(function (l) { return l.y < L[Math.max(hi, 0)].y - 2; }), anchors = [];
+    body.forEach(function (l) { var cs = l.t.filter(function (t) { return colOf(t) === IC && /\d/.test(t.s); }); if (cs.length) anchors.push({ y: l.y, code: cs.map(function (t) { return t.s; }).join('').replace(/\s+/g, ''), cell: [] }); });
+    if (!anchors.length) return; var mach = {}, near = function (y) { var b = null, bd = 1e9; anchors.forEach(function (a) { var d = Math.abs(a.y - y); if (d < bd) { bd = d; b = a; } }); return bd < 34 ? b : null; };
+    anchors.forEach(function (a) { var pf = a.code.split('/')[0]; (mach[pf] = mach[pf] || []).push(a); });
+    var spanOf = function (y) { var best = null, bd = 1e9; Object.keys(mach).forEach(function (k) { var ys = mach[k].map(function (a) { return a.y; }), hi2 = Math.max.apply(null, ys) + 30, lo = Math.min.apply(null, ys) - 30; var mid = (hi2 + lo) / 2; if (y <= hi2 && y >= lo && Math.abs(mid - y) < bd) { bd = Math.abs(mid - y); best = k; } }); return best; };
+    var mcell = {}; body.forEach(function (l) { l.t.forEach(function (t) { var c = colOf(t); if (c === IC) { if (/\d/.test(t.s) || IC < 1) return; c = IC - 1; }
+      if (c === MN || c === MC || c === NO) { var k = c === MC && /\d/.test(t.s) && mach[t.s.trim()] ? t.s.trim() : spanOf(l.y); if (!k) return; mcell[k] = mcell[k] || {}; mcell[k][c] = (mcell[k][c] ? mcell[k][c] + ' ' : '') + t.s.trim(); return; }
+      var a = near(l.y); if (a) a.cell[c] = (a.cell[c] ? a.cell[c] + ' ' : '') + t.s.trim(); }); });
+    Object.keys(mach).forEach(function (k) { mach[k].sort(function (a, b) { return b.y - a.y; }).forEach(function (a, i) { var r = head.map(function () { return ''; }); Object.keys(a.cell).forEach(function (c) { r[c] = a.cell[c]; }); r[IC] = a.code;
+      if (i === 0) { r[MN] = (mcell[k] || {})[MN] || k; r[MC] = k; } rows.push(r); }); }); });
+  if (head && rows.length) { var mj = head.findIndex(function (h) { return /serial/i.test(h) && /required|points/i.test(h); });
+    if (mj >= 0) { head.splice(mj, 1, 'Item Serial', 'Required points'); rows.forEach(function (r) { r.splice(mj, 0, ''); }); } }
+  if (head && rows.length) { var hs = head.map(function (h) { return String(h || '').toLowerCase(); }), SNc = hs.findIndex(function (h) { return /serial/.test(h); });
+    rows.forEach(function (r, ri) { r.forEach(function (c, ci) { if (!c || ci === SNc) return; var v = String(c);
+      v = v.replace(/^\(If applicable\)\s*(to be calibrated\s*)?/i, '');
+      if (SNc >= 0 && !r[SNc]) { var m = v.match(/\s([A-Z0-9][A-Z0-9\-\/]*\d[A-Z0-9\-\/]{5,})$/); if (m && /[A-Z]/.test(m[1]) && !/^\d+(\.\d+)?$/.test(m[1])) { r[SNc] = m[1]; v = v.slice(0, m.index).trim(); } }
+      r[ci] = v; }); }); }
+  if (!head || rows.length < 2) return null; return impRowTable([head].concat(rows)); }
 /* text only (no columns found): the codes split the records */
 var IMP_CODE = /\b([A-Z]{1,5}\d{0,3}[-.]\d{1,5}[A-Z]?(?:\s*\/\s*[A-Z]{1,5}[-.]?\s?\d{1,3})?)\b/g;
-function impText(t) { IMP_KIND = IMP_KIND || 'text'; if (!IMP_LAST || !IMP_LAST.text) impKeep(null, t); var recs = [], m, idx = []; t = String(t || '').replace(/[ \t]*\n[ \t]*/g, '   ').replace(/\u00a0/g, ' '); IMP_CODE.lastIndex = 0; while ((m = IMP_CODE.exec(t))) idx.push({ c: m[1].replace(/\s+/g, ''), i: m.index, e: m.index + m[0].length });
+function impText(t) { IMP_KIND = IMP_KIND || 'text'; if (IMP_ALL.indexOf(String(t || '').slice(0, 120)) < 0) IMP_ALL += '\n' + t; if (!IMP_LAST || !IMP_LAST.text) impKeep(null, t); var recs = [], m, idx = []; t = String(t || '').replace(/[ \t]*\n[ \t]*/g, '   ').replace(/\u00a0/g, ' '); IMP_CODE.lastIndex = 0; while ((m = IMP_CODE.exec(t))) idx.push({ c: m[1].replace(/\s+/g, ''), i: m.index, e: m.index + m[0].length });
   var hasKids = {}, anySlash = idx.some(function (o) { return /\//.test(o.c); }); idx.forEach(function (o) { var p = o.c.split('/')[1] ? o.c.split('/')[0] : ''; if (p) hasKids[impKey(p)] = 1; });
   idx = idx.filter(function (o) { return /\//.test(o.c) || !anySlash || hasKids[impKey(o.c)]; });
   var segs = function (x) { return String(x).split(/\s{2,}/).map(function (v) { return v.trim(); }).filter(Boolean); };
@@ -1616,6 +1647,7 @@ function impPlan(rows) { var hi = -1, H = null;
 /* one row per item, the machine in its own column (Servier: Location · Asset · Description · Item to be calibrated · Code / SN · Units · Range · Cal. points · Tolerance · Cert. #). A new title row starts a new block. */
 function impRowHead(r) { var h = r.map(function (c) { return String(c || '').replace(/\s+/g, ' ').trim().toLowerCase(); }), f = function (rx, not) { return h.findIndex(function (x, i) { return x && rx.test(x) && !(not && not.test(x)); }); };
   var H = { it: f(/item to be calibrated|^uut|^instrument( name)?$|^equipment$|^item$/), code: f(/^code|code ?\/ ?s\/?n|^tag|int\.? ?lab ?no/), mc: f(/^asset$|^machine|^equipment name$|^system$|^line$/), ds: f(/^description$/), un: f(/^units?$/), rg: f(/^range$/), pt: f(/points/), tol: f(/toleran|accept/), ce: f(/^cert|certificate/), lo: f(/^location$|^area$/), sn: f(/serial/), ma: f(/manufact|maker|brand/), mo: f(/^model/) };
+  if (H.code < 0) { var icx = f(/^item code$/); if (icx >= 0) H.code = icx; }
   /* "Item Name" holding the tag (PI 1001) and "Function" holding what it is (Pressure Gauge) */
   var fn = f(/^function$/), inm = f(/^item name$|^tag( no\.?)?$/); if (H.code < 0 && fn >= 0 && inm >= 0) { H.code = inm; H.it = fn; }
   /* "Instrument · Model · Ser. No. · … · Use range": no code column – the serial number (the second "Ser. No." when the first one only counts the rows) names it */
@@ -1631,10 +1663,14 @@ function impRowHead(r) { var h = r.map(function (c) { return String(c || '').rep
   /* machine and item side by side: "Instrument Name · Instrument code · Calibration Item · Item Code" (Eva) or "Equipment · Code · Instrument Name · Instrument Code" (Minapharm) */
   var xIt = f(/^calibration item$|^items? to calibrate$/), xIc = f(/^item code$/), xMn = f(/^instrument name$|^equipment( name)?$|^machine( name)?$/), xMc = f(/^instrument code$|^equipment code$|^machine code$|^code$/);
   if (xIt >= 0 && xIc >= 0 && xMn >= 0) { H.mc = xMn; H.it = xIt; H.code = xIc; H.mcode = xMc; H.carry = 1; }
+  else if (xIc >= 0 && xMn >= 0 && xMc >= 0 && xMc !== xIc) { H.mc = xMn; H.mcode = xMc; H.code = xIc; H.it = -2; H.carry = 1; }
   else { var eq = f(/^equipment$|^machine$/), ic = f(/^instrument code$/), inn = f(/^instrument name$|^instrument$/), cc = f(/^code$/); if (eq >= 0 && ic >= 0 && inn >= 0) { H.mc = eq; H.it = inn; H.code = ic; H.mcode = cc; H.carry = 1; } }
   if (H.pt < 0) H.pt = f(/required points|calibration points|points to be calibrated/); if (H.tol < 0) H.tol = f(/accept/);
-  if (H.code >= 0 && /code/.test(h[H.code]) && /serial|s\/n/.test(h[H.code])) H.codeSn = 1; if (H.it < 0 && H.code >= 0) H.it = f(/^item name$|^item description$|^equipment name$|^instrument name$/); if (mon >= 6) H.months = 1;
-  return H.it >= 0 && H.code >= 0 && (H.months || H.mc >= 0 || H.ds >= 0 || H.un >= 0 || H.rg >= 0 || H.sn >= 0 || H.lo >= 0) ? H : null; }
+  if (H.code >= 0 && /code/.test(h[H.code]) && /serial|s\/n/.test(h[H.code])) H.codeSn = 1; if (H.it === -1 && H.code >= 0) H.it = f(/^item name$|^item description$|^equipment name$|^instrument name$/); if (mon >= 6) H.months = 1;
+  return (H.it >= 0 || H.it === -2) && H.code >= 0 && (H.carry || H.months || H.mc >= 0 || H.ds >= 0 || H.un >= 0 || H.rg >= 0 || H.sn >= 0 || H.lo >= 0) ? H : null; }
+/* an item with only a code: what it is, from the end of the code (PR8-004/TS.01 → Temperature sensor) */
+var IMP_SFX2 = [[/^(TS|TE|TT|T)\d*$/, 'Temperature sensor'], [/^(RH|MT|H)\d*$/, 'Humidity sensor'], [/^(DP|DPT|PDT)\d*$/, 'Differential pressure gauge'], [/^(PR|PG|PT|PI|P)\d*$/, 'Pressure gauge'], [/^(RP|RPM|R)\d*$/, 'Speed (RPM)'], [/^(CN|CT|C)\d*$/, 'Conductivity'], [/^(TK)\d*$/, 'Thickness'], [/^(FL|FT|F)\d*$/, 'Flow'], [/^(TM|TI|CL)\d*$/, 'Timer'], [/^(PH)\d*$/i, 'pH'], [/^(VC|AV|V)\d*$/, 'Air velocity'], [/^(W|WT)\d*$/, 'Weight']];
+function impSfxName(code) { var m = String(code || '').match(/\/([A-Z]{1,4})[.\-]?\d*$/i); if (!m) return ''; var s = m[1].toUpperCase(); for (var i = 0; i < IMP_SFX2.length; i++) if (IMP_SFX2[i][0].test(s)) return IMP_SFX2[i][1]; return ''; }
 function impRowTable(rows) { var H = null, recs = [], seenM = {}, any = false, g = function (r, k) { return k >= 0 ? String(r[k] == null ? '' : r[k]).replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' ').trim() : ''; };
   rows.forEach(function (r) { var h = impRowHead(r); if (h) { H = h; any = true; return; } if (!H) return;
     var filled = r.filter(function (c) { return String(c == null ? '' : c).trim(); }).length; if (filled <= 1) return; /* a section title such as "Manufacturing" */
@@ -1644,6 +1680,7 @@ function impRowTable(rows) { var H = null, recs = [], seenM = {}, any = false, g
     if (H.carry) { if (mc || mcc) { H.lastMc = mc || mcc; H.lastMcc = mcc; } else { mc = H.lastMc || ''; mcc = H.lastMcc || ''; } mc = mc.replace(/\s*model\s*:.*$/i, '').trim() || mc; }
     var un = g(r, H.un).replace(/[ᵒº]/g, '°').replace(/^m\s*bar$/i, 'mbar').replace(/^kg\s*\/\s*cm2$/i, 'kg/cm²').replace(/^in\s*h2o$/i, 'inH2O').replace(/^ml\s*\/\s*min$/i, 'mL/min'), rg = g(r, H.rg).replace(/[ᵒº]/g, '°'), tol = g(r, H.tol).replace(/[ᵒº]/g, '°'), ce = g(r, H.ce), cert = /\d/.test(ce) ? ce.replace(/^(\d{3})(\d{3}-\d{4})$/, '$1-$2') : '';
     if (ikv && /\//.test(code) && !/^(n\/?a|-+)$/i.test(ikv)) nm = ikv.charAt(0).toUpperCase() + ikv.slice(1) + (nm ? ' – ' + nm : '');
+    if ((H.it === -2 || H.carry) && !nm) nm = impSfxName(code);
     var snx = ''; if (H.codeSn && /\//.test(code)) { var cs = code.split('/'); code = cs[0].trim(); snx = cs.slice(1).join('/').trim(); }
     var rec = { name: nm || ds, code: code, man: g(r, H.ma), model: g(r, H.mo), sn: g(r, H.sn) || snx, range: rg && /\d/.test(rg) ? rg : '', pts: '', crit: tol && tol !== '-' ? tol : '', loc: [g(r, H.lo) || H.sec || '', ds && ds !== mc && ds !== nm ? ds : ''].filter(Boolean).join(' · '), prevCert: cert, unitHint: un };
     if (H.pt >= 0) rec.pts = g(r, H.pt);
@@ -1779,7 +1816,7 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
   var parentOf = function (c) { if (/s\/n/i.test(c)) return ''; var m = c.match(/^(.+?)\/(.+)$/); if (m) return m[1]; var u = c.match(/^(.+)_([^_]+)$/); return u && allC[impKey(u[1])] ? u[1] : ''; };
   var kids = {}; recs.forEach(function (r) { var p = parentOf(codeOf(r)); if (p) kids[impKey(p)] = 1; });
   var curM = null, seen = {}, addIt = function (list, it, mk) { var k = (mk || '') + '|' + (impKey(it.code) || impKey(it.description) + '#' + list.length); if (seen[k]) { var o = seen[k]; Object.keys(it).forEach(function (f) { if ((o[f] == null || o[f] === '') && it[f]) o[f] = it[f]; }); return; } seen[k] = it; list.push(it); };
-  var lastM = null; recs.forEach(function (r) { var c = codeOf(r); if (/^n\.?\/?a\.?$/i.test(c)) c = ''; if (!c && !r.name) return; var p = parentOf(c);
+  var lastM = null; recs.forEach(function (r) { var c = codeOf(r); if (/^n\.?\/?a\.?$/i.test(c)) c = ''; if (!c && !r.name && !r.prevCert) return; var p = parentOf(c);
     var nm = String(r.name || '').replace(/\s+/g, ' ').trim(), rg = impRange(r.range) || impRange((nm.match(/\(([^)]*\d[^)]*)\)/) || [])[0]) || (impPts(r.pts) ? null : impRange(r.pts)), pt = impPts(r.pts), sn = /^n\.?\s?a\.?$|^-+$/i.test(String(r.sn).trim()) ? '' : String(r.sn || '').trim();
     var uh = String(r.unitHint || '').trim(), u = (uh && !/,/.test(uh) ? (uh === '%' ? (/\brh\b|humid/i.test(nm) ? '%RH' : '%') : impUnit(' ' + uh) || (/^[a-zµ°%\/³²]{1,8}$/i.test(uh) && uh.length > 1 ? uh : '')) : '') || (pt && pt.u) || (rg && rg.u) || impUnit((nm.match(/\(([^)]*)\)/) || [''])[0]) || '';
     var it = { ocr: r.ocr ? 1 : 0, noCode: r.noCode ? 1 : 0, code: c, description: nm.replace(/\s*\([^)]*\d[^)]*\)\s*$/, '').trim() || nm, manufacturer: r.man || '', model: r.model || '', serial: sn, unit: u, rMin: rg ? rg.a : '', rMax: rg ? rg.b : '', pts: pt ? pt.pts : null, lim: impLim(r.crit, u), crit: r.crit || '', loc: r.loc || '' };
@@ -1789,7 +1826,7 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
     if (r.noCode && (curM || lastM)) { it.noCode = 1; return addIt(M[curM || lastM].items, it, curM || lastM); }
     if (!p && c && kids[impKey(c)]) { var mk = impKey(c); lastM = mk; if (!M[mk]) { M[mk] = { name: nm || c, code: c, man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(mk); } else if (/^[A-Z0-9\-.]+$/i.test(M[mk].name) && nm) { M[mk].name = nm; M[mk].man = M[mk].man || r.man || ''; M[mk].model = M[mk].model || r.model || ''; } curM = null; return; }
     /* a machine with no code ("Water Station  NA") – the rows under it, without a "/" code, are its items */
-    if (!c && nm && !r.pts && !r.crit && !r.range && !r.qty) { var nk = 'NA:' + impKey(nm) + ':' + order.length; M[nk] = { name: nm, code: '', man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(nk); curM = nk; return; }
+    if (!c && nm && !r.pts && !r.crit && !r.range && !r.qty && !r.letter) { var nk = 'NA:' + impKey(nm) + ':' + order.length; M[nk] = { name: nm, code: '', man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(nk); curM = nk; return; }
     if (p) { var pk = impKey(p); if (!M[pk]) { M[pk] = { name: p, code: p, items: [] }; order.push(pk); } addIt(M[pk].items, it, pk); curM = null; lastM = pk; return; }
     if (curM) return addIt(M[curM].items, it, curM);
     addIt(units, it, 'u'); });
@@ -1798,11 +1835,23 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
 function impCodesFromText(t) { var out = [], seen = {}; String(t || '').split(/\n/).forEach(function (line) { line.split(/\s{2,}|\t|,|;|\|/).forEach(function (tok) { tok = tok.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').replace(/\s*([\/\-.])\s*/g, '$1');
   if (tok.length >= 3 && tok.length <= 24 && /[0-9]/.test(tok) && /[A-Za-z]/.test(tok) && !/^(page|tel|fax|mob)/i.test(tok)) { var k = impKey(tok); if (!seen[k]) { seen[k] = 1; out.push({ code: tok.toUpperCase(), name: '', man: '', model: '', pts: '', crit: '', sn: '', range: '', loc: '', ocr: 1 }); } } }); }); return out; }
 function impOcrRecs(t) { return impCodesFromText(t); }
-function impImage(file) { IMP_KIND = 'photo'; return shrink(file, 2200, 0.9).then(ocrText).then(function (t) { var tb = impOcrRecs(t); return tb; }); }
+function impImage(file) { IMP_KIND = 'photo'; return shrink(file, 2200, 0.9).then(ocrText).then(function (t) { IMP_ALL += '\n' + t; var tb = impOcrRecs(t); return tb; }); }
 function impPdfOcr(pdf) { var txt = [], next = function (i) { if (!pdf || i > Math.min(pdf.numPages, 20)) return Promise.resolve(); return pdf.getPage(i).then(function (pg) { var vp = pg.getViewport({ scale: 2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
     return pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise.then(function () { return ocrText(cv.toDataURL('image/jpeg', 0.9)); }).then(function (t) { txt.push(t || ''); return next(i + 1); }); }); };
   return next(1).then(function () { var t = txt.join('\n'), tb = impOcrRecs(t); return tb; }); }
-function impRead(file) { var n = String(file.name || '').toLowerCase(); if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|gif)$/.test(n)) return impImage(file); return /\.pdf$/.test(n) ? impPdf(file) : /\.docx$/.test(n) ? impDocx(file) : /\.doc$/.test(n) ? impDoc(file) : /\.xlsx$/.test(n) ? impXlsx(file) : Promise.reject(new Error('Choose a PDF, Word (.doc or .docx), Excel (.xlsx) file or a photo')); }
+/* a receipt letter from last year (Word, PDF or a photo of it, even marked by hand): its certificate numbers → each one brings its old certificate */
+var IMP_ALL = '';
+var CERTNO_G = /\b\d{1,4}\s*\/\s*[A-Z]{1,5}\s*-\s*\d{1,5}[A-Z]?\s*-\s*20\d\d\b/gi;
+function impCertNos(t) { var seen = {}, out = []; String(t || '').replace(CERTNO_G, function (m) { var v = m.replace(/\s+/g, '').toUpperCase(); if (!seen[v]) { seen[v] = 1; out.push(v); } return m; }); return out; }
+function impLetter(recs) { if (recs && !Array.isArray(recs)) return recs; var t = IMP_ALL, certs = impCertNos(t); if (!certs.length) return recs;
+  var isLet = /receipt|received|delivery|deliver(ed)?\s+to|استلام|تسليم|خطاب/i.test(t) || certs.length >= 3; if (!isLet) return recs;
+  recs = recs || []; var got = {}; recs.forEach(function (r) { impCertNos(r.prevCert).forEach(function (c) { got[c] = 1; }); });
+  var miss = certs.filter(function (c) { return !got[c]; }); if (!miss.length) { IMP_KIND = IMP_KIND || 'letter'; return recs; }
+  /* no table gave the numbers (photo, scan, plain text): the numbers alone – the old certificates bring the codes and everything else */
+  if (!Object.keys(got).length && (IMP_KIND === 'text' || IMP_KIND === 'photo' || !recs.length || miss.length >= recs.length / 2)) { IMP_KIND = 'letter'; return miss.map(function (c) { return { code: '', name: '', prevCert: c, letter: 1 }; }); }
+  IMP_KIND = 'letter'; return recs.concat(miss.map(function (c) { return { code: '', name: '', prevCert: c, letter: 1 }; })); }
+function impRead(file) { IMP_ALL = ''; return impRead0(file).then(function (r) { return impLetter(r); }); }
+function impRead0(file) { var n = String(file.name || '').toLowerCase(); if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|gif)$/.test(n)) return impImage(file); return /\.pdf$/.test(n) ? impPdf(file) : /\.docx$/.test(n) ? impDocx(file) : /\.doc$/.test(n) ? impDoc(file) : /\.xlsx$/.test(n) ? impXlsx(file) : Promise.reject(new Error('Choose a PDF, Word (.doc or .docx), Excel (.xlsx) file or a photo')); }
 /* ===== Old certificates from this computer (Word or PDF): every "Data of item" becomes an item with last year's data, ready to work on ===== */
 function localPdfPages(file) { return needPdf().then(function () { return file.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (doc) { var out = [], chain = Promise.resolve();
   for (var i = 1; i <= Math.min(doc.numPages, 300); i++) (function (n) { chain = chain.then(function () { return doc.getPage(n).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
@@ -1923,7 +1972,7 @@ function shapesSheet(p, back) { var open = 'akh';
       $('#shBk').onclick = function () { if (back) back(); else closeSheet(); }; } }; }); };
   draw(); }
 /* does what was read look like a list the app knows? */
-function impOdd(recs, kind) { if (kind === 'photo') return []; if (!recs || !recs.length) return ['nothing could be read from it'];
+function impOdd(recs, kind) { if (kind === 'photo' || kind === 'letter') return []; if (!recs || !recs.length) return ['nothing could be read from it'];
   var R = impBuild(recs), why = [], its = [].concat.apply([], R.machines.map(function (m) { return m.items; })).concat(R.units);
   if (kind === 'text') why.push('no table with a Code column – the codes were picked out of the text');
   var em = R.machines.filter(function (m) { return !m.items.length; }).length; if (em) why.push(em + ' machine' + (em === 1 ? ' has' : 's have') + ' no items under ' + (em === 1 ? 'it' : 'them'));
@@ -1937,7 +1986,7 @@ function attachSheet(p, files0) { var st = { busy: 0, res: null, err: '', file: 
       .then(function () { st.busy = 0; st.res = impBuild(all); if (bad.length) st.err = bad.join(' · '); else if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in these files.'; renderSheet(); }); };
   var go = function (f) { st.file = f; st.busy = 1; st.err = ''; st.res = null; st.odd = []; st.oddOk = 0; st.reqSent = 0; IMP_KIND = ''; IMP_LAST = null; IMP_FILE = f.name; renderSheet();
     var n = String(f.name || '').toLowerCase(), job = /\.xlsx$/.test(n) ? needExcel().then(function () { return f.arrayBuffer(); }).then(function (b) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(b).then(function () { return wb; }); }).then(function (wb) { var ws = wb.getWorksheet('Items') || wb.worksheets[0], hd = ws.getRow(1).values.map(function (v) { return cellStr(v).trim().toLowerCase(); }).join('|'); return /range from/.test(hd) && /machine/.test(hd) ? 'tpl' : impXlsx(f); }) : impRead(f);
-    job.then(function (r) { if (r === 'tpl') { closeSheet(); excelSheet(p); return setTimeout(function () { xlImport(p, f); }, 300); } st.busy = 0; var w = impOdd(r || [], IMP_KIND); if (w.length) st.odd = [{ name: f.name, why: w }]; st.res = impBuild(r || []); if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in this file. Is it a list of instruments with a Code column?'; renderSheet(); })
+    job.then(function (r) { if (r === 'tpl') { closeSheet(); excelSheet(p); return setTimeout(function () { xlImport(p, f); }, 300); } st.busy = 0; if (IMP_KIND === 'letter') { var nl = (r || []).filter(function (x) { return x.prevCert; }).length; toast('Receipt letter – ' + nl + ' certificate no. found · last year\'s certificates come with them'); } var w = impOdd(r || [], IMP_KIND); if (w.length) st.odd = [{ name: f.name, why: w }]; st.res = impBuild(r || []); if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in this file. Is it a list of instruments with a Code column?'; renderSheet(); })
       .catch(function (e) { st.busy = 0; st.err = (e && e.message) || String(e); st.odd = [{ name: f.name, why: [st.err] }]; st.err = ''; renderSheet(); }); };
   var have = {}; p.items.forEach(function (i) { if (i.code) have[impKey(i.code)] = 1; });
   var line = function (it, mi, ii) { var k = mi + ':' + ii, dup = it.code && have[impKey(it.code)], meta = [it.manufacturer, it.model, it.serial ? 'S/N ' + it.serial : '', it.prevCert ? 'last year: ' + it.prevCert : '', it.loc || ''].filter(Boolean).join(' · '), req = [it.rMin !== '' && it.rMax !== '' ? '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || '') : '', it.pts ? it.pts.join(' · ') + ' ' + (it.unit || '') : '', it.crit].filter(Boolean).join('  |  ');
@@ -7216,7 +7265,7 @@ function itLibTab() { var L = itLib(), adm = certAdmin(), q = function (x) { ret
 /* ===== a customer file in a shape the app does not know: sent to the admins, who see it on Home and work it out (with Claude) ===== */
 var IMP_LAST = null, IMP_FILE = '', IMP_SAMPLES = {};
 /* what a file looked like to the app (first rows or text) – sent with a request for a new shape */
-function impKeep(rows, text) { var t = rows ? rows.slice(0, 45).map(function (r) { return r.map(function (c) { return String(c == null ? '' : c).replace(/\s+/g, ' ').trim(); }).join(' | ').replace(/( \| )+$/, ''); }).filter(function (l) { return l.replace(/[ |]/g, ''); }).join('\n') : String(text || '').replace(/[ \t]+/g, ' ').slice(0, 3500);
+function impKeep(rows, text) { IMP_ALL += '\n' + (rows ? rows.map(function (r) { return (r || []).join(' | '); }).join('\n') : String(text || '')); var t = rows ? rows.slice(0, 45).map(function (r) { return r.map(function (c) { return String(c == null ? '' : c).replace(/\s+/g, ' ').trim(); }).join(' | ').replace(/( \| )+$/, ''); }).filter(function (l) { return l.replace(/[ |]/g, ''); }).join('\n') : String(text || '').replace(/[ \t]+/g, ' ').slice(0, 3500);
   var o = IMP_SAMPLES[IMP_FILE] || ''; if (o.length < 4000 && t) IMP_SAMPLES[IMP_FILE] = (o ? o + '\n---\n' : '') + t.slice(0, 4000 - o.length); IMP_LAST = { name: IMP_FILE, text: IMP_SAMPLES[IMP_FILE] || '' }; }
 function shapeReqs() { var L = LS.get('shapeReq', []) || [], gone = LS.get('shapeReqDone', {}) || {}; return L.filter(function (r) { return r && r.id && !gone[r.id]; }); }
 function shapeReqSend(p, odd) { var me = S.me ? S.me.name : 'someone', smp = IMP_LAST ? IMP_LAST : null, at = Date.now();
