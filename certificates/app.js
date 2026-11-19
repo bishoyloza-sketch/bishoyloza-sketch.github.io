@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v374';
+var APP_V = 'v375';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1625,14 +1625,20 @@ function impRowHead(r) { var h = r.map(function (c) { return String(c || '').rep
   /* "Item" holding the machine and "Description" the part of it (Gypto: Item = Oral drops tank, Description = Agitator RPM) */
   if (H.it >= 0 && h[H.it] === 'item' && H.ds >= 0 && H.mc < 0) { H.mc = H.it; H.it = H.ds; H.ds = -1; }
   H.ik = f(/^items? to be calibrated$/); if (H.ik === H.it) H.ik = -1;
-  return H.it >= 0 && H.code >= 0 && (H.mc >= 0 || H.ds >= 0 || H.un >= 0 || H.rg >= 0 || H.sn >= 0 || H.lo >= 0) ? H : null; }
+  /* master plan with a column per month (Future Pharma): "Item Name · Item Code / Serial No. · January … December" – the code and the serial share one cell */
+  var mon = h.filter(function (x) { return /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?$/.test(x); }).length;
+  if (H.code < 0) { H.code = f(/^item code|code\s*\/\s*serial|code\s*&\s*serial/); if (H.code >= 0 && /serial/.test(h[H.code])) H.codeSn = 1; }
+  if (H.code >= 0 && /code/.test(h[H.code]) && /serial|s\/n/.test(h[H.code])) H.codeSn = 1; if (H.it < 0 && H.code >= 0) H.it = f(/^item name$|^item description$|^equipment name$|^instrument name$/); if (mon >= 6) H.months = 1;
+  return H.it >= 0 && H.code >= 0 && (H.months || H.mc >= 0 || H.ds >= 0 || H.un >= 0 || H.rg >= 0 || H.sn >= 0 || H.lo >= 0) ? H : null; }
 function impRowTable(rows) { var H = null, recs = [], seenM = {}, any = false, g = function (r, k) { return k >= 0 ? String(r[k] == null ? '' : r[k]).replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' ').trim() : ''; };
   rows.forEach(function (r) { var h = impRowHead(r); if (h) { H = h; any = true; return; } if (!H) return;
     var filled = r.filter(function (c) { return String(c == null ? '' : c).trim(); }).length; if (filled <= 1) return; /* a section title such as "Manufacturing" */
+    if (H.months && !g(r, H.code)) { var cells = r.map(function (c) { return String(c == null ? '' : c).trim(); }), ri = cells.findIndex(function (c) { return /^ranges?$/i.test(c); }); if (ri >= 0 && H.rg < 0) H.rg = ri; var tt = cells.filter(function (c) { return c && !/^[A-Z][-.)]?\s*$/.test(c) && !/^ranges?$/i.test(c); })[0]; if (tt && tt.length < 60) H.sec = tt.replace(/^[A-Z]\s*[-.)]\s*/, ''); return; }
     var nm = g(r, H.it), ikv = g(r, H.ik), code = g(r, H.code).replace(/^installed unit s\/?n\s*:?\s*/i, '').replace(/\s*\/\s*/g, '/'), mc = g(r, H.mc), ds = g(r, H.ds); if (!nm && !code) return;
     var un = g(r, H.un).replace(/[ᵒº]/g, '°').replace(/^m\s*bar$/i, 'mbar').replace(/^kg\s*\/\s*cm2$/i, 'kg/cm²').replace(/^in\s*h2o$/i, 'inH2O').replace(/^ml\s*\/\s*min$/i, 'mL/min'), rg = g(r, H.rg).replace(/[ᵒº]/g, '°'), tol = g(r, H.tol).replace(/[ᵒº]/g, '°'), ce = g(r, H.ce), cert = /\d/.test(ce) ? ce.replace(/^(\d{3})(\d{3}-\d{4})$/, '$1-$2') : '';
     if (ikv && /\//.test(code) && !/^(n\/?a|-+)$/i.test(ikv)) nm = ikv.charAt(0).toUpperCase() + ikv.slice(1) + (nm ? ' – ' + nm : '');
-    var rec = { name: nm || ds, code: code, man: g(r, H.ma), model: g(r, H.mo), sn: g(r, H.sn), range: rg && /\d/.test(rg) ? rg : '', pts: '', crit: tol && tol !== '-' ? tol : '', loc: [g(r, H.lo), ds && ds !== mc && ds !== nm ? ds : ''].filter(Boolean).join(' · '), prevCert: cert, unitHint: un };
+    var snx = ''; if (H.codeSn && /\//.test(code)) { var cs = code.split('/'); code = cs[0].trim(); snx = cs.slice(1).join('/').trim(); }
+    var rec = { name: nm || ds, code: code, man: g(r, H.ma), model: g(r, H.mo), sn: g(r, H.sn) || snx, range: rg && /\d/.test(rg) ? rg : '', pts: '', crit: tol && tol !== '-' ? tol : '', loc: [g(r, H.lo) || H.sec || '', ds && ds !== mc && ds !== nm ? ds : ''].filter(Boolean).join(' · '), prevCert: cert, unitHint: un };
     if (mc) { var key = 'A:' + impKey(g(r, H.lo)) + ':' + impKey(mc); if (!seenM[key]) { seenM[key] = 1; recs.push({ name: mc, code: '', isMachine: 1, mkey: key, loc: g(r, H.lo) }); } rec.mkey = key; rec.parent = mc; }
     recs.push(rec); });
   return any && recs.length ? recs : null; }
