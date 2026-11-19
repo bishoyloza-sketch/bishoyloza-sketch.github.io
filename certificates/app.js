@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v360';
+var APP_V = 'v361';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1614,6 +1614,21 @@ function impRowTable(rows) { var H = null, recs = [], seenM = {}, any = false, g
     if (mc) { var key = 'A:' + impKey(g(r, H.lo)) + ':' + impKey(mc); if (!seenM[key]) { seenM[key] = 1; recs.push({ name: mc, code: '', isMachine: 1, mkey: key, loc: g(r, H.lo) }); } rec.mkey = key; rec.parent = mc; }
     recs.push(rec); });
   return any && recs.length ? recs : null; }
+/* a request form, one instrument per file: "Instrument Name / Model / Code / S/N", a list of the items by number, then a table "Items to be Calibrated · Calibration Points · Acceptance Criteria" */
+function impForm(rows) { var lab = {}, names = {}, codes = [], mode = '', na = function (x) { return !x || /^[-\s]*n\.?\/?a\.?[-\s]*$/i.test(String(x).trim()); }, t = function (x) { return String(x == null ? '' : x).replace(/\s+/g, ' ').trim(); };
+  rows.forEach(function (r) { var c0 = t(r[0]).toLowerCase(), m = c0.match(/^instrument\s*(name|model|code|s\/?n|serial(?: no\.?)?)\s*:?$/);
+    if (m) { var v = r.slice(1).map(t).filter(Boolean)[0] || ''; lab[m[1].replace(/serial.*/, 's/n').replace('sn', 's/n')] = v; mode = ''; return; }
+    if (/^ser\.?$/.test(c0) && r.some(function (x) { return /items to be calibrated/i.test(x); })) { mode = 'names'; return; }
+    if (/items to be calibrated/i.test(c0) && r.some(function (x) { return /points|acceptance/i.test(x); })) { mode = 'codes'; return; }
+    if (mode === 'names') { var any = false; for (var k = 0; k + 1 < r.length; k += 2) { var n = parseInt(t(r[k]), 10); if (n) { any = true; if (!na(r[k + 1])) names[n] = t(r[k + 1]); } } if (!any) mode = ''; return; }
+    if (mode === 'codes') { if (na(r[0])) return; if (/calibration service|department manager/i.test(c0)) { mode = ''; return; } codes.push({ code: t(r[0]).replace(/\s+/g, ''), pts: t(r[1]), crit: t(r[2]) }); } });
+  if (!lab.code || !codes.length) return null;
+  var mc = lab.code.replace(/\s+/g, ''), nm = lab.name || mc, ks = Object.keys(names).map(Number).sort(function (a, b) { return a - b; }), fix = function (s) { return String(s || '').replace(/mm\s*(of)?\s*water|mm\s*w\.?c\.?/ig, 'mmH2O'); };
+  var base = { man: '', model: lab.model || '', sn: lab['s/n'] || '', range: '', loc: '' };
+  if (codes.length === 1 && impKey(codes[0].code) === impKey(mc)) return [Object.assign({}, base, { name: nm + (names[ks[0]] && !/^weight/i.test(names[ks[0]]) ? ' – ' + names[ks[0]] : ''), code: mc, pts: fix(codes[0].pts), crit: /according/i.test(codes[0].crit) ? '' : codes[0].crit })];
+  var recs = [Object.assign({}, base, { name: nm, code: mc, isMachine: 1 })];
+  codes.forEach(function (c, i) { recs.push({ name: names[ks[i]] || impSfx(c.code) || nm, code: c.code, parent: mc, man: '', model: '', sn: '', range: '', loc: '', pts: fix(c.pts), crit: /according/i.test(c.crit) ? '' : c.crit }); });
+  return recs; }
 /* Word: tables of word/document.xml */
 function needZip() { return window.JSZip ? Promise.resolve() : loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); }
 function impDocx(file) { return needZip().then(function () { return file.arrayBuffer(); }).then(function (b) { return JSZip.loadAsync(b); }).then(function (z) { return z.file('word/document.xml').async('string'); }).then(function (x) {
@@ -1626,18 +1641,18 @@ function impDocx(file) { return needZip().then(function () { return file.arrayBu
       if (vm === 'continue') txt = prevRow[col] != null ? prevRow[col] : txt;
       for (var k = 0; k < span; k++) row[col + k] = txt; col += span; });
     rows.push(row); prevRow = row; });
-  var pl = impRowTable(rows) || impPlan(rows); if (pl) return pl; var r = impTable(rows); return r.length ? r : impText(Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return p.textContent; }).join('\n')); }); }
+  var pl = impForm(rows) || impRowTable(rows) || impPlan(rows); if (pl) return pl; var r = impTable(rows); return r.length ? r : impText(Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return p.textContent; }).join('\n')); }); }
 function impXlsx(file) { return needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) { var all = [];
-  wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); all = all.concat(impRowTable(rows) || impPlan(rows) || impTable(rows)); }); return all; }); }
+  wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); all = all.concat(impForm(rows) || impRowTable(rows) || impPlan(rows) || impTable(rows)); }); return all; }); }
 /* ---- understanding the values ---- */
 function impNum(s) { var v = String(s).replace(/,(?=\d{3}\b)/g, '').match(/-?\d+(?:\.\d+)?/); return v ? v[0] : ''; }
-var IMP_UNIT = /(?:^|[\s()\d\/])(°\s?C|°\s?F|%\s?RH|rpm|bar|mbar|psi|kpa|pa|kg|g|gm|mm|m\/s|l\/min|lpm|µs\/cm|us\/cm|ms\/cm|ppm|ph|v|a|hz|s|min|hr|lux|db|n\.?m|%)\b/i;
-function impUnit(s) { var m = String(s || '').match(IMP_UNIT); if (!m) return ''; var u = m[1].replace(/\s/g, ''); return ({ '°c': '°C', '°f': '°F', '%rh': '%RH', rpm: 'RPM', kg: 'kg', g: 'g', gm: 'g', bar: 'bar', mbar: 'mbar', pa: 'Pa', kpa: 'kPa', psi: 'psi', mm: 'mm', 'm/s': 'm/s', 'µs/cm': 'µS/cm', 'us/cm': 'µS/cm', 'ms/cm': 'mS/cm', ph: 'pH', v: 'V', a: 'A', hz: 'Hz', s: 's', min: 'min', lux: 'lux', db: 'dB', '%': '%' })[u.toLowerCase()] || u; }
+var IMP_UNIT = /(?:^|[\s()\d\/])(mmh2o|inh2o|°\s?C|°\s?F|%\s?RH|rpm|bar|mbar|psi|kpa|pa|kg|g|gm|mm|m\/s|l\/min|lpm|µs\/cm|us\/cm|ms\/cm|ppm|ph|v|a|hz|s|min|hr|lux|db|n\.?m|%)\b/i;
+function impUnit(s) { s = String(s || '').replace(/[ºᵒ]/g, '°'); if (/rh\s*%|%\s*rh/i.test(s)) return '%RH'; var m = s.match(IMP_UNIT); if (!m) return ''; var u = m[1].replace(/\s/g, ''); return ({ '°c': '°C', '°f': '°F', '%rh': '%RH', rpm: 'RPM', kg: 'kg', g: 'g', gm: 'g', bar: 'bar', mbar: 'mbar', pa: 'Pa', kpa: 'kPa', psi: 'psi', mm: 'mm', 'm/s': 'm/s', 'µs/cm': 'µS/cm', mmh2o: 'mmH2O', inh2o: 'inH2O', 'us/cm': 'µS/cm', 'ms/cm': 'mS/cm', ph: 'pH', v: 'V', a: 'A', hz: 'Hz', s: 's', min: 'min', lux: 'lux', db: 'dB', '%': '%' })[u.toLowerCase()] || u; }
 function impRange(s) { var m = String(s || '').match(/\(?\s*(-?\d+(?:\.\d+)?)\s*(?::|to|-|–|~)\s*(-?\d+(?:\.\d+)?)\s*([^)]*)\)?/i); return m ? { a: m[1], b: m[2], u: impUnit(m[3]) || impUnit(s) } : null; }
-function impPts(s) { s = String(s || ''); if (!s || /^n\.?a\.?$/i.test(s.trim())) return null; var inP = s.match(/\(([^)]*)\)?/), body = inP ? inP[1] : s; if (/[:]|\bto\b/.test(body) && !/,/.test(body)) return null;
+function impPts(s) { s = String(s || ''); if (!s || /^n\.?a\.?$/i.test(s.trim()) || /full\s*range|\branges?\b/i.test(s)) return null; var inP = s.match(/\(([^)]*)\)?/), body = inP ? inP[1] : s; if (/[:]|\bto\b/.test(body) && !/,/.test(body)) return null;
   var nums = (body.match(/-?\d+(?:\.\d+)?/g) || []).filter(function (v, i, a) { return a.indexOf(v) === i; }); if (/^\s*\d+\s*points?/i.test(s) && nums.length && inP) nums = (inP[1].match(/-?\d+(?:\.\d+)?/g) || []);
   return nums.length >= 2 ? { pts: nums, u: impUnit(body) || impUnit(s) } : null; }
-function impLim(s, unit) { s = String(s || '').replace(/\s+/g, ' '); var m = s.match(/±\s*(\d+(?:\.\d+)?)\s*(%)?\s*(of\s*)?(f\.?\s?s\.?|full\s*(scale|range)|reading|rdg|span)?\s*([^\s,;]*)/i); if (!m) return null;
+function impLim(s, unit) { s = String(s || '').replace(/\s+/g, ' ').replace(/[ºᵒ]/g, '°'); var m = s.match(/±\s*(\d+(?:\.\d+)?)\s*(%)?\s*(of\s*)?(f\.?\s?s\.?|full\s*(scale|range)|reading|rdg|span)?\s*([^\s,;]*)/i); if (!m) return null;
   var v = m[1], pc = !!m[2], what = (m[4] || '').toLowerCase(); if (pc) return { type: /read|rdg/.test(what) ? 'rdg' : 'fs', val: v, unit: '' };
   return { type: 'abs', val: v, unit: impUnit(m[6]) || impUnit(s) || unit || '' }; }
 function impKey(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
@@ -1651,7 +1666,7 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
     var uh = String(r.unitHint || '').trim(), u = (uh && !/,/.test(uh) ? (uh === '%' ? (/\brh\b|humid/i.test(nm) ? '%RH' : '%') : impUnit(' ' + uh) || uh) : '') || (pt && pt.u) || (rg && rg.u) || impUnit((nm.match(/\(([^)]*)\)/) || [''])[0]) || '';
     var it = { ocr: r.ocr ? 1 : 0, noCode: r.noCode ? 1 : 0, code: c, description: nm.replace(/\s*\([^)]*\d[^)]*\)\s*$/, '').trim() || nm, manufacturer: r.man || '', model: r.model || '', serial: sn, unit: u, rMin: rg ? rg.a : '', rMax: rg ? rg.b : '', pts: pt ? pt.pts : null, lim: impLim(r.crit, u), crit: r.crit || '', loc: r.loc || '' };
     it.prevCert = r.prevCert || ''; if (r.loc) it.loc = r.loc;
-    if (r.isMachine) { var xk = r.mkey || impKey(c); if (!M[xk]) { M[xk] = { name: nm || c, code: c, man: '', model: '', sn: '', loc: r.loc || '', items: [] }; order.push(xk); } lastM = xk; curM = null; return; }
+    if (r.isMachine) { var xk = r.mkey || impKey(c); if (!M[xk]) { M[xk] = { name: nm || c, code: c, man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(xk); } lastM = xk; curM = null; return; }
     if (r.parent) { var rk = r.mkey || impKey(r.parent); if (!M[rk]) { M[rk] = { name: r.parent, code: r.parent, items: [] }; order.push(rk); } if (r.noCode) it.noCode = 1; addIt(M[rk].items, it, rk); return; }
     if (r.noCode && (curM || lastM)) { it.noCode = 1; return addIt(M[curM || lastM].items, it, curM || lastM); }
     if (!p && c && kids[impKey(c)]) { var mk = impKey(c); lastM = mk; if (!M[mk]) { M[mk] = { name: nm || c, code: c, man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(mk); } else if (/^[A-Z0-9\-.]+$/i.test(M[mk].name) && nm) { M[mk].name = nm; M[mk].man = M[mk].man || r.man || ''; M[mk].model = M[mk].model || r.model || ''; } curM = null; return; }
