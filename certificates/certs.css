@@ -1746,3 +1746,4 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 
 .cexp button.on{background:#13294B;color:#fff}
 .dlcity{font-style:normal;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;background:#FFF1DC;color:#B26A00;white-space:nowrap}
+.selbar3{flex-wrap:wrap}.selbar3 .sbsp{flex:1}
