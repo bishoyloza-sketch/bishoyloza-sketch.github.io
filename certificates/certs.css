@@ -1743,3 +1743,6 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .holb.on{background:#FFF1DC;border-color:#F0C36D;color:#B26A00}
 .lesb{position:sticky;bottom:0;margin-top:10px;flex-wrap:wrap}
 .hrr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+
+.cexp button.on{background:#13294B;color:#fff}
+.dlcity{font-style:normal;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;background:#FFF1DC;color:#B26A00;white-space:nowrap}
