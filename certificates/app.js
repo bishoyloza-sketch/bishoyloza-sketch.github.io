@@ -732,7 +732,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v397';
+var APP_V = 'v398';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2832,10 +2832,12 @@ function tpRowW(Ds) { if (Ds.length === 1) return tpDrawW(Ds[0]); var w = Math.f
     Ds.map(function (D) { var k = Math.min(1, (w - 200) / D.cols.reduce(function (a, b) { return a + b; }, 0)), D2 = { cols: D.cols.map(function (c) { return Math.floor(c * k); }), rowsH: D.rowsH, frame: D.frame, rows: D.rows, cap: D.cap }; return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/></w:tcPr>' + tpDrawW(D2) + '</w:tc>'; }).join('') + '</w:tr></w:tbl>'; }
 /* ---- the certificate content as blocks, shared by the screen/print view and Word ---- */
 function tpFixLaf(tp) { if (!tp || tp.t !== 'laf') return; (tp.filters || []).forEach(function (x) { if (x.v.length < 4 && !x.v.join('').trim()) { while (x.v.length < 6) { x.v.push(''); (x.v0 = x.v0 || []).push(''); } } }); if (!(tpN(tp.lim) > 0 && tpN(tp.lim) < 1)) tp.lim = '0.09'; if (!(tpN(tp.design) > 0 && tpN(tp.design) < 5)) tp.design = '0.45'; }
+/* the procedure of a test certificate: the one set in Item types, else ours by test */
+function tpSop(t) { var k = { hepa: 'HEPA Filter (DOP)', pc: 'Particle Count', ca: 'Compressed Air', laf: 'LAF Air Velocity' }[t], x = null; try { x = itLib().filter(function (y) { return y.k === k; })[0]; } catch (e) {} return (x && x.sop) || { hepa: 'SOP-HEPA-7.2.1', pc: 'SOP-PC-7.2.1', ca: 'SOP-CA-7.2.1', laf: 'SOP-AV-7.2.1' }[t] || ''; }
 function tpBlocks(p, it) { try { tpFixLaf(it.tp); } catch (e) {} var tp = it.tp, c = tpCalc(it), B = [], T = function (h, rows, w) { B.push({ k: 'tbl', h: h, rows: rows, w: w }); }, KV = function (h, rows) { B.push({ k: 'kv', h: h, rows: rows }); }, X = function (h, t) { B.push({ k: 'txt', h: h, t: t }); }, DR = function (h, Ds) { B.push({ k: 'draw', h: h, D: Ds }); };
   var cd = calShow(p, it), refs = refsUsed(p, [it]), inst = function (dflt) { var d = refs[0] || {}, i0 = tp.inst || {}, nm = d.description || i0.name || dflt; if (tp.t === 'hepa' && !/photometer/i.test(nm)) nm = dflt; return { name: nm, sn: d.serial || i0.sn || '', cert: d.certNo || i0.cert || '' }; }, S = function (ok, a, b) { return { t: tpSt(ok, a, b), st: ok }; };
   if (tp.t === 'hepa') { var I = inst('Aerosol Photometer'), cl = tp.cls || 'H14';
-    KV('HEPA Filter Integrity Test (Aerosol Photometer – Scan Method)', [['Instrument', I.name, 'Instrument S/N', I.sn], ['Calibration certificate No.', I.cert, 'Test Date', cd], ['U.U.T Code', tp.code || it.code || '', 'Filter Class', cl + (TP_HCLS[cl] != null ? ' (≤ ' + TP_HCLS[cl] + ' %)' : '')], ['Upstream Concentration', tp.up ? tp.up + ' µg/L' : '—', 'Aerosol', tp.aer || 'PAO']]);
+    KV('HEPA Filter Integrity Test (Aerosol Photometer – Scan Method)', [['Instrument', I.name, 'Instrument S/N', I.sn], ['Calibration certificate No.', I.cert, 'Test Date', cd], ['U.U.T Code', tp.code || it.code || '', 'Filter Class', cl + (TP_HCLS[cl] != null ? ' (≤ ' + TP_HCLS[cl] + ' %)' : '')], ['Upstream Concentration', tp.up ? tp.up + ' µg/L' : '—', 'Aerosol', tp.aer || 'PAO'], ['Procedure No.', tp.proc || tpSop('hepa')]]);
     var sizes = []; tp.rows.forEach(function (r) { var s = r.size || '60x60'; if (sizes.indexOf(s) < 0) sizes.push(s); });
     /* one drawing for every filter (up to 6, smaller when there are more); a long list is drawn once per size with its filter IDs */
     var nR = tp.rows.length, scF = nR > 4 ? 0.62 : nR > 2 ? 0.75 : nR > 1 ? 0.88 : 1;
@@ -2848,7 +2850,7 @@ function tpBlocks(p, it) { try { tpFixLaf(it.tp); } catch (e) {} var tp = it.tp,
     X('Attachments', '1- Digital Aerosol Photometer Calibration Certificate.');
     X('Test acceptance criteria', 'HEPA filters (' + cl + '): challenge aerosol penetration is lower or equal to ' + (TP_HCLS[cl] != null ? TP_HCLS[cl] : 0.005) + '% of the upstream concentration.' + (tp.up ? ' (The upstream value is ' + tp.up + ' µg/L)' : '')); }
   if (tp.t === 'pc') { var I2 = inst('Particle Counter'), lim = TP_ISO[tp.cls] || {}, nl = tpNL(tp.area);
-    KV('Airborne Particle Count – Cleanliness Classification (ISO 14644-1:2015)', [['Occupancy state', tp.state || 'At Rest', 'Instrument', I2.name], ['Instrument S/N', I2.sn, 'Calibration certificate No.', I2.cert], ['Location', tp.loc || it.code || '', 'Test Date', cd], ['Required Class', 'ISO Class ' + tp.cls, 'No. of locations', tp.rows.length + (tp.area ? ' (area ' + tp.area + ' m²' + (nl ? ', min. ' + nl : '') + ')' : '')]]);
+    KV('Airborne Particle Count – Cleanliness Classification (ISO 14644-1:2015)', [['Occupancy state', tp.state || 'At Rest', 'Instrument', I2.name], ['Instrument S/N', I2.sn, 'Calibration certificate No.', I2.cert], ['Location', tp.loc || it.code || '', 'Test Date', cd], ['Required Class', 'ISO Class ' + tp.cls, 'No. of locations', tp.rows.length + (tp.area ? ' (area ' + tp.area + ' m²' + (nl ? ', min. ' + nl : '') + ')' : '')], ['Procedure No.', tp.proc || tpSop('pc')]]);
     DR('Sampling Locations', [tpDrawPoints(tp.rows.length, tp.cols || 3, 'Sampling locations at work height', tp.size)]);
     var sz = tp.sizes, wC = Math.floor(7400 / sz.length);
     T('Test Results (particles/m³ ≥ size in µm)', [['Testing point No.'].concat(sz.map(function (s) { return '≥ ' + s + ' µm'; })).concat(['Status'])].concat(tp.rows.map(function (r, i) { return [r.p].concat(r.v.map(function (v) { return v === '' ? '—' : v; })).concat([S(c.rows[i].ok)]); }))
@@ -2856,12 +2858,12 @@ function tpBlocks(p, it) { try { tpFixLaf(it.tp); } catch (e) {} var tp = it.tp,
     X('Attachments', '1- Particle Count Calibration Certificate.');
     X('Test acceptance criteria', 'The ISO standard 14644-1 considers has met the required classification if;\na- The average particle concentration at each of the particle measuring locations falls below the class limit.\nb- When the total number of the locations sampled is less than 10, the calculated 95% upper confidence limit (UCL) of the particle concentration is below the class limit.'); }
   if (tp.t === 'ca') { var D0 = TP_CA[tp.k] || TP_CA.oil, sd0 = tp.std || D0.std;
-    KV('', [['Machine Description', tp.mach || it.description || '', 'Load', tp.load || ''], ['Used point description', tp.point || '', 'Used point location', tp.loc || '']]);
+    KV('', [['Machine Description', tp.mach || it.description || '', 'Load', tp.load || ''], ['Used point description', tp.point || '', 'Used point location', tp.loc || ''], ['Procedure No.', tp.proc || tpSop('ca')]]);
     B.push({ k: 'kv2', h: D0.n, rows: [['Purpose', tp.purpose || D0.purpose], ['Method', tp.method || D0.method], ['Acceptance criteria', tp.lim || D0.lim], ['Results', tp.res ? tp.res + (tpN(tp.res) != null && !/[a-z°%³]/i.test(tp.res) ? ' ' + D0.u : '') : '—'], ['Status', S(c.ok)]] });
     var sd = refs.length ? refs.map(function (d, i) { return [i + 1, d.manufacturer || '', d.description || '', d.model || '', d.serial || '', dueText(d)]; }) : [[1, sd0[0], sd0[1], sd0[2], tp.batch || tp.batch0 || '', tp.exp || tp.exp0 || '']];
     T('Measurement Standard(s) Utilized', [['Item No.', 'Manufacturer', 'Description', 'Model', 'Batch / Serial No.', 'Expiry / Cal. Due']].concat(sd), [900, 1700, 2300, 1500, 2000, 1800]);
     if (tp.note) X('Remarks', tp.note); }
-  if (tp.t === 'laf') { var f9 = (it.old && it.old.fields) || {}, fx = { 'Range': f9.range || 'N/A', 'Cal. Range': '(Around ' + tp.design + ') m/s', 'Resolution': f9.resolution || 'N/A', 'Accepted Limits': '±' + tp.lim + ' m/s', 'Procedure No.': f9.procedure || tp.proc || 'AK-OP-AV-7.2.1' };
+  if (tp.t === 'laf') { var f9 = (it.old && it.old.fields) || {}, fx = { 'Range': f9.range || 'N/A', 'Cal. Range': '(Around ' + tp.design + ') m/s', 'Resolution': f9.resolution || 'N/A', 'Accepted Limits': '±' + tp.lim + ' m/s', 'Procedure No.': f9.procedure || tp.proc || tpSop('laf') };
     KV('Data of item to be calibrated', dataRows(p, it, false).map(function (r) { var r2 = r.slice(); [0, 2].forEach(function (j) { if (fx[r2[j]] != null && (/^(Cal\. Range|Accepted Limits)$/.test(r2[j]) || !String(r2[j + 1] == null ? '' : r2[j + 1]).trim())) r2[j + 1] = fx[r2[j]]; }); return r2; }));
     DR('Measuring Points', tp.filters.length > 1 && tp.joined !== false ? [tpDrawLafUnit(tp.filters, tp.cols || 3)] : tp.filters.map(function (x, i) { return tpDrawPoints(x.v.length, tp.cols || 3, 'Filter ' + (i + 1) + (x.size ? ' (' + tpSzT(x.size) + ' cm)' : ''), x.size); }));
     var nP = Math.max.apply(null, tp.filters.map(function (x) { return x.v.length; })), wf = Math.floor(8700 / tp.filters.length);
@@ -3226,7 +3228,8 @@ function kindOf(desc, unit) { var d = String(desc || ''), u = unitKey(unit || ''
 function itKind(it) { var f = (it.old && it.old.fields) || {}; return kindOf((it.description || f.description || '') + ' ' + (f.description || ''), it.unit || it.resUnit || (rngNums(f.range || '') || {}).u || ''); }
 var KDEF = { /* the lab's own procedures (AK-OP-…) and the limits used most on our certificates */
   'Temperature': ['Sop-Temp-7.2.1', '±1 °C'], 'Pressure': ['SOP-PG-7.2.1', '±5% of F.S'], 'Differential pressure': ['DP-7.2.1', '±5% of F.S'], 'Timer': ['SOP-TI-7.2-1', ''],
-  'RPM': ['RPM-7.2.1', '±5% of Rdg.'], 'RH': ['TRH-7.2.1', '±5 %RH'], 'Weight': ['SOP-B-7.2.1', '±1% of Rdg.'], 'Single weight': ['SOP-SW-7.2.1', '±1% of Rdg.'], 'Air velocity': ['AV-7.2.1', '±3% of F.S'] };
+  'RPM': ['RPM-7.2.1', '±5% of Rdg.'], 'RH': ['TRH-7.2.1', '±5 %RH'], 'Weight': ['SOP-B-7.2.1', '±1% of Rdg.'], 'Single weight': ['SOP-SW-7.2.1', '±1% of Rdg.'], 'Air velocity': ['AV-7.2.1', '±3% of F.S'],
+  'Volume': ['SOP-MP-7.2.1', '±5% of Rdg.'], 'pH': ['SOP-PH-7.2.1', '±0.05 pH'], 'Conductivity': ['SOP-CNS-7.2.1', '±2% of Rdg.'], 'ORP': ['SOP-ORP-7.2.1', '±10 mV'], 'Flow': ['SOP-FM-7.2.1', '±5% of Rdg.'], 'Electrical': ['SOP-CLAMP-7.2.1', '±2% of Rdg.'], 'Light': ['SOP-LUX-7.2.1', '±3% of Rdg.'], 'Length': ['SOP-DIST-7.2.1', ''], 'Force': ['SOP-LC-7.2.1', '±1% of Rdg.'], 'Sound level': ['SOP-SL-7.2.1', '±1 dB'], 'Refractive index': ['SOP-RI-7.2.1', '±0.0002 RI'] };
 function sopNorm(v) { var s = String(v || '').trim(); if (!s) return ''; s = s.toUpperCase().replace(/\s+/g, '-').replace(/^SOP[\s\-_.:]*/, '');
   /* only the procedure code – SOP-TM-7.2.1; anything read after it (accepted limit…, status before calibration…) is not part of it */
   var m = s.match(/^([A-Z]{1,8}(?:-[A-Z]{1,8})?)[-_.]?(\d+(?:[.\-]\d+){1,3})/); if (m) return 'SOP-' + m[1] + '-' + m[2].replace(/-/g, '.');
@@ -3834,6 +3837,7 @@ function sqIssues(it) { var q = it.sq || {}, out = []; (q.dr || []).forEach(func
   (q.ncg || []).forEach(function (r, i) { var c = sqNum(r[1]); if (c != null && c <= 0) out.push('Non-condensable gases run ' + (i + 1) + ': Vc must be above 0'); }); return out; }
 function sqF(v, d) { return v == null || !isFinite(v) ? '—' : v.toFixed(d); }
 function sqDue(p, it) { var d = s2d(it.calDate || (p.info && p.info.cal) || ''); if (!d) return ''; d.setFullYear(d.getFullYear() + 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function sqSop(it) { var f = (it.old && it.old.fields) || {}, x = null; try { x = itLib().filter(function (y) { return y.k === 'Steam Quality'; })[0]; } catch (e) {} return sopNorm(f.procedure) || (x && x.sop) || 'SOP-SQ-7.2.1'; }
 function sqRows(p, it) { var c = sqCalc(it), cd = it.calDate || p.info.cal, due = sqDue(p, it), st = function (ok, v) { return v == null ? '—' : ok ? 'Accepted' : 'Rejected'; };
   return [['Non-condensable gases', fmtD(cd), fmtD(due), c.a.ncg == null ? '—' : sqF(c.a.ncg, 2) + ' %', '≤ ' + SQ_LIM.ncg + ' %', st(c.ok.ncg, c.a.ncg)], ['Superheat', fmtD(cd), fmtD(due), c.a.sh == null ? '—' : sqF(c.a.sh, 1) + ' °C', '≤ ' + SQ_LIM.sh + ' °C', st(c.ok.sh, c.a.sh)], ['Dryness value', fmtD(cd), fmtD(due), sqF(c.a.dr, 3), '> ' + SQ_LIM.dr, st(c.ok.dr, c.a.dr)]]; }
 function sqMach(it) { var mm = null; try { (S.projects || []).some(function (p) { if ((p.items || []).indexOf(it) < 0) return false; mm = it.machineId ? (p.machines || []).filter(function (x) { return x.id === it.machineId; })[0] || null : null; return true; }); } catch (e) {} return mm; }
@@ -3979,6 +3983,7 @@ function certBody(p, it, first) { try { normItem(p, it); } catch (e) {} var inf 
   if (tpOn(it)) { body += tpWord(p, it); return body + certSign(p, it, inf, g); }
   if (sqOn(it)) { var th = function (a2) { return a2.map(function (t) { return { t: t, b: true, shade: 'E7ECF2' }; }); };
     body += H('Unit under Test') + W.tbl([th(['No.', 'Manufacturer', 'Description', 'Model', 'S/N', 'Location', 'Code'])].concat([sqMachRow(it)]), [500, 1500, 2100, 1300, 1400, 1700, 1700], { head: true, sz: FS, h: 300 });
+    body += W.tbl([[{ t: 'Procedure No.', b: true, jc: 'left' }, { t: sqSop(it), jc: 'left', span: 3 }]], KVW, { sz: FS, h: 300 });
     body += H('Test Results (average of 3 runs)') + W.tbl([th(['Test', 'Test Date', 'Due Date', 'Result', 'Accepted Limits', 'Status'])].concat(sqRows(p, it)), [2800, 1450, 1450, 1450, 1600, 1450], { head: true, sz: FS, h: 300 });
     body += H('Calibration Standard(s) Utilized') + W.tbl([th(['No.', 'Manufacturer', 'Description', 'Model', 'Serial No.', 'Range', 'Cal. Due Date'])].concat(refsUsed(p, [it]).map(function (d, i) { return [String(i + 1), d.manufacturer || '', d.description || '', d.model || '', d.serial || '', d.range || '', dueText(d)]; })), [500, 1500, 2300, 1300, 1500, 1600, 1500], { head: true, sz: FS, h: 300 });
     body += W.p(W.r('Method: ', { b: true, sz: FS }) + W.r('EN 285:2015', { sz: FS }), { before: 80 }) + (it.sq && it.sq.note ? W.p(W.r('Comments: ', { b: true, sz: FS }) + W.r(it.sq.note, { sz: FS })) : '');
@@ -4106,7 +4111,7 @@ function printView(p, opt) { opt = opt || {}; (p.items || []).forEach(pipRefFix)
           '<p class="nt">** The recalibration date & accepted limits have been included in response to the customer\'s request. The customer has specified the calibration interval & acceptance criteria.</p><p class="nt">This Certificate and Readings refers only to the particular item under calibration.</p>';
         pages.push(ht + ftr(form, pg++, total) + '</section>'); return; }
       if (sqOn(it)) { var hdrS = hdr.replace('>Calibration Certificate<', '>Steam Quality Test<'), sc = sqCalc(it), hs = '<section class="pg" data-it="' + it.id + '">' + hdrS + top(false) +
-          '<h4>Unit under Test</h4>' + htmlTbl([['No.', 'Manufacturer', 'Description', 'Model', 'S/N', 'Location', 'Code']].concat([sqMachRow(it)]), true) +
+          '<h4>Unit under Test</h4>' + htmlTbl([['No.', 'Manufacturer', 'Description', 'Model', 'S/N', 'Location', 'Code']].concat([sqMachRow(it)]), true) + htmlTbl([[{ t: 'Procedure No.', b: 1 }, { t: sqSop(it), span: 3 }]], false, 'info') +
           '<h4>Test Results (average of 3 runs)</h4>' + htmlTbl([['Test', 'Test Date', 'Due Date', 'Result', 'Accepted Limits', 'Status']].concat(sqRows(p, it)), true).replace(/^(<table[^>]*>)(<colgroup>.*?<\/colgroup>)?/, '$1<colgroup><col style="width:27%"><col style="width:14%"><col style="width:14%"><col style="width:15%"><col style="width:16%"><col style="width:14%"></colgroup>').replace('<table', '<table style="table-layout:fixed"') +
           '<h4>Calibration Standard(s) Utilized</h4>' + htmlTbl([['No.', 'Manufacturer', 'Description', 'Model', 'Serial No.', 'Range', 'Cal. Due Date']].concat(refsUsed(p, [it]).map(function (d, i) { return [i + 1, d.manufacturer, d.description, d.model, d.serial, d.range, dueText(d)]; })), true) +
           '<p class="nt"><b>Method:</b> EN 285:2015</p>' + (it.sq && it.sq.note ? '<p class="nt"><b>Comments:</b> ' + esc(it.sq.note) + '</p>' : '') +
@@ -7405,27 +7410,28 @@ var ITLIB0 = [
   ['Load Cell', 'Load Cell', ['kg', 'g'], '0.1', 'SOP-LC-7.2.1', ['±1% of Rdg.']],
   ['Data Logger', 'Temperature Data Logger', ['°C', '%RH'], '0.1', 'SOP-TEMP-7.2.1', ['±0.5 °C', '±2 °C', '±5 %RH']],
   ['Flow Meter', 'Flow Meter', ['L/h', 'L/min', 'm³/h'], '1', 'SOP-FM-7.2.1', ['±5% of Rdg.', '±10% of Rdg.']],
-  ['Air Volume', 'Air Volume Flow', ['m³/h', 'CFM'], '1', 'SOP-AV-7.2.1', ['±5% of Rdg.']],
+  ['Air Volume', 'Air Volume Flow', ['m³/h', 'CFM'], '1', 'SOP-AVF-7.2.1', ['±5% of Rdg.']],
   /* conductivity two ways: R – the electronics with a decade resistance box (USP <645>: ±0.1 µS/cm); S – the cell with standard solutions (cell constant ±2%) */
   ['Conductivity', 'Conductivity Meter – Resistance box', ['µS/cm', 'mS/cm'], '0.01', 'SOP-CNR-7.2.1', ['±0.1 µS/cm', '±5% of Rdg.']],
   ['Conductivity – Solutions', 'Conductivity Meter – Standard solutions', ['µS/cm', 'mS/cm'], '0.1', 'SOP-CNS-7.2.1', ['±2% of Rdg.']],
   ['pH', 'pH Meter', ['pH'], '0.01', 'SOP-PH-7.2.1', ['±0.05 pH', '±0.1 pH']],
+  ['ORP (Redox)', 'ORP Meter', ['mV'], '1', 'SOP-ORP-7.2.1', ['±10 mV']],
   ['Distance / Length', 'Caliper', ['mm', 'µm', 'cm'], '0.01', 'SOP-DIST-7.2.1', ['±0.01 mm', '±0.05 mm']],
   ['Thickness / Diameter', 'Thickness Measurement', ['mm', 'µm'], '0.01', 'SOP-DIST-7.2.1', ['±0.05 mm', '±0.01 mm']],
   ['Light (Lux)', 'Lux Sensor', ['lux'], '1', 'SOP-LUX-7.2.1', ['±3% of Rdg.']],
-  ['Sound Level', 'Sound Level Meter', ['dB'], '0.1', '', ['±1 dB']],
+  ['Sound Level', 'Sound Level Meter', ['dB'], '0.1', 'SOP-SL-7.2.1', ['±1 dB']],
   ['Electrical', 'Multimeter', ['V', 'mV', 'A', 'mA', 'Hz'], '0.01', 'SOP-CLAMP-7.2.1', ['±2% of Rdg.']],
-  ['Level', 'Level Transmitter', ['%'], '0.1', '', ['±5% of F.S.']],
+  ['Level', 'Level Transmitter', ['%'], '0.1', 'SOP-LV-7.2.1', ['±5% of F.S.']],
   ['Chlorine', 'Chlorine Sensor', ['mg/L', 'ppm'], '0.01', 'SOP-CL-7.2.1', ['±0.1 mg/L']],
   ['Strokes / Count', 'Number of Strokes', ['strokes/min'], '1', 'SOP-RPM-7.2.1', ['±5% of Rdg.']],
-  ['Refractometer', 'Refractometer', ['RI'], '0.0001', '', ['±0.0002 RI']],
-  ['Steam Quality', 'Steam Quality Test', [], '', '', ['Non-condensable gases ≤ 3.5%', 'Dryness ≥ 0.95', 'Superheat ≤ 25 °C'], 'test'],
-  ['Filter Integrity', 'Filter Integrity Test', ['ml/min', 'mbar'], '', '', ['Flow ≤ the maximum flow allowed (FF / WIT)', 'Bubble point ≥ the minimum (BP)'], 'test'],
-  ['HEPA Filter (DOP)', 'HEPA Filter Integrity Test', ['%'], '', '', ['Penetration ≤ 0.01%'], 'test'],
-  ['Particle Count', 'Particle Count', ['particles/m³'], '', '', ['ISO 14644-1 class of the room'], 'test'],
-  ['Compressed Air', 'Compressed Air Quality Test', [], '', '', ['ISO 8573-1 class (particles, water, oil)'], 'test'],
-  ['LAF Air Velocity', 'Laminar Flow Air Velocity', ['m/s'], '0.01', '', ['0.36 – 0.54 m/s (0.45 ± 20%)'], 'test']];
-function itLib() { var ed = LS.get('itLibEd', {}) || {}; return ITLIB0.map(function (t) { var e = ed[t[0]] || {}; return { k: t[0], desc: e.desc != null ? e.desc : t[1], units: e.units || t[2], sop: e.sop != null ? e.sop : t[4], lims: e.lims || t[5], refs: e.refs || [], test: !!t[6], ed: !!ed[t[0]], by: e.by || '', at: e.at || 0 }; }); }
+  ['Refractometer', 'Refractometer', ['RI'], '0.0001', 'SOP-RI-7.2.1', ['±0.0002 RI']],
+  ['Steam Quality', 'Steam Quality Test', [], '', 'SOP-SQ-7.2.1', ['Non-condensable gases ≤ 3.5%', 'Dryness ≥ 0.95', 'Superheat ≤ 25 °C'], 'test'],
+  ['Filter Integrity', 'Filter Integrity Test', ['ml/min', 'mbar'], '', 'SOP-FI-7.2.1', ['Flow ≤ the maximum flow allowed (FF / WIT)', 'Bubble point ≥ the minimum (BP)'], 'test'],
+  ['HEPA Filter (DOP)', 'HEPA Filter Integrity Test', ['%'], '', 'SOP-HEPA-7.2.1', ['Penetration ≤ 0.01%'], 'test'],
+  ['Particle Count', 'Particle Count', ['particles/m³'], '', 'SOP-PC-7.2.1', ['ISO 14644-1 class of the room'], 'test'],
+  ['Compressed Air', 'Compressed Air Quality Test', [], '', 'SOP-CA-7.2.1', ['ISO 8573-1 class (particles, water, oil)'], 'test'],
+  ['LAF Air Velocity', 'Laminar Flow Air Velocity', ['m/s'], '0.01', 'SOP-AV-7.2.1', ['0.36 – 0.54 m/s (0.45 ± 20%)'], 'test']];
+function itLib() { var ed = LS.get('itLibEd', {}) || {}; return ITLIB0.map(function (t) { var e = ed[t[0]] || {}; return { k: t[0], desc: e.desc != null ? e.desc : t[1], units: e.units || t[2], sop: e.sop != null && String(e.sop).trim() ? e.sop : t[4], lims: e.lims || t[5], refs: e.refs || [], test: !!t[6], ed: !!ed[t[0]], by: e.by || '', at: e.at || 0 }; }); }
 /* the resolution belongs to each item, not to its type: only the eight first types keep the one they always filled */
 var KUNIT0 = {}; ['RPM', 'Timer', 'Temperature', 'Pressure', 'Humidity', 'Differential Pressure', 'Air Velocity', 'Weight'].forEach(function (k) { if (KUNIT[k]) KUNIT0[k] = KUNIT[k][1]; });
 function itTypeOf(it) { var d = (it.description || '') + ' ' + (((it.old || {}).fields || {}).description || ''), k = it.itype || kind8(d); if (!k && isFilterItem && isFilterItem(it)) k = 'Filter Integrity'; return itLib().filter(function (t) { return t.k === k; })[0] || null; }
