@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v362';
+var APP_V = 'v363';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1515,14 +1515,26 @@ function xlImport(p, file) { needExcel().then(function () { return file.arrayBuf
 
 /* ===== Attach file: read a customer's list (PDF / Word / Excel) → machines + items ===== */
 var IMP_ROLES = [['ref', /reference|rationale/i], ['crit', /accept|criteria|toleran|limit/i], ['pts', /point|cal(ibration)?\.?\s*range|test\s*range/i], ['sn', /^s\.?\s*n\.?$|serial|s\/n|instrument\s*s\.?\s*n/i], ['man', /manuf|make|brand|vendor/i], ['model', /model/i],
-  ['range', /range/i], ['code', /code|tag|asset|^id$|id\s*no/i], ['loc', /location|area|room|dep/i], ['name', /name|desc|instrument|equipment|item|device/i]];
+  ['range', /range/i], ['unit', /^units?$/i], ['code', /code|tag|asset|^id$|id\s*no/i], ['loc', /location|area|room|dep/i], ['name', /name|desc|instrument|equipment|item|device/i]];
 function impRole(h) { h = String(h || '').replace(/\s+/g, ' ').trim(); if (!h || h.length > 60) return ''; for (var i = 0; i < IMP_ROLES.length; i++) if (IMP_ROLES[i][1].test(h)) return IMP_ROLES[i][0]; return ''; }
 function impHeader(cells) { var r = {}, n = 0; cells.forEach(function (c, i) { var k = impRole(c); if (k && r[k] == null) { r[k] = i; n++; } }); return n >= 2 && (r.code != null || r.name != null) ? r : null; }
 /* table rows (array of cell arrays) → records */
 function impTable(rows) { var out = [], H = null;
   rows.forEach(function (cells) { var h = impHeader(cells); if (h) { H = h; return; } if (!H) return; var g = function (k) { return H[k] == null ? '' : String(cells[H[k]] == null ? '' : cells[H[k]]).replace(/\s+/g, ' ').trim(); };
-    var rec = { name: g('name'), code: g('code'), man: g('man'), model: g('model'), pts: g('pts'), crit: g('crit'), sn: g('sn'), range: g('range'), loc: g('loc') }; if (rec.code || rec.name) out.push(rec); });
+    var rec = { name: g('name'), code: g('code'), man: g('man'), model: g('model'), pts: g('pts'), crit: g('crit'), sn: g('sn'), range: g('range'), loc: g('loc') }; if (H.unit != null && g('unit')) rec.unitHint = g('unit'); if (rec.code || rec.name) out.push(rec); });
   return out; }
+/* Akhnaton's own Excel template (the same columns as XL_COLS), when it comes with other files */
+function impAkh(rows) { var hi = rows.findIndex(function (r) { var h = r.map(function (c) { return String(c || '').toLowerCase(); }).join('|'); return /range from/.test(h) && /machine code/.test(h); }); if (hi < 0) return null;
+  var h = rows[hi].map(function (c) { return String(c || '').trim().toLowerCase(); }), col = function (re) { return h.findIndex(function (x) { return re.test(x); }); };
+  var c = { mach: col(/^machine$/), mc: col(/machine code/), code: col(/^code/), desc: col(/desc/), man: col(/manuf/), model: col(/model/), sn: col(/serial/), a: col(/^range from/), b: col(/^range to/), un: col(/^unit$/), loc: col(/dep/) }, recs = [], seen = {};
+  var g = function (r, k) { return c[k] >= 0 ? String(r[c[k]] == null ? '' : r[c[k]]).replace(/\s+/g, ' ').trim() : ''; };
+  rows.slice(hi + 1).forEach(function (r) { var code = g(r, 'code'), desc = g(r, 'desc'); if (!code && !desc) return;
+    if ({ 'TH-05': 'Digital thermometer', 'AC-01-PG1': 'Pressure gauge', 'AC-01-T1': 'Chamber temperature sensor' }[code] === desc) return; /* the template's own examples */
+    var a = g(r, 'a'), b = g(r, 'b'), un = g(r, 'un'), mn = g(r, 'mach'), mc = g(r, 'mc').replace(/\s+/g, '');
+    var rec = { name: desc, code: code.replace(/\s+/g, ''), man: g(r, 'man'), model: g(r, 'model'), sn: g(r, 'sn'), range: a !== '' && b !== '' ? '(' + a + ' : ' + b + ') ' + un : '', pts: '', crit: '', loc: g(r, 'loc'), unitHint: un };
+    if (mn || mc) { var key = 'K:' + impKey(mc || mn); if (!seen[key]) { seen[key] = 1; recs.push({ name: mn || mc, code: mc, isMachine: 1, mkey: key, man: '', model: '', sn: '', range: '', loc: '' }); } rec.mkey = key; rec.parent = mc || mn; }
+    recs.push(rec); });
+  return recs.length ? recs : null; }
 /* PDF: text with positions → rows by line, cells by the header's columns */
 function impPdf(file) { return needPdf().then(function () { return file.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (pdf) {
   var pages = [], next = function (i) { if (i > pdf.numPages) return Promise.resolve(pages); return pdf.getPage(i).then(function (pg) { return pg.getTextContent(); }).then(function (tc) { pages.push(tc.items.filter(function (t) { return String(t.str).trim(); }).map(function (t) { return { s: t.str, x: t.transform[4], y: t.transform[5], w: t.width || 0 }; })); return next(i + 1); }); };
@@ -1557,7 +1569,7 @@ function impPdf(file) { return needPdf().then(function () { return file.arrayBuf
   return recs.length ? recs : impText(txt.join('\n')); }); }
 /* text only (no columns found): the codes split the records */
 var IMP_CODE = /\b([A-Z]{1,5}\d{0,3}[-.]\d{1,5}[A-Z]?(?:\s*\/\s*[A-Z]{1,5}[-.]?\s?\d{1,3})?)\b/g;
-function impText(t) { var recs = [], m, idx = []; t = String(t || '').replace(/[ \t]*\n[ \t]*/g, '   ').replace(/\u00a0/g, ' '); IMP_CODE.lastIndex = 0; while ((m = IMP_CODE.exec(t))) idx.push({ c: m[1].replace(/\s+/g, ''), i: m.index, e: m.index + m[0].length });
+function impText(t) { IMP_KIND = IMP_KIND || 'text'; var recs = [], m, idx = []; t = String(t || '').replace(/[ \t]*\n[ \t]*/g, '   ').replace(/\u00a0/g, ' '); IMP_CODE.lastIndex = 0; while ((m = IMP_CODE.exec(t))) idx.push({ c: m[1].replace(/\s+/g, ''), i: m.index, e: m.index + m[0].length });
   var hasKids = {}, anySlash = idx.some(function (o) { return /\//.test(o.c); }); idx.forEach(function (o) { var p = o.c.split('/')[1] ? o.c.split('/')[0] : ''; if (p) hasKids[impKey(p)] = 1; });
   idx = idx.filter(function (o) { return /\//.test(o.c) || !anySlash || hasKids[impKey(o.c)]; });
   var segs = function (x) { return String(x).split(/\s{2,}/).map(function (v) { return v.trim(); }).filter(Boolean); };
@@ -1642,7 +1654,7 @@ function impDocx(file) { return needZip().then(function () { return file.arrayBu
       for (var k = 0; k < span; k++) row[col + k] = txt; col += span; });
     rows.push(row); prevRow = row; });
   return impRows(rows, Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return p.textContent; }).join('\n')); }); }
-function impRows(rows, text) { var pl = impForm(rows) || impRowTable(rows) || impPlan(rows); if (pl) return pl; var r = impTable(rows); return r.length ? r : impText(text); }
+function impRows(rows, text) { var pl = impAkh(rows) || impForm(rows) || impRowTable(rows) || impPlan(rows); if (pl) return pl; var r = impTable(rows); return r.length ? r : impText(text); }
 function impDoc(file) { return file.arrayBuffer().then(function (b) { var r = docBin(b), prev = []; return impRows(r.body.filter(function (x) { return x.row; }).map(function (x) { var row = x.row.slice();
     row.forEach(function (c, i) { if (x.vm && x.vm[i] === 2 && prev[i] != null && !c) row[i] = prev[i]; else if (x.hm && x.hm[i] && i && !c) row[i] = row[i - 1]; }); prev = row; return row; }), r.body.map(function (x) { return x.p != null ? x.p : x.row.join(' '); }).join('\n')); }); }
 /* Word 97–2003 (.doc): the file is a little "disk" (compound file); its WordDocument stream holds the text, the table stream says where each piece of text sits and which paragraph marks end a table row */
@@ -1701,7 +1713,7 @@ function docBin(buf) { var u = new Uint8Array(buf), dv = new DataView(buf), r16 
   return { body: body, head: head }; }
 
 function impXlsx(file) { return needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) { var all = [];
-  wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); all = all.concat(impForm(rows) || impRowTable(rows) || impPlan(rows) || impTable(rows)); }); return all; }); }
+  wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); all = all.concat(impAkh(rows) || impForm(rows) || impRowTable(rows) || impPlan(rows) || impTable(rows)); }); return all; }); }
 /* ---- understanding the values ---- */
 function impNum(s) { var v = String(s).replace(/,(?=\d{3}\b)/g, '').match(/-?\d+(?:\.\d+)?/); return v ? v[0] : ''; }
 var IMP_UNIT = /(?:^|[\s()\d\/])(mmh2o|inh2o|°\s?C|°\s?F|%\s?RH|rpm|bar|mbar|psi|kpa|pa|kg|g|gm|mm|m\/s|l\/min|lpm|µs\/cm|us\/cm|ms\/cm|ppm|ph|v|a|hz|s|min|hr|lux|db|n\.?m|%)\b/i;
@@ -1738,7 +1750,7 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
 function impCodesFromText(t) { var out = [], seen = {}; String(t || '').split(/\n/).forEach(function (line) { line.split(/\s{2,}|\t|,|;|\|/).forEach(function (tok) { tok = tok.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').replace(/\s*([\/\-.])\s*/g, '$1');
   if (tok.length >= 3 && tok.length <= 24 && /[0-9]/.test(tok) && /[A-Za-z]/.test(tok) && !/^(page|tel|fax|mob)/i.test(tok)) { var k = impKey(tok); if (!seen[k]) { seen[k] = 1; out.push({ code: tok.toUpperCase(), name: '', man: '', model: '', pts: '', crit: '', sn: '', range: '', loc: '', ocr: 1 }); } } }); }); return out; }
 function impOcrRecs(t) { return impCodesFromText(t); }
-function impImage(file) { return shrink(file, 2200, 0.9).then(ocrText).then(function (t) { var tb = impOcrRecs(t); return tb; }); }
+function impImage(file) { IMP_KIND = 'photo'; return shrink(file, 2200, 0.9).then(ocrText).then(function (t) { var tb = impOcrRecs(t); return tb; }); }
 function impPdfOcr(pdf) { var txt = [], next = function (i) { if (!pdf || i > Math.min(pdf.numPages, 20)) return Promise.resolve(); return pdf.getPage(i).then(function (pg) { var vp = pg.getViewport({ scale: 2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
     return pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise.then(function () { return ocrText(cv.toDataURL('image/jpeg', 0.9)); }).then(function (t) { txt.push(t || ''); return next(i + 1); }); }); };
   return next(1).then(function () { var t = txt.join('\n'), tb = impOcrRecs(t); return tb; }); }
@@ -1799,21 +1811,68 @@ function oldCertSheet(p, files0) { var st = { busy: 0, files: [], rows: [], off:
           saveProjects(); closeSheet(); toast(n2 + ' items added from the old certificates'); render(); }; } }; }); };
   renderSheet(); if (files0 && files0.length) setTimeout(function () { go(files0); }, 50); }
 
+/* ---- accepted shapes of a customer's list: a picture of each, and a template to fill ---- */
+var IMP_KIND = '';
+var SHAPES = [
+  { id: 'akh', t: 'Akhnaton Excel template', s: 'The easiest one: one row per item, the machine in its own columns. Read 100%.', f: 'xlsx', best: 1,
+    head: XL_COLS, ex: [['Unit', '', '', 'TH-05', 'Digital thermometer', 'Testo', '110', '45012', -50, 150, '°C', 0, 100, 0.1, '°C', 'QC'], ['Machine item', 'Autoclave', 'AC-01', 'AC-01-PG1', 'Pressure gauge', 'Wika', '', '', 0, 4, 'bar', '', '', 0.05, 'bar', 'Production'], ['Machine item', 'Autoclave', 'AC-01', 'AC-01-T1', 'Chamber temperature sensor', 'Fedegari', '', '', 0, 150, '°C', 100, 135, 0.1, '°C', 'Production']] },
+  { id: 'list', t: 'Machines and their items in one list', s: 'PDF, Word or Excel. A machine on its own row, its items under it with codes like AC-01/T1.', f: 'xlsx',
+    head: ['Code', 'Description', 'Manufacturer', 'Model', 'Serial No.', 'Range', 'Unit', 'Acceptance criteria', 'Location'],
+    ex: [['AC-01', 'Autoclave', 'Fedegari', 'FOB3', '12345', '', '', '', 'Production'], ['AC-01/T1', 'Chamber temperature sensor', '', '', '', '0 - 150', '°C', '± 1 °C', 'Production'], ['AC-01/PG1', 'Jacket pressure gauge', 'Wika', '', '', '0 - 4', 'bar', '± 2% F.S.', 'Production'], ['TH-05', 'Digital thermometer', 'Testo', '110', '45012', '-50 - 150', '°C', '± 0.5 °C', 'QC']] },
+  { id: 'plan', t: 'Plan by machine with last year\'s certificates', s: 'Word or Excel. One row per machine: its item codes and last year\'s certificate numbers.', f: 'xlsx',
+    head: ['No.', 'Name', 'Code', 'Code', 'Certificate No.', 'Location'],
+    ex: [['1', 'Autoclave', 'AC-01', 'AC-01/T1 AC-01/PG1', '10/EP-101-2025 To 10/EP-102-2025', 'Production'], ['2', 'Digital thermometer', 'TH-05', '', '10/EP-103-2025', 'QC']] },
+  { id: 'rows', t: 'One item per row, the machine in its own column', s: 'Excel or Word. Each row is one item; the machine is written beside it.', f: 'xlsx',
+    head: ['Location', 'Machine', 'Item to be calibrated', 'Code', 'Units', 'Range', 'Calibration points', 'Tolerance', 'Certificate No.'],
+    ex: [['Production', 'Autoclave AC-01', 'Chamber temperature', 'AC-01/T1', '°C', '0 - 150', '100, 121, 134', '± 1 °C', '10/EP-101-2025'], ['Production', 'Autoclave AC-01', 'Jacket pressure', 'AC-01/PG1', 'bar', '0 - 4', '1, 2, 3', '± 2% F.S.', '10/EP-102-2025'], ['QC', '', 'Digital thermometer', 'TH-05', '°C', '-50 - 150', '0, 50, 100', '± 0.5 °C', '10/EP-103-2025']] },
+  { id: 'form', t: 'Request form, one instrument per file', s: 'Word. The instrument\'s data on top, then its items with calibration points and acceptance criteria.', f: 'docx',
+    parts: [{ rows: [['Instrument Name:', 'Dispensing booth'], ['Instrument Model:', 'DB-200'], ['Instrument Code:', 'DB-01'], ['Instrument S/N:', '2025/047']], w: [3000, 6000] },
+      { rows: [['Ser.', 'Items to be Calibrated', 'Ser.', 'Items to be Calibrated'], ['1', 'Differential pressure gauge', '2', 'Supply air temperature'], ['3', 'Supply air humidity', '4', 'N/A']], w: [900, 3600, 900, 3600] },
+      { rows: [['Items to be Calibrated', 'Calibration Points', 'Acceptance Criteria'], ['DB-01/DP.01', 'Full range (0 - 25 mm of water)', '± 5% F.S.'], ['DB-01/TS.01', '3 points', '± 2 ºC'], ['DB-01/RH.01', '3 points', '± 5 RH%']], w: [3000, 3600, 2400] }] }];
+function shapeRows(sh, blank) { if (sh.parts) return [].concat.apply([], sh.parts.map(function (pt) { return blank ? [pt.rows[0]].concat(pt.rows.slice(1).map(function (r) { return r.map(function (c, i) { return /:$/.test(r[0]) && i === 0 ? c : /^ser\.?$/i.test(pt.rows[0][0]) && i % 2 === 0 ? c : ''; }); })) : pt.rows; })); return [sh.head].concat(blank ? [] : sh.ex); }
+function shapePic(sh) { var tb = function (rows, kv) { return '<table class="shpt' + (kv ? ' kv' : '') + '">' + rows.map(function (r, i) { var h = !kv && i === 0; return '<tr>' + r.map(function (c, k) { return h || (kv && k === 0) ? '<th>' + esc(String(c)) + '</th>' : '<td>' + esc(String(c)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>'; };
+  return '<div class="shpw">' + (sh.parts ? sh.parts.map(function (pt, i) { return tb(i === 0 ? pt.rows : pt.rows, i === 0); }).join('') : tb([sh.head].concat(sh.ex))) + '</div>'; }
+function shapeDownload(sh, p) { if (sh.id === 'akh') return xlTemplate(p || { depts: [] });
+  if (sh.f === 'docx') { var body = W.p(W.r('Calibration / Recalibration Request', { b: 1, sz: 28 }), { after: 160 }) + sh.parts.map(function (pt, i) { var rows = shapeRows({ parts: [pt] }, true); return W.tbl(rows.map(function (r, k) { return r.map(function (c, j) { return { t: c, b: (i === 0 && j === 0) || (i > 0 && k === 0), shade: i > 0 && k === 0 ? 'DCE6F2' : '', jc: i === 0 ? 'left' : 'center' }; }); }), pt.w, { head: i > 0 }) + W.p('', { after: 160 }); }).join('');
+    return saveBlob(new Blob([W.doc(body, {})], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), 'Template - ' + sh.t + '.docx'); }
+  needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Items', { views: [{ state: 'frozen', ySplit: 1 }] });
+    ws.addRow(sh.head).eachCell(function (c) { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Arial', size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF13294B' } }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+    sh.head.forEach(function (h, i) { ws.getColumn(i + 1).width = Math.max(12, Math.min(34, String(h).length + 6, Math.max.apply(null, sh.ex.map(function (r) { return String(r[i] || '').length + 4; })))); });
+    return wb.xlsx.writeBuffer(); }).then(function (buf) { dlBlob(buf, 'Template - ' + sh.t.replace(/'/g, '') + '.xlsx'); }).catch(function (e) { toast(e.message, true); }); }
+function shapesSheet(p, back) { var open = 'akh';
+  var draw = function () { openSheet(function () { return { wide: 1, title: 'Accepted shapes',
+    body: '<div class="note">The app reads a customer\'s list when it looks like one of these. Tap a shape to see it. If a file looks different, ask for it in one of these shapes, or copy it into a template.</div>' +
+      SHAPES.map(function (sh, i) { var on = open === sh.id; return '<div class="shp' + (on ? ' on' : '') + (sh.best ? ' best' : '') + '"><button class="shph" data-shp="' + sh.id + '"><span class="shpn">' + (sh.best ? '★' : i) + '</span><span class="shpx"><b>' + esc(sh.best ? sh.t : 'Shape ' + i + ' · ' + sh.t) + '</b><small>' + esc(sh.s) + '</small></span>' + (sh.best ? '<span class="shpb">Easiest</span>' : '') + '<span class="shpa">' + (on ? '▴' : '▾') + '</span></button>' +
+        (on ? '<div class="shpbody"><div class="shpl">How it looks (example)</div>' + shapePic(sh) + '<div class="shpf"><button class="btn sm" data-shdl="' + sh.id + '">⤓ Download the template (' + (sh.f === 'docx' ? 'Word' : 'Excel') + ')</button><small>An empty copy, with the same columns – fill one row per item.</small></div></div>' : '') + '</div>'; }).join(''),
+    foot: back ? '<button class="btn ghost" id="shBk">‹ Back</button>' : '<button class="btn ghost" id="shBk">Close</button>',
+    mount: function () { $$('[data-shp]').forEach(function (b) { b.onclick = function () { open = open === b.dataset.shp ? '' : b.dataset.shp; draw(); }; });
+      $$('[data-shdl]').forEach(function (b) { b.onclick = function () { shapeDownload(SHAPES.filter(function (s) { return s.id === b.dataset.shdl; })[0], p); }; });
+      $('#shBk').onclick = function () { if (back) back(); else closeSheet(); }; } }; }); };
+  draw(); }
+/* does what was read look like a list the app knows? */
+function impOdd(recs, kind) { if (kind === 'photo') return []; if (!recs || !recs.length) return ['nothing could be read from it'];
+  var R = impBuild(recs), why = [], its = [].concat.apply([], R.machines.map(function (m) { return m.items; })).concat(R.units);
+  if (kind === 'text') why.push('no table with a Code column – the codes were picked out of the text');
+  var em = R.machines.filter(function (m) { return !m.items.length; }).length; if (em) why.push(em + ' machine' + (em === 1 ? ' has' : 's have') + ' no items under ' + (em === 1 ? 'it' : 'them'));
+  var nc = its.filter(function (x) { return !x.code && !x.prevCert; }).length; if (nc >= 3 && nc > its.length * 0.3) why.push(nc + ' of ' + its.length + ' items have no code');
+  if (!its.length) why.push('no items were found');
+  return why; }
 /* the sheet: pick a file → see the machines and items found → add them */
 function attachSheet(p, files0) { var st = { busy: 0, res: null, err: '', file: null, off: {} };
   var goMany = function (fs) { fs = Array.prototype.slice.call(fs || []); if (!fs.length) return; if (fs.length === 1) return go(fs[0]); st.file = { name: fs.length + ' files' }; st.busy = 1; st.err = ''; st.res = null; renderSheet();
-    var all = [], bad = []; fs.reduce(function (pr, f) { return pr.then(function () { return impRead(f).then(function (r) { all = all.concat(r || []); }).catch(function (e) { bad.push(f.name + ': ' + ((e && e.message) || e)); }); }); }, Promise.resolve())
+    var all = [], bad = []; st.odd = []; st.oddOk = 0; fs.reduce(function (pr, f) { return pr.then(function () { IMP_KIND = ''; return impRead(f).then(function (r) { var w = impOdd(r || [], IMP_KIND); if (w.length) st.odd.push({ name: f.name, why: w }); all = all.concat(r || []); }).catch(function (e) { bad.push(f.name + ': ' + ((e && e.message) || e)); }); }); }, Promise.resolve())
       .then(function () { st.busy = 0; st.res = impBuild(all); if (bad.length) st.err = bad.join(' · '); else if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in these files.'; renderSheet(); }); };
-  var go = function (f) { st.file = f; st.busy = 1; st.err = ''; st.res = null; renderSheet();
+  var go = function (f) { st.file = f; st.busy = 1; st.err = ''; st.res = null; st.odd = []; st.oddOk = 0; IMP_KIND = ''; renderSheet();
     var n = String(f.name || '').toLowerCase(), job = /\.xlsx$/.test(n) ? needExcel().then(function () { return f.arrayBuffer(); }).then(function (b) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(b).then(function () { return wb; }); }).then(function (wb) { var ws = wb.getWorksheet('Items') || wb.worksheets[0], hd = ws.getRow(1).values.map(function (v) { return cellStr(v).trim().toLowerCase(); }).join('|'); return /range from/.test(hd) && /machine/.test(hd) ? 'tpl' : impXlsx(f); }) : impRead(f);
-    job.then(function (r) { if (r === 'tpl') { closeSheet(); excelSheet(p); return setTimeout(function () { xlImport(p, f); }, 300); } st.busy = 0; st.res = impBuild(r || []); if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in this file. Is it a list of instruments with a Code column?'; renderSheet(); })
-      .catch(function (e) { st.busy = 0; st.err = (e && e.message) || String(e); renderSheet(); }); };
+    job.then(function (r) { if (r === 'tpl') { closeSheet(); excelSheet(p); return setTimeout(function () { xlImport(p, f); }, 300); } st.busy = 0; var w = impOdd(r || [], IMP_KIND); if (w.length) st.odd = [{ name: f.name, why: w }]; st.res = impBuild(r || []); if (!st.res.machines.length && !st.res.units.length) st.err = 'No codes found in this file. Is it a list of instruments with a Code column?'; renderSheet(); })
+      .catch(function (e) { st.busy = 0; st.err = (e && e.message) || String(e); st.odd = [{ name: f.name, why: [st.err] }]; st.err = ''; renderSheet(); }); };
   var have = {}; p.items.forEach(function (i) { if (i.code) have[impKey(i.code)] = 1; });
   var line = function (it, mi, ii) { var k = mi + ':' + ii, dup = it.code && have[impKey(it.code)], meta = [it.manufacturer, it.model, it.serial ? 'S/N ' + it.serial : '', it.prevCert ? 'last year: ' + it.prevCert : '', it.loc || ''].filter(Boolean).join(' · '), req = [it.rMin !== '' && it.rMax !== '' ? '(' + it.rMin + ' : ' + it.rMax + ') ' + (it.unit || '') : '', it.pts ? it.pts.join(' · ') + ' ' + (it.unit || '') : '', it.crit].filter(Boolean).join('  |  ');
     return '<label class="imi' + (dup ? ' dup' : '') + '"><input type="checkbox" data-imk="' + k + '"' + (dup || st.off[k] ? '' : ' checked') + (dup ? ' disabled' : '') + '>' + (it.ocr || it.noCode ? '<input class="imcin" data-imc="' + k + '" value="' + esc(it.code || '') + '" placeholder="no code" title="' + (it.noCode ? 'The file has no code for this one – write it if you know it' : 'Fix the code if the photo was misread') + '">' : '<span class="imc">' + esc(it.code || '—') + '</span>') + '<span class="imd"><b>' + esc(it.description || (it.ocr ? 'last year\'s certificate is searched by this code' : '')) + '</b>' + (meta ? '<small>' + esc(meta) + '</small>' : '') + (req ? '<small class="imr">' + esc(req) + '</small>' : '') + '</span>' + (dup ? '<em>already in the job</em>' : it.ocr ? '<em class="ocr">from the photo – check it</em>' : it.noCode ? '<em class="ocr">' + (it.prevCert ? 'no code – filled from last year\'s certificate' : 'no code in the file – write it') + '</em>' : '') + '</label>'; };
   var count = function () { var n = 0; if (!st.res) return 0; st.res.machines.forEach(function (m, mi) { m.items.forEach(function (it, ii) { if (!(it.code && have[impKey(it.code)]) && !st.off[mi + ':' + ii]) n++; }); }); st.res.units.forEach(function (it, ii) { if (!(it.code && have[impKey(it.code)]) && !st.off['u:' + ii]) n++; }); return n; };
   var renderSheet = function () { openSheet(function () { var R = st.res, n = count();
-    var body = '<div class="imdrop" id="imDrop"><div class="imic">📎</div><b>' + (st.file ? esc(st.file.name) : 'Choose the customer\'s list') + '</b><small>PDF · Word · Excel · or a photo of handwritten codes – one file or several. Drag them here, or choose them. Codes from a photo are searched in last year\'s certificates of the company.</small><button class="btn" id="imPick">' + (st.file ? 'Choose other files' : 'Choose files') + '</button></div>' +
+    var body = '<div class="imdrop" id="imDrop"><div class="imic">📎</div><b>' + (st.file ? esc(st.file.name) : 'Choose the customer\'s list') + '</b><small>PDF · Word · Excel · or a photo of handwritten codes – one file or several. Drag them here, or choose them. Codes from a photo are searched in last year\'s certificates of the company.</small><button class="btn" id="imPick">' + (st.file ? 'Choose other files' : 'Choose files') + '</button><button class="btn ghost sm" id="imShp2">Accepted shapes and templates</button></div>' +
+      (st.odd && st.odd.length && !st.oddOk ? '<div class="imodd"><div class="imoh">⚠ ' + (st.odd.length === 1 ? 'This file isn\'t' : st.odd.length + ' files aren\'t') + ' in one of the shapes the app knows</div>' + st.odd.map(function (o) { return '<div class="imow"><b>' + esc(o.name) + '</b>: ' + esc(o.why.join(' · ')) + '</div>'; }).join('') + '<div class="imob"><button class="btn sm" id="imShp">See the accepted shapes</button><button class="btn ghost sm" id="imTpl">⤓ Download the Excel template</button>' + (st.res && (st.res.machines.length || st.res.units.length) ? '<button class="btn ghost sm" id="imOk">Continue anyway – I\'ll check it</button>' : '') + '</div></div>' : '') +
       (st.busy ? '<div class="note"><span class="spin dark" style="width:14px;height:14px;border-width:2px"></span> Reading ' + esc(st.file.name) + '…</div>' : '') + (st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : '') +
       (R ? '<div class="imsum"><b>' + R.machines.length + '</b> machine' + (R.machines.length === 1 ? '' : 's') + ' · <b>' + (R.machines.reduce(function (a, m) { return a + m.items.length; }, 0) + R.units.length) + '</b> items found' + (R.units.length ? ' · <a href="#imU" class="imul">' + R.units.length + ' without a machine</a>' : '') + (function () { var nc = R.machines.reduce(function (a, m) { return a + m.items.filter(function (x) { return x.noCode; }).length; }, 0) + R.units.filter(function (x) { return x.noCode; }).length; return nc ? ' · <span class="imnc">' + nc + ' without a code</span>' : ''; })() + '</div>' +
         (R.units.length ? '<div class="imm imun" id="imU"><div class="imh"><span class="imc">—</span><b>Without a machine</b><small>codes in the file that are not under any machine – each one is a certificate of its own</small><button class="btn ghost sm" data-imall="u">' + R.units.length + ' item' + (R.units.length === 1 ? '' : 's') + '</button></div>' + R.units.map(function (it, ii) { return line(it, 'u', ii); }).join('') + '</div>' : '') +
@@ -1822,7 +1881,8 @@ function attachSheet(p, files0) { var st = { busy: 0, res: null, err: '', file: 
     return { wide: 1, title: 'Attach files', body: body, foot: '<button class="btn ghost" id="imX">Cancel</button>' + (R ? '<button class="btn" id="imGo"' + (n ? '' : ' disabled') + '>Add ' + n + ' item' + (n === 1 ? '' : 's') + '</button>' : ''),
       mount: function () { $('#imPick').onclick = function () { pickFiles('.pdf,.doc,.docx,.xlsx,image/*,application/msword,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', true).then(goMany); };
         var dz = $('#imDrop'); dz.ondragover = function (e) { e.preventDefault(); dz.classList.add('on'); }; dz.ondragleave = function () { dz.classList.remove('on'); }; dz.ondrop = function (e) { e.preventDefault(); dz.classList.remove('on'); goMany(e.dataTransfer.files); };
-        $('#imX').onclick = closeSheet;
+        $('#imX').onclick = closeSheet; $('#imShp2').onclick = function () { shapesSheet(p, renderSheet); };
+        if ($('#imShp')) { $('#imShp').onclick = function () { shapesSheet(p, renderSheet); }; $('#imTpl').onclick = function () { xlTemplate(p); }; if ($('#imOk')) $('#imOk').onclick = function () { st.oddOk = 1; renderSheet(); }; }
         $$('[data-imc]').forEach(function (e) { e.onclick = function (ev) { ev.preventDefault(); }; e.oninput = function () { var sp = e.dataset.imc.split(':'), L = sp[0] === 'u' ? st.res.units : st.res.machines[+sp[0]].items; L[+sp[1]].code = e.value.trim(); }; });
         $$('[data-imk]').forEach(function (c) { c.onchange = function () { if (c.checked) delete st.off[c.dataset.imk]; else st.off[c.dataset.imk] = 1; var b = $('#imGo'), k = count(); if (b) { b.textContent = 'Add ' + k + ' item' + (k === 1 ? '' : 's'); b.disabled = !k; } }; });
         $$('[data-imall]').forEach(function (b) { b.onclick = function () { var mi = b.dataset.imall, ks = $$('[data-imk^="' + mi + ':"]').filter(function (c) { return !c.disabled; }), on = ks.some(function (c) { return !c.checked; }); ks.forEach(function (c) { c.checked = on; if (on) delete st.off[c.dataset.imk]; else st.off[c.dataset.imk] = 1; }); var k = count(), g = $('#imGo'); if (g) { g.textContent = 'Add ' + k + ' item' + (k === 1 ? '' : 's'); g.disabled = !k; } }; });

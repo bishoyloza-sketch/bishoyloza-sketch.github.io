@@ -1748,3 +1748,15 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .dlcity{font-style:normal;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;background:#FFF1DC;color:#B26A00;white-space:nowrap}
 .selbar3{flex-wrap:wrap}.selbar3 .sbsp{flex:1}
 .imun{border-color:#F0C36D!important}.imun .imh{background:#FFF8EC!important}.imul{color:#B26A00;font-weight:700;text-decoration:none}.imnc{color:#B26A00;font-weight:700}
+.imdrop #imShp2{margin-top:2px}
+.imodd{border:1px solid #F0C36D;background:#FFF8E8;border-radius:12px;padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:6px}
+.imodd .imoh{font-weight:700;color:#7A4B00;font-size:14px}.imodd .imow{font-size:13px;color:#5B4A2A}.imodd .imob{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.shp{border:1px solid #DDE4EE;border-radius:12px;margin:8px 0;background:#fff;overflow:hidden}.shp.best{border-color:#185FA5}.shp.on{box-shadow:0 0 0 2px #EEF5FC}
+.shph{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;background:none;border:0;text-align:left;cursor:pointer;font:inherit}
+.shpn{width:28px;height:28px;border-radius:50%;background:#EEF2F7;color:#13294B;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}.shp.best .shpn{background:#E6F1FB;color:#185FA5}
+.shpx{flex:1;display:flex;flex-direction:column;gap:2px}.shpx b{color:#13294B;font-size:14px}.shpx small{color:#5B6B80;font-size:12px}
+.shpb{background:#E6F1FB;color:#0C447C;font-size:11px;padding:2px 8px;border-radius:8px;font-weight:600}.shpa{color:#8A97A8}
+.shpbody{padding:0 14px 14px}.shpl{font-size:11px;color:#8A97A8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.shpw{overflow-x:auto;display:flex;flex-direction:column;gap:8px}
+.shpt{border-collapse:collapse;font-size:12px;min-width:100%}.shpt th,.shpt td{border:1px solid #C9D5E5;padding:4px 8px;white-space:nowrap;text-align:left}.shpt th{background:#13294B;color:#fff;font-weight:600}.shpt.kv th{background:#EEF2F7;color:#13294B;width:160px}.shpt td{color:#3A4A5E}
+.shpf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}.shpf small{color:#5B6B80;font-size:12px}
