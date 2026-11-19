@@ -729,7 +729,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v361';
+var APP_V = 'v362';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1641,7 +1641,65 @@ function impDocx(file) { return needZip().then(function () { return file.arrayBu
       if (vm === 'continue') txt = prevRow[col] != null ? prevRow[col] : txt;
       for (var k = 0; k < span; k++) row[col + k] = txt; col += span; });
     rows.push(row); prevRow = row; });
-  var pl = impForm(rows) || impRowTable(rows) || impPlan(rows); if (pl) return pl; var r = impTable(rows); return r.length ? r : impText(Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return p.textContent; }).join('\n')); }); }
+  return impRows(rows, Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return p.textContent; }).join('\n')); }); }
+function impRows(rows, text) { var pl = impForm(rows) || impRowTable(rows) || impPlan(rows); if (pl) return pl; var r = impTable(rows); return r.length ? r : impText(text); }
+function impDoc(file) { return file.arrayBuffer().then(function (b) { var r = docBin(b), prev = []; return impRows(r.body.filter(function (x) { return x.row; }).map(function (x) { var row = x.row.slice();
+    row.forEach(function (c, i) { if (x.vm && x.vm[i] === 2 && prev[i] != null && !c) row[i] = prev[i]; else if (x.hm && x.hm[i] && i && !c) row[i] = row[i - 1]; }); prev = row; return row; }), r.body.map(function (x) { return x.p != null ? x.p : x.row.join(' '); }).join('\n')); }); }
+/* Word 97–2003 (.doc): the file is a little "disk" (compound file); its WordDocument stream holds the text, the table stream says where each piece of text sits and which paragraph marks end a table row */
+function docBin(buf) { var u = new Uint8Array(buf), dv = new DataView(buf), r16 = function (o) { return dv.getUint16(o, true); }, r32 = function (o) { return dv.getUint32(o, true); };
+  if (r32(0) !== 0xE011CFD0) throw new Error('not a Word 97–2003 file');
+  var ss = 1 << r16(30), mss = 1 << r16(32), sec = function (n) { return 512 + n * ss; }, fat = [], difat = [];
+  for (var i = 0; i < 109; i++) { var v = r32(76 + i * 4); if (v < 0xFFFFFFFA) difat.push(v); }
+  for (var dn = r32(68), g = 0; dn < 0xFFFFFFFA && g < 1e5; g++) { for (var k = 0; k < ss / 4 - 1; k++) { var w = r32(sec(dn) + k * 4); if (w < 0xFFFFFFFA) difat.push(w); } dn = r32(sec(dn) + ss - 4); }
+  difat.forEach(function (s) { for (var k = 0; k < ss / 4; k++) fat.push(r32(sec(s) + k * 4)); });
+  var chain = function (s, tab) { var o = []; for (var g = 0; s < 0xFFFFFFFA && g < 2e6; g++) { o.push(s); s = tab[s]; } return o; };
+  var read = function (s, size) { var out = new Uint8Array(size), p = 0; chain(s, fat).forEach(function (n) { if (p >= size) return; var b = sec(n), m = Math.min(ss, size - p); if (b + m <= u.length) out.set(u.subarray(b, b + m), p); p += m; }); return out; };
+  var dirB = read(r32(48), chain(r32(48), fat).length * ss), dd = new DataView(dirB.buffer), ents = [];
+  for (var o = 0; o + 128 <= dirB.length; o += 128) { var nl = dd.getUint16(o + 64, true), nm = ''; for (var c = 0; c < nl / 2 - 1; c++) nm += String.fromCharCode(dd.getUint16(o + c * 2, true)); ents.push({ name: nm, type: dirB[o + 66], start: dd.getUint32(o + 116, true), size: dd.getUint32(o + 120, true) }); }
+  var root = ents[0], mfat = [], mini = null, cut = r32(56);
+  if (r32(60) < 0xFFFFFFFA) { var mb = read(r32(60), chain(r32(60), fat).length * ss), mv = new DataView(mb.buffer); for (var q = 0; q < mb.length / 4; q++) mfat.push(mv.getUint32(q * 4, true)); }
+  var stream = function (name) { var e = ents.filter(function (x) { return x.name === name && x.type === 2; })[0]; if (!e) return null; if (e.size >= cut) return read(e.start, e.size);
+    if (!mini) mini = read(root.start, root.size); var out = new Uint8Array(e.size), p = 0; chain(e.start, mfat).forEach(function (n) { if (p >= e.size) return; var m = Math.min(mss, e.size - p); out.set(mini.subarray(n * mss, n * mss + m), p); p += m; }); return out; };
+  var wd = stream('WordDocument'); if (!wd) throw new Error('no Word text in this file'); var wv = new DataView(wd.buffer);
+  var flags = wv.getUint16(10, true); if (flags & 0x0100) throw new Error('this Word file is password-protected');
+  var tb = stream(flags & 0x0200 ? '1Table' : '0Table'), tv = new DataView(tb.buffer);
+  var csw = wv.getUint16(32, true), lw = 34 + csw * 2, cslw = wv.getUint16(lw, true), rgLw = lw + 2, fcl = rgLw + cslw * 4 + 2;
+  var ccp = function (i) { return wv.getInt32(rgLw + i * 4, true); }, ccpText = ccp(3), ccpFtn = ccp(4), ccpHdd = ccp(5), fl = function (i) { return [wv.getUint32(fcl + i * 8, true), wv.getUint32(fcl + i * 8 + 4, true)]; };
+  /* the pieces of text */
+  var clx = fl(33), p0 = clx[0], pend = clx[0] + clx[1]; while (p0 < pend && tb[p0] === 1) p0 += 3 + tv.getUint16(p0 + 1, true);
+  if (tb[p0] !== 2) throw new Error('could not find the text in this Word file');
+  var lcb = tv.getUint32(p0 + 1, true), n = (lcb - 4) / 12, base = p0 + 5, pcs = [];
+  for (var j = 0; j < n; j++) { var fv = tv.getUint32(base + (n + 1) * 4 + j * 8 + 2, true), comp = !!(fv & 0x40000000); pcs.push({ cp: tv.getUint32(base + j * 4, true), cp2: tv.getUint32(base + (j + 1) * 4, true), fc: comp ? (fv & 0x3FFFFFFF) / 2 : fv, comp: comp }); }
+  var dec = new TextDecoder('windows-1252'), chars = [];
+  pcs.forEach(function (pc) { var len = pc.cp2 - pc.cp; for (var x = 0; x < len; x++) { var fc = pc.comp ? pc.fc + x : pc.fc + x * 2, ch = pc.comp ? dec.decode(wd.subarray(fc, fc + 1)) : String.fromCharCode(wv.getUint16(fc, true)); chars.push([ch, fc, pc.comp ? 1 : 2]); } });
+  /* paragraph marks that end a table row (sprmPFTtp / sprmPFInnerTtp) */
+  var data = stream('Data'), dav = data && new DataView(data.buffer);
+  /* a paragraph's properties are a list of sprms; a row end carries sprmPFTtp (0x2417) or sprmPFInnerTtp (0x244C); long lists sit in the Data stream (sprmPHugePapx 0x6646) */
+  /* the row end also says which cells are merged with the one above (vm 2) or to their left (hm) */
+  function scan(by, vw, s, end, o) { o = o || {}; for (var g = 0; s + 2 <= end && g < 500; g++) { var sp = vw.getUint16(s, true), spra = sp >> 13, ol = [1, 1, 2, 4, 2, 2, 0, 3][spra]; if (spra === 6) ol = sp === 0xD608 ? vw.getUint16(s + 2, true) + 1 : by[s + 2] + 1;
+      if ((sp === 0x2417 || sp === 0x244C) && by[s + 2]) o.ttp = 1;
+      if (sp === 0xD608) { var itc = by[s + 4], t0 = s + 5 + (itc + 1) * 2; o.vm = []; o.hm = []; for (var i = 0; i < itc && t0 + i * 20 + 2 <= end; i++) { var gf = vw.getUint16(t0 + i * 20, true); o.vm[i] = gf & 0x40 ? 1 : gf & 0x20 ? 2 : 0; o.hm[i] = (gf & 3) === 2 ? 1 : 0; } }
+      if (sp === 0xD62B && o.vm) { var ic = by[s + 3], f = by[s + 4]; o.vm[ic] = f === 1 ? 2 : f === 3 ? 1 : 0; }
+      if (sp === 0x6646 && data) { var off = vw.getUint32(s + 2, true); if (off + 2 <= data.length) scan(data, dav, off + 2, Math.min(data.length, off + 2 + dav.getUint16(off, true)), o); }
+      s += 2 + ol; } return o; }
+  var ttp = [], bp = fl(13), nb = (bp[1] - 4) / 8;
+  for (var b2 = 0; b2 < nb; b2++) { var pn = tv.getUint32(bp[0] + (nb + 1) * 4 + b2 * 4, true) & 0x3FFFFF, pg = pn * 512; if (pg + 512 > wd.length) continue; var crun = wd[pg + 511];
+    for (var r = 0; r < crun; r++) { var f1 = wv.getUint32(pg + r * 4, true), f2 = wv.getUint32(pg + (r + 1) * 4, true), bo = wd[pg + (crun + 1) * 4 + r * 13] * 2; if (!bo) continue; var cb = wd[pg + bo], st = pg + bo + 1, sz; if (!cb) { sz = wd[st] * 2; st++; } else sz = cb * 2 - 1;
+      var inf = scan(wd, wv, st + 2, st + sz); if (inf.ttp) ttp.push([f1, f2, inf]); } }
+  var isTtp = function (fc) { for (var z = 0; z < ttp.length; z++) if (fc >= ttp[z][0] && fc < ttp[z][1]) return ttp[z][2]; return null; };
+  /* split body text into paragraphs and rows: a paragraph mark outside a row closes a paragraph */
+  var body = [], cur = '', cells = [], fld = [], inCell = false;
+  var flush = function () { var t = cur.replace(/[ \t]+/g, ' ').trim(); if (t) body.push({ p: t }); cur = ''; };
+  for (var x = 0; x < ccpText && x < chars.length; x++) { var ch = chars[x][0], cc = ch.charCodeAt(0);
+    if (cc === 0x13) { fld.push(1); continue; } if (cc === 0x14) { if (fld.length) fld[fld.length - 1] = 2; continue; } if (cc === 0x15) { fld.pop(); continue; } if (fld.length && fld[fld.length - 1] === 1) continue;
+    if (cc === 7) { var tt = isTtp(chars[x][1]); if (tt) { body.push({ row: cells, vm: tt.vm, hm: tt.hm }); cells = []; cur = ''; } else { cells.push(cur.replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim()); cur = ''; } continue; }
+    if (cc === 13 || cc === 12) { if (cells.length || inTbl(x)) cur += '\n'; else flush(); continue; }
+    if (cc === 11) { cur += '\n'; continue; } if (cc === 0x1E) { cur += '-'; continue; } if (cc === 9 || cc === 0xA0) { cur += ' '; continue; } if (cc < 32 || cc === 0x1F) continue; cur += ch; }
+  flush();
+  function inTbl(x) { for (var y = x + 1; y < ccpText && y < chars.length; y++) { var c2 = chars[y][0].charCodeAt(0); if (c2 === 7) return true; if (c2 === 13 || c2 === 12) return false; } return false; }
+  var hs = ccpText + ccpFtn, head = []; if (ccpHdd > 0) chars.slice(hs, hs + ccpHdd).map(function (c) { return c[0]; }).join('').replace(/\x13[^\x13\x14\x15]*\x14/g, '').replace(/\x13[^\x13\x14\x15]*\x15/g, '').replace(/[\x14\x15]/g, '').split(/[\r\x07\x0c]/).forEach(function (l) { l = l.replace(/[\x00-\x1f]/g, ' ').replace(/\s+/g, ' ').trim(); if (l && head.indexOf(l) < 0) head.push(l); });
+  return { body: body, head: head }; }
+
 function impXlsx(file) { return needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) { var all = [];
   wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); all = all.concat(impForm(rows) || impRowTable(rows) || impPlan(rows) || impTable(rows)); }); return all; }); }
 /* ---- understanding the values ---- */
@@ -1684,7 +1742,7 @@ function impImage(file) { return shrink(file, 2200, 0.9).then(ocrText).then(func
 function impPdfOcr(pdf) { var txt = [], next = function (i) { if (!pdf || i > Math.min(pdf.numPages, 20)) return Promise.resolve(); return pdf.getPage(i).then(function (pg) { var vp = pg.getViewport({ scale: 2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
     return pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise.then(function () { return ocrText(cv.toDataURL('image/jpeg', 0.9)); }).then(function (t) { txt.push(t || ''); return next(i + 1); }); }); };
   return next(1).then(function () { var t = txt.join('\n'), tb = impOcrRecs(t); return tb; }); }
-function impRead(file) { var n = String(file.name || '').toLowerCase(); if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|gif)$/.test(n)) return impImage(file); return /\.pdf$/.test(n) ? impPdf(file) : /\.docx$/.test(n) ? impDocx(file) : /\.xlsx$/.test(n) ? impXlsx(file) : Promise.reject(new Error('Choose a PDF, Word (.docx), Excel (.xlsx) file or a photo')); }
+function impRead(file) { var n = String(file.name || '').toLowerCase(); if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|gif)$/.test(n)) return impImage(file); return /\.pdf$/.test(n) ? impPdf(file) : /\.docx$/.test(n) ? impDocx(file) : /\.doc$/.test(n) ? impDoc(file) : /\.xlsx$/.test(n) ? impXlsx(file) : Promise.reject(new Error('Choose a PDF, Word (.doc or .docx), Excel (.xlsx) file or a photo')); }
 /* ===== Old certificates from this computer (Word or PDF): every "Data of item" becomes an item with last year's data, ready to work on ===== */
 function localPdfPages(file) { return needPdf().then(function () { return file.arrayBuffer(); }).then(function (buf) { return pdfjsLib.getDocument({ data: buf }).promise; }).then(function (doc) { var out = [], chain = Promise.resolve();
   for (var i = 1; i <= Math.min(doc.numPages, 300); i++) (function (n) { chain = chain.then(function () { return doc.getPage(n).then(function (pg) { return pg.getTextContent(); }).then(function (tc) {
@@ -1703,11 +1761,15 @@ function localDocxPages(file) { return needZip().then(function () { return file.
       else if (c.localName === 'body' || c.localName === 'sdt' || c.localName === 'sdtContent') walk(c); }); };
     walk(root.documentElement.getElementsByTagNameNS(W, 'body')[0] || root.documentElement); return out; };
   var body = lines(P(xs[0])), head = [].concat.apply([], xs.slice(1).map(function (h) { var d = P(h); return Array.prototype.map.call(d.getElementsByTagNameNS(W, 'p'), function (p) { return txt(p).trim(); }).filter(Boolean); }));
+  return docSplit(body, head); }); }
+function docLines(r) { return r.body.map(function (b) { return b.p != null ? b.p.replace(/\s+/g, ' ').trim() : b.row.map(function (c) { return c.replace(/\s+/g, ' ').trim(); }).filter(Boolean).join(' | '); }).filter(Boolean); }
+function localDocPages(file) { return file.arrayBuffer().then(function (b) { var r = docBin(b); return docSplit(docLines(r), r.head); }); }
+function docSplit(body, head) {
   /* one "page" per certificate: it starts at its CERTIFICATE NO. line (just above "Data of item") */
   var starts = []; body.forEach(function (l, i) { if (/data\s*of\s*item/i.test(l) && !/continue/i.test(l)) { var s = i; for (var k = i - 1; k >= Math.max(0, i - 14); k--) { if (/certi\s*ficate\s*no|calibration\s*certificate/i.test(body[k])) { s = k; break; } if (/data\s*of\s*item/i.test(body[k])) break; } if (!starts.length || s > starts[starts.length - 1]) starts.push(s); } });
   if (!starts.length) return [head.concat(body)];
-  return starts.map(function (s, k) { return head.concat(body.slice(s, starts[k + 1] == null ? body.length : starts[k + 1])); }); }); }
-function oldFilePages(file) { var n = String(file.name || '').toLowerCase(); return /\.pdf$/.test(n) ? localPdfPages(file) : /\.docx$/.test(n) ? localDocxPages(file) : Promise.reject(new Error(file.name + ': choose Word (.docx) or PDF certificates')); }
+  return starts.map(function (s, k) { return head.concat(body.slice(s, starts[k + 1] == null ? body.length : starts[k + 1])); }); }
+function oldFilePages(file) { var n = String(file.name || '').toLowerCase(); return /\.pdf$/.test(n) ? localPdfPages(file) : /\.docx$/.test(n) ? localDocxPages(file) : /\.doc$/.test(n) ? localDocPages(file) : Promise.reject(new Error(file.name + ': choose a Word (.doc or .docx) or PDF certificate')); }
 function oldFileItems(file) { return oldFilePages(file).then(function (pages) { var secs = [];
   pages.forEach(function (pg, i) { var t = pg.join(' | '); if (!/data\s*of\s*item/i.test(t) || /continue\s*certificate/i.test(pg.slice(0, 6).join(' '))) return; var sec = [pg]; for (var n = i + 1; n < pages.length && sec.length < 5; n++) { var t2 = pages[n].join(' '); if (/data\s*of\s*item/i.test(t2) && !/continue/i.test(pages[n].slice(0, 6).join(' '))) break; if (/continue/i.test(t2)) sec.push(pages[n]); else break; } secs.push(sec); });
   return secs.reduce(function (pr, sec) { return pr.then(function (acc) { return readSec(sec, '').then(function (r) { if (r && r.fields && (r.fields.code || r.fields.description)) acc.push(r); return acc; }).catch(function () { return acc; }); }); }, Promise.resolve([])); })
@@ -1724,7 +1786,7 @@ function oldCertSheet(p, files0) { var st = { busy: 0, files: [], rows: [], off:
       (st.rows.length ? '<div class="imm">' + st.rows.map(function (r, i) { var dup = r.code && have[impKey(r.code)], meta = [r.manufacturer, r.model, r.serial ? 'S/N ' + r.serial : ''].filter(Boolean).join(' · '), pts = ((r.r && r.r.points) || []).map(function (q) { return q.point; }).filter(function (v) { return String(v).trim(); });
         return '<label class="imi' + (dup ? ' dup' : '') + '"><input type="checkbox" data-ock="' + i + '"' + (dup || st.off[i] ? '' : ' checked') + (dup ? ' disabled' : '') + '><span class="imc">' + esc(r.code || '—') + '</span><span class="imd"><b>' + esc(r.description || '') + '</b>' + (meta ? '<small>' + esc(meta) + '</small>' : '') + '<small class="imr">' + esc([r.certNo ? 'Cert. ' + r.certNo : '', pts.length ? pts.length + ' points: ' + pts.slice(0, 6).join(' · ') : 'no readings found'].filter(Boolean).join('  |  ')) + '</small></span>' + (dup ? '<em>already in the job</em>' : '') + '</label>'; }).join('') + '</div>' : '');
     return { wide: 1, title: 'Attach certificates', body: body, foot: '<button class="btn ghost" id="ocX">Cancel</button>' + (st.rows.length ? '<button class="btn" id="ocGo"' + (n && !st.busy ? '' : ' disabled') + '>Add ' + n + ' item' + (n === 1 ? '' : 's') + '</button>' : ''),
-      mount: function () { $('#ocPick').onclick = function () { pickFiles('.docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document', true).then(go); };
+      mount: function () { $('#ocPick').onclick = function () { pickFiles('.doc,.docx,.pdf,application/msword,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document', true).then(go); };
         var dz = $('#ocDrop'); dz.ondragover = function (e) { e.preventDefault(); dz.classList.add('on'); }; dz.ondragleave = function () { dz.classList.remove('on'); }; dz.ondrop = function (e) { e.preventDefault(); dz.classList.remove('on'); go(e.dataTransfer.files); };
         $('#ocX').onclick = closeSheet;
         $$('[data-ock]').forEach(function (c) { c.onchange = function () { if (c.checked) delete st.off[c.dataset.ock]; else st.off[c.dataset.ock] = 1; var b = $('#ocGo'), k = count(); if (b) { b.textContent = 'Add ' + k + ' item' + (k === 1 ? '' : 's'); b.disabled = !k; } }; });
@@ -1758,7 +1820,7 @@ function attachSheet(p, files0) { var st = { busy: 0, res: null, err: '', file: 
         R.machines.map(function (m, mi) { return '<div class="imm"><div class="imh"><span class="imc">' + esc(m.code) + '</span><b>' + esc(m.name) + '</b><small>' + esc([m.man, m.model, m.sn ? 'S/N ' + m.sn : ''].filter(Boolean).join(' · ')) + '</small><button class="btn ghost sm" data-imall="' + mi + '">' + m.items.length + ' item' + (m.items.length === 1 ? '' : 's') + '</button></div>' + m.items.map(function (it, ii) { return line(it, mi, ii); }).join('') + '</div>'; }).join('') +
         '' : '');
     return { wide: 1, title: 'Attach files', body: body, foot: '<button class="btn ghost" id="imX">Cancel</button>' + (R ? '<button class="btn" id="imGo"' + (n ? '' : ' disabled') + '>Add ' + n + ' item' + (n === 1 ? '' : 's') + '</button>' : ''),
-      mount: function () { $('#imPick').onclick = function () { pickFiles('.pdf,.docx,.xlsx,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', true).then(goMany); };
+      mount: function () { $('#imPick').onclick = function () { pickFiles('.pdf,.doc,.docx,.xlsx,image/*,application/msword,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', true).then(goMany); };
         var dz = $('#imDrop'); dz.ondragover = function (e) { e.preventDefault(); dz.classList.add('on'); }; dz.ondragleave = function () { dz.classList.remove('on'); }; dz.ondrop = function (e) { e.preventDefault(); dz.classList.remove('on'); goMany(e.dataTransfer.files); };
         $('#imX').onclick = closeSheet;
         $$('[data-imc]').forEach(function (e) { e.onclick = function (ev) { ev.preventDefault(); }; e.oninput = function () { var sp = e.dataset.imc.split(':'), L = sp[0] === 'u' ? st.res.units : st.res.machines[+sp[0]].items; L[+sp[1]].code = e.value.trim(); }; });
