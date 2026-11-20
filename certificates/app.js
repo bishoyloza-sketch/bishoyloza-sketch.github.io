@@ -738,7 +738,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v466';
+var APP_V = 'v467';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1687,7 +1687,7 @@ function impRowHead(r) { var h = r.map(function (c) { return String(c || '').rep
   else if (xIc >= 0 && xMn >= 0 && xMc >= 0 && xMc !== xIc) { H.mc = xMn; H.mcode = xMc; H.code = xIc; H.it = -2; H.carry = 1; }
   else { var eq = f(/^equipment$|^machine$/), ic = f(/^instrument code$/), inn = f(/^instrument name$|^instrument$/), cc = f(/^code$/); if (eq >= 0 && ic >= 0 && inn >= 0) { H.mc = eq; H.it = inn; H.code = ic; H.mcode = cc; H.carry = 1; } }
   if (H.pt < 0) H.pt = f(/required points|calibration points|points to be calibrated/); if (H.tol < 0) H.tol = f(/accept/);
-  if (H.code >= 0 && /code/.test(h[H.code]) && /serial|s\/n/.test(h[H.code])) H.codeSn = 1; if (H.it === -1 && H.code >= 0) H.it = f(/^item name$|^item description$|^equipment name$|^instrument name$/); if (mon >= 6) H.months = 1;
+  if (H.code >= 0 && /code/.test(h[H.code]) && /serial|s\/n/.test(h[H.code])) H.codeSn = 1; if (H.it === -1 && H.code >= 0) H.it = f(/^item name$|^item description$|^equipment name$|^instrument name$/); if (mon >= 6 || (mon >= 2 && H.it >= 0 && H.code >= 0)) H.months = 1; H.no = f(/^s\.?\s*n\.?$|^no\.?$|^#$/);
   return (H.it >= 0 || H.it === -2) && H.code >= 0 && (H.carry || H.months || H.mc >= 0 || H.ds >= 0 || H.un >= 0 || H.rg >= 0 || H.sn >= 0 || H.lo >= 0) ? H : null; }
 /* an item with only a code: what it is, from the end of the code (PR8-004/TS.01 → Temperature sensor) */
 var IMP_SFX2 = [[/^(TS|TE|TT|T)\d*$/, 'Temperature sensor'], [/^(RH|MT|H)\d*$/, 'Humidity sensor'], [/^(DP|DPT|PDT)\d*$/, 'Differential pressure gauge'], [/^(PR|PG|PT|PI|P)\d*$/, 'Pressure gauge'], [/^(RP|RPM|R)\d*$/, 'Speed (RPM)'], [/^(CN|CT|C)\d*$/, 'Conductivity'], [/^(TK)\d*$/, 'Thickness'], [/^(FL|FT|F)\d*$/, 'Flow'], [/^(TM|TI|CL)\d*$/, 'Timer'], [/^(PH)\d*$/i, 'pH'], [/^(VC|AV|V)\d*$/, 'Air velocity'], [/^(W|WT)\d*$/, 'Weight']];
@@ -1696,16 +1696,19 @@ function impRowTable(rows) { var H = null, recs = [], seenM = {}, any = false, g
   rows.forEach(function (r) { var h = impRowHead(r); if (h) { H = h; any = true; return; } if (!H) return;
     var filled = r.filter(function (c) { return String(c == null ? '' : c).trim(); }).length; if (filled <= 1) return; /* a section title such as "Manufacturing" */
     if (H.months && !g(r, H.code)) { var cells = r.map(function (c) { return String(c == null ? '' : c).trim(); }), ri = cells.findIndex(function (c) { return /^ranges?$/i.test(c); }); if (ri >= 0 && H.rg < 0) H.rg = ri; var tt = cells.filter(function (c) { return c && !/^[A-Z][-.)]?\s*$/.test(c) && !/^ranges?$/i.test(c); })[0]; if (tt && tt.length < 60) H.sec = tt.replace(/^[A-Z]\s*[-.)]\s*/, ''); return; }
-    var nm = g(r, H.it), ikv = g(r, H.ik), code = g(r, H.code).replace(/^installed unit s\/?n\s*:?\s*/i, '').replace(/\s*\/\s*/g, '/'), mc = g(r, H.mc), ds = g(r, H.ds), mcc = g(r, H.mcode); if (!nm && !code) return;
+    var code0 = g(r, H.code), nm = g(r, H.it), ikv = g(r, H.ik), code = code0.replace(/^installed unit s\/?n\s*:?\s*/i, '').replace(/\s*\/\s*/g, '/'), mc = g(r, H.mc), ds = g(r, H.ds), mcc = g(r, H.mcode); if (!nm && !code) return;
     /* rows under a machine leave its cells empty: they belong to the machine above */
     if (H.carry) { if (mc || mcc) { H.lastMc = mc || mcc; H.lastMcc = mcc; } else { mc = H.lastMc || ''; mcc = H.lastMcc || ''; } mc = mc.replace(/\s*model\s*:.*$/i, '').trim() || mc; }
     var un = g(r, H.un).replace(/[ᵒº]/g, '°').replace(/^m\s*bar$/i, 'mbar').replace(/^kg\s*\/\s*cm2$/i, 'kg/cm²').replace(/^in\s*h2o$/i, 'inH2O').replace(/^ml\s*\/\s*min$/i, 'mL/min'), rg = g(r, H.rg).replace(/[ᵒº]/g, '°'), tol = g(r, H.tol).replace(/[ᵒº]/g, '°'), ce = g(r, H.ce), cert = /\d/.test(ce) ? ce.replace(/^(\d{3})(\d{3}-\d{4})$/, '$1-$2') : '';
     if (ikv && /\//.test(code) && !/^(n\/?a|-+)$/i.test(ikv)) nm = ikv.charAt(0).toUpperCase() + ikv.slice(1) + (nm ? ' – ' + nm : '');
     if ((H.it === -2 || H.carry) && !nm) nm = impSfxName(code);
-    var snx = ''; if (H.codeSn && /\//.test(code)) { var cs = code.split('/'); code = cs[0].trim(); snx = cs.slice(1).join('/').trim(); }
+    var snx = ''; if (H.codeSn && /\s\/|\/\s/.test(code0)) { var cs = code.split('/'); code = cs[0].trim(); snx = cs.slice(1).join('/').trim(); }
+    if (H.no >= 0 && !mc) { var no = g(r, H.no), nx = rows[rows.indexOf(r) + 1] || [], nno = g(nx, H.no); if (/^\d+$/.test(no) && nno.indexOf(no + '.') === 0) { H.subM = { no: no, name: nm, code: code }; var mk0 = 'N:' + no + ':' + impKey(code || nm); if (!seenM[mk0]) { seenM[mk0] = 1; recs.push({ name: nm, code: code, isMachine: 1, mkey: mk0, loc: H.sec || '' }); } H.subM.key = mk0; return; }
+      if (H.subM && no.indexOf(H.subM.no + '.') === 0) { mc = H.subM.name; } else if (no && !/^\d+\.\d/.test(no)) H.subM = null; }
     var rec = { name: nm || ds, code: code, man: g(r, H.ma), model: g(r, H.mo), sn: g(r, H.sn) || snx, range: rg && /\d/.test(rg) ? rg : '', pts: '', crit: tol && tol !== '-' ? tol : '', loc: [g(r, H.lo) || H.sec || '', ds && ds !== mc && ds !== nm ? ds : ''].filter(Boolean).join(' · '), prevCert: cert, unitHint: un };
     if (H.pt >= 0) rec.pts = g(r, H.pt);
-    if (mc) { var key = 'A:' + impKey(g(r, H.lo)) + ':' + impKey(mcc || mc); if (!seenM[key]) { seenM[key] = 1; recs.push({ name: mc, code: mcc && mcc !== code ? mcc : '', isMachine: 1, mkey: key, loc: g(r, H.lo) }); } rec.mkey = key; rec.parent = mc; }
+    if (mc && H.subM && mc === H.subM.name) { rec.mkey = H.subM.key; rec.parent = mc; }
+    else if (mc) { var key = 'A:' + impKey(g(r, H.lo)) + ':' + impKey(mcc || mc); if (!seenM[key]) { seenM[key] = 1; recs.push({ name: mc, code: mcc && mcc !== code ? mcc : '', isMachine: 1, mkey: key, loc: g(r, H.lo) }); } rec.mkey = key; rec.parent = mc; }
     recs.push(rec); });
   return any && recs.length ? recs : null; }
 /* a request form, one instrument per file: "Instrument Name / Model / Code / S/N", a list of the items by number, then a table "Items to be Calibrated · Calibration Points · Acceptance Criteria" */
