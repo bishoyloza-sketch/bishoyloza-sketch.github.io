@@ -738,7 +738,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v462';
+var APP_V = 'v463';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2428,7 +2428,14 @@ function poParse(text) { var t = String(text || '').replace(/\s*\|\s*/g, ' ').re
   /* a description that wraps under the numbers: the rest of it comes after the row */
   out.forEach(function (l, i) { var tail = t.slice(ends[i], i + 1 < starts.length ? starts[i + 1] : t.length).replace(/\bTotal\b[\s\S]*$/i, '').trim(); if (tail && tail.length < 90 && !/^\d{1,3}\s+[A-Za-z]/.test(tail)) l.desc = (l.desc + ' ' + tail).replace(/\s+/g, ' ').trim(); });
   var num = (String(text).match(/Order\s*Number\s*:?\s*([A-Z]?\d{5,})/i) || [])[1] || '', dt = (String(text).match(/Issue\s*Date\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i) || [])[1] || '';
-  if (!out.length) out = poGen(text); if (!num || !dt) { var mt = poMeta(text); num = num || mt.number; dt = dt || mt.date; }
+  if (!out.length) out = poGen(text);
+  /* Oracle "Payment Request" (Orchidia): "1.000 Integrity tester September budget EA EGP .0000 / EA 50160.00 EGP" – the unit price is left 0, the total carries the amount */
+  if (!out.length) { var pr = /(?:^|\s)(\d+(?:\.\d+)?)\s+(\S.*?)\s+(EA|PCS?|EACH|LOT)\s+([A-Z]{3})\s*([\d,]*\.?\d*)\s*\/\s*\3\s+([\d,]+(?:\.\d+)?)\s*\4/gi, q2, n2 = 0; while ((q2 = pr.exec(String(text).replace(/\s+/g, ' ')))) { var qq = poNum(q2[1]) || 1, tt = poNum(q2[6]), uu = poNum(q2[5]); if (tt == null) continue; out.push({ no: String(++n2), desc: q2[2].replace(/\s+/g, ' ').trim(), qty: qq, uom: q2[3], price: uu ? uu : Math.round(tt / qq * 100) / 100, cur: q2[4], total: tt, vat: false }); } }
+  if (!num) num = (String(text).match(/Payment\s*Request[\s\S]{0,120}?Serial\s*No\s*:?\s*(\d{6,})/i) || [])[1] || '';
+  if (!dt) { var pd = String(text).match(/Payment\s*Request[\s\S]{0,200}?Date\s*:?\s*(\d{4})-(\d{2})-(\d{2})/i); if (pd) dt = pd[3] + '/' + pd[2] + '/' + pd[1]; }
+  if (!num || !dt) { var mt = poMeta(text); num = num || mt.number; dt = dt || mt.date; }
+  /* table headers that stick to the first row ("Specifications Calibration of …") and an item code that repeats the first word ("Calibration Calibration of …") */
+  out.forEach(function (l) { l.desc = String(l.desc || '').replace(/^(?:(?:Code|Description|Specifications?|Item\s*(?:Name|Description)?)\s+)+(?=\S)/i, '').replace(/^(\w+)\s+(?=\1\b)/i, '').trim(); });
   return { lines: out, number: num, date: dt }; }
 /* any PO layout: a line is two numbers whose product is a third one after them (with or without 14% tax) */
 var PO_UOM = /^(each|ea|pcs?|pc|piece|units?|unt|u|lot|ls|nos?\.?|au)$/i;
@@ -2483,9 +2490,9 @@ function poDateNorm(s, us) { var m, p2 = function (n) { return ('0' + n).slice(-
 var PO_DT = '(\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{1,2}[\\s-][A-Za-z]{3,9}[\\s-],?\\s*\\d{2,4}|[A-Za-z]{3,9}\\.?\\s+\\d{1,2},?\\s+\\d{4})';
 function poMeta(text) { var t = String(text || '').normalize('NFKC').replace(/\s+/g, ' ').replace(/(\d)\s*([\/.])\s+(\d)/g, '$1$2$3'), num = '', dt = '', m;
   var NUM = [/Order\s*Number\s*:?\s*([A-Z]?\d{4,})/i, /Bon\s*de\s*Commande\s*:?\s*(\d{5,})/i, /PO\s*number\s*\/\s*date\s*(\d{4,})/i, /PO\s*(?:Number|No\.?|#)\s*:?\s*([A-Z]{0,3}\d{4,})/i, /Order\s*No\.?\s*:?\s*(\d{4,})/i, /Purchase\s*Order\s*(?:No\.?|Number|#)?\s*:?\s*(\d{5,})/i,
-    /\b(?:GPI|GNP)\s*\/\s*(\d{6,})/, /\bOrder\s+(\d{4,})\s+Revision/i, /(\d{4,})\s*:\s*توريد\s*أمر/, /أمر\s*توريد\s*:?\s*(\d{4,})/, /\bNo\s+(\d{8,})\s+Rev/i, /Serial\s*No\s*:?\s*(\d{6,})/i, /\b(\d{6,})\s+Purchase\s+Order\b/i];
+    /\b(?:GPI|GNP|GAP)\s*\/\s*(\d{6,})/, /\bPO\s*#\s*:?\s*(\d{1,4}\/\d{4})\b/, /\bOrder\s+(\d{4,})\s+Revision/i, /(\d{4,})\s*:\s*توريد\s*أمر/, /أمر\s*توريد\s*:?\s*(\d{4,})/, /\bNo\s+(\d{8,})\s+Rev/i, /Serial\s*No\s*:?\s*(\d{6,})/i, /\b(\d{6,})\s+Purchase\s+Order\b/i];
   for (var i = 0; i < NUM.length && !num; i++) if ((m = t.match(NUM[i]))) num = m[1];
-  var DL = ['Issue\\s*Date', 'Purchase\\s*order\\s*:?\\s*\\d+\\s*Date', 'PO\\s*number\\s*\\/\\s*date\\s*\\d+\\s*\\/', 'Order\\s*Date', 'Document\\s*Date', 'Creation\\s*Date', 'Placed\\s*On', 'Issued\\s*on\\s*\\w+day,?', 'Date', 'Creation', 'التاريخ'], us = /AstraZeneca/i.test(t);
+  var DL = ['Issue\\s*Date', 'Purchase\\s*order\\s*:?\\s*\\d+\\s*Date', 'PO\\s*number\\s*\\/\\s*date\\s*\\d+\\s*\\/', 'Order\\s*Date', 'Document\\s*Date', 'Creation\\s*Date', 'Placed\\s*On', 'Issued\\s*on\\s*\\w+day,?', 'Date', 'Creation', 'التاريخ'], us = /AstraZeneca|DSM\s*Nutritional/i.test(t);
   for (i = 0; i < DL.length && !dt; i++) { var r = new RegExp(DL[i] + '\\s*:?\\s*' + PO_DT, 'i'); if ((m = t.match(r))) dt = poDateNorm(m[1], us); }
   if (!dt && (m = t.match(new RegExp(PO_DT + '\\s*Creation\\s*Date', 'i')))) dt = poDateNorm(m[1]);
   if (!dt && (m = t.match(/:\s*التاريخ\s*(\d{1,2}-\d{1,2}-\d{4})/))) dt = poDateNorm(m[1]);
