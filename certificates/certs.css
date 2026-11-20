@@ -1862,3 +1862,5 @@ tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
 .prs.on{color:#fff;background:var(--navy,#14284B)}.prs.on small{color:#C9D6EA}
 /* the same edit row on every certificate */
 .shedrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}.shedrow>span{font-size:12px;font-weight:700;color:var(--muted,#64748B);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
+
+.tcount{display:block;font-size:10.5px;opacity:.6;margin-top:3px;font-style:italic}
