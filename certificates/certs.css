@@ -2020,3 +2020,13 @@ body.hasTb #tbar{z-index:95}
 .tmwk{display:flex;align-items:flex-end;gap:8px}.tmwk em{display:flex;align-items:flex-end;gap:2px;height:24px}.tmwk u{display:block;width:6px;background:#9CC3EA;border-radius:2px;text-decoration:none}
 .tmgo{grid-column:1/-1;justify-self:start;font-size:12px}
 @media (max-width:760px){.pkh.tm{display:none}.pkr.tm{grid-template-columns:1fr 1fr}}
+
+/* Today – a notification that slides down under the header */
+#todayCard{position:fixed;top:calc(var(--tbh,64px) + 10px);right:16px;width:370px;max-width:calc(100vw - 24px);z-index:120;background:rgba(255,255,255,.88);-webkit-backdrop-filter:blur(26px) saturate(1.8);backdrop-filter:blur(26px) saturate(1.8);border:1px solid rgba(255,255,255,.7);border-radius:16px;box-shadow:0 16px 44px rgba(15,25,45,.2);padding:12px 12px 10px;transform:translateY(-14px);opacity:0;transition:transform .26s cubic-bezier(.2,.9,.3,1.1),opacity .22s}
+#todayCard.in{transform:none;opacity:1}
+.tdh{display:flex;align-items:baseline;gap:8px;padding:0 4px 8px}.tdh b{font-size:15px;color:#111827}.tdh small{color:#6B7280;font-size:12px}.tdx{margin-left:auto;border:0;background:rgba(0,0,0,.05);width:24px;height:24px;border-radius:50%;cursor:pointer;color:#4B5563;font-size:15px;line-height:1}
+.tdl{display:flex;flex-direction:column;gap:4px}.tdi{display:flex;align-items:center;gap:10px;text-align:left;border:0;background:rgba(255,255,255,.7);border-radius:11px;padding:8px 10px;cursor:pointer;font:inherit}.tdi:hover{background:#fff}
+.tdi b{display:block;font-size:13.5px;color:#111827;font-weight:600}.tdi small{display:block;font-size:12px;color:#6B7280}.tdi i{margin-left:auto;font-style:normal;color:#9CA3AF}.tdic{font-size:16px;width:22px;text-align:center}
+.tdi.lv3{box-shadow:inset 3px 0 0 #D92D20}.tdi.lv3 small{color:#B42318}.tdi.lv2{box-shadow:inset 3px 0 0 #E8A317}
+.tdmore,.tdok{font-size:12.5px;color:#6B7280;text-align:center;margin:6px 0 2px}
+.tbtoday{position:relative}.tbbadge{position:absolute;top:3px;right:8px;background:#D92D20;color:#fff;font-style:normal;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;line-height:16px;text-align:center;padding:0 4px}
