@@ -20,6 +20,8 @@ function book() { var P = PropertiesService.getScriptProperties(), id = P.getPro
   return s; }
 function dir() { var P = PropertiesService.getScriptProperties(), id = P.getProperty('DIR'); if (id) { try { return DriveApp.getFolderById(id); } catch (x) {} }
   var f = DriveApp.createFolder('Akhnaton Certificates – Jobs'); P.setProperty('DIR', f.getId()); return f; }
+function photoDir() { var P = PropertiesService.getScriptProperties(), id = P.getProperty('PHOTO_DIR'); if (id) { try { return DriveApp.getFolderById(id); } catch (x) {} }
+  var f = dir().createFolder('Device photos'); P.setProperty('PHOTO_DIR', f.getId()); return f; }
 function rows(sh) { var v = sh.getDataRange().getValues(); return v.slice(1); }
 function findRow(sh, id) { var v = sh.getRange(1, 1, Math.max(1, sh.getLastRow()), 1).getValues(); for (var i = 1; i < v.length; i++) if (String(v[i][0]) === String(id)) return i + 1; return 0; }
 /* certificates permission per person (admin / writer / none) – the people and PINs stay on the Devices server */
@@ -49,6 +51,9 @@ function handle(b) { var s = book(), J = s.getSheetByName('Jobs'), op = b.op;
     return { ok: true, rev: 1, updated: now2 }; }
   if (op === 'del' || op === 'restore') { var rn2 = findRow(J, b.id); if (!rn2) return { ok: true }; var t = Date.now();
     J.getRange(rn2, 10).setValue(op === 'del' ? t : ''); J.getRange(rn2, 4).setValue(t); log(s, b, { jobId: b.id, company: J.getRange(rn2, 2).getValue(), action: op, detail: op === 'del' ? 'Deleted the job' : 'Restored the job' }); return { ok: true }; }
+  /* photos of customers' instruments (Customer devices): one Drive folder, read back by id */
+  if (op === 'photoPut') { var pf = photoDir().createFile(Utilities.newBlob(Utilities.base64Decode(String(b.b64 || '')), 'image/jpeg', String(b.name || 'device').slice(0, 80) + '.jpg')); return { ok: true, id: pf.getId() }; }
+  if (op === 'photoGet') { var gf = DriveApp.getFileById(String(b.id)), inDir = false, pit = gf.getParents(); while (pit.hasNext()) if (pit.next().getId() === photoDir().getId()) inDir = true; if (!inDir) return { error: 'not a device photo' }; return { ok: true, b64: Utilities.base64Encode(gf.getBlob().getBytes()) }; }
   if (op === 'roles') return { ok: true, roles: roles(s) };
   if (op === 'setRole') { var R = rolesSheet(s), rr = findRow(R, b.id), row = [String(b.id), b.who || '', b.role || 'writer', b.name || '', new Date()];
     if (rr) R.getRange(rr, 1, 1, 5).setValues([row]); else R.appendRow(row); log(s, b, { action: 'role', detail: 'Set ' + (b.who || b.id) + ' to ' + (b.role === 'admin' ? 'Admin' : b.role === 'none' ? 'No access' : 'Certificate writer') }); return { ok: true, roles: roles(s) }; }

@@ -118,9 +118,7 @@ function photoDir_() { var P = PropertiesService.getScriptProperties(), id = P.g
   var f = DriveApp.createFolder('Akhnaton – Device photos'); P.setProperty('PHOTO_DIR', f.getId()); return f; }
 function photo_(req) {
   var imgs = (req.images || []).slice(0, 8); if (!imgs.length) throw new Error('No photos');
-  var dir = photoDir_(), stamp = Utilities.formatDate(new Date(), 'Africa/Cairo', 'yyyy-MM-dd HH.mm');
-  var ids = imgs.map(function (b64, i) { return dir.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', String(req.co || 'device').slice(0, 60) + ' ' + stamp + ' (' + (i + 1) + ').jpg')).getId(); });
-  if (req.saveOnly) return { ids: ids };
+  var ids = []; /* the photos themselves are kept by the jobs server (it already has Drive) */
   var gk = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'); if (!gk) throw new Error('GEMINI_KEY is missing in Script Properties');
   var prompt = 'These ' + imgs.length + ' photo(s) show ONE measuring instrument at a customer of a calibration laboratory – usually its nameplate / label / asset sticker and its display while it is switched on.\n' +
     'Read ONLY what is really visible. Answer with ONLY one JSON object, no other text:\n' +
