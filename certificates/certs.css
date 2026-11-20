@@ -1983,3 +1983,4 @@ body.hasTb .sheet-bg,body.hasTb .dlg,body.hasTb .pkov,body.hasTb .sopov{top:var(
 body.hasTb .sheet.wide{height:100%!important}
 @media (min-width:1000px){body.hasTb .sheet:not(.wide){height:100%;max-height:100%}}
 body.hasTb #tbar{z-index:95}
+.fxqp{width:90px;height:26px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12.5px;margin-left:4px}
