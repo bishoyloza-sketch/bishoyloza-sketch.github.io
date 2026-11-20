@@ -1892,3 +1892,39 @@ tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
 .mfs.mfsc small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mfgo{flex:none;font-size:13px;font-weight:700;color:#0B6FC7;padding:6px 12px;border:1px solid #C9DCF2;border-radius:999px;background:#fff}
 .mfs.mfsc:hover .mfgo{background:#0B6FC7;color:#fff;border-color:#0B6FC7}
+/* compressed-air Edit table: a normal width sheet, fields in two tidy columns, the clicked field marked */
+.tpsh.tp-ca .tpg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px;margin-bottom:14px}
+.tpsh.tp-ca .tpo.w2{grid-column:1 / -1}
+.tpsh.tp-ca .tpo>span{display:block;font-size:12.5px;font-weight:600;color:#3D4B5E;margin-bottom:4px}
+.tpsh.tp-ca .tpo .inp{width:100%;font-size:14px}
+.inp.tpfoc{border-color:#0B6FC7!important;box-shadow:0 0 0 3px rgba(11,111,199,.18)}
+@media (max-width:640px){.tpsh.tp-ca .tpg{grid-template-columns:1fr}}
+/* calm buttons everywhere on a computer: sized to their words, not stretched across the screen */
+@media (min-width:761px){
+  .sheet-f{justify-content:flex-end;gap:8px}
+  .sheet-f .btn{flex:0 0 auto;min-width:120px;height:40px;min-height:40px;font-size:14px;padding:0 18px}
+  .dlg .cf{justify-content:flex-end}
+  .dlg .cf .btn{flex:0 0 auto;min-width:104px;height:38px;font-size:14px;padding:0 16px}
+  .wiz-foot{padding-top:9px;padding-bottom:calc(9px + var(--safe-b))}
+  .wiz-foot>div{justify-content:center}
+  .wiz-foot .btn{flex:0 1 auto;min-width:130px;height:42px;font-size:14.5px;padding:0 20px}
+  .wiz-foot .btn.blue,.wiz-foot #hGo,.wiz-foot #fwGo{min-width:220px}
+  #toast{font-size:13.5px;padding:9px 16px;max-width:520px}
+}
+/* labels: one set of dates for all, then the codes */
+.lmdef{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;background:#F4F7FB;border:1px solid #DCE4EE;border-radius:12px;padding:12px 14px;margin:6px 0 12px}
+.lmdef>b{width:100%;font-size:13.5px;color:#13294B}
+.lmdef label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#3D4B5E}
+.lmdef .inp{height:38px;min-width:170px;font-size:14px}
+.lmdef small{width:100%;color:#5B6B80;font-size:12px}
+.lmgrid2 td:nth-child(2){width:40%}
+.lmsame{color:#7A8799;font-size:12.5px}.lmsame .lnk{margin-left:8px;font-size:12.5px}
+.lmcust{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.lmcust input{max-width:150px}.lmcust .lnk{font-size:12.5px}
+tr.lmc td{background:#FFFBEF}
+/* online now (admins) */
+#tbar .tbonl .onlc{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:999px;background:rgba(255,255,255,.18);font-size:12px}
+#tbar .tbonl.on .onlc{background:#1C8A57}
+.onlnote{position:fixed;right:18px;bottom:96px;z-index:120;display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #DCE4EE;border-left:4px solid #1C8A57;border-radius:12px;box-shadow:0 10px 28px rgba(19,41,75,.18);padding:10px 14px;font-size:13.5px;max-width:340px;cursor:pointer;animation:akhIn .3s ease both;transition:opacity .4s}
+.onlnote.out{opacity:0}.onlnote i,.onlrow i{width:9px;height:9px;border-radius:50%;background:#1C8A57;flex:none;box-shadow:0 0 0 3px rgba(28,138,87,.18)}
+.onlnote small{display:block;color:#5B6B80;font-size:12px}
+.onlrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #EEF2F6;font-size:14px}.onlrow span{color:#5B6B80;font-size:12.5px;margin-left:auto}
