@@ -1928,3 +1928,4 @@ tr.lmc td{background:#FFFBEF}
 .onlnote.out{opacity:0}.onlnote i,.onlrow i{width:9px;height:9px;border-radius:50%;background:#1C8A57;flex:none;box-shadow:0 0 0 3px rgba(28,138,87,.18)}
 .onlnote small{display:block;color:#5B6B80;font-size:12px}
 .onlrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #EEF2F6;font-size:14px}.onlrow span{color:#5B6B80;font-size:12.5px;margin-left:auto}
+.lmdef #lmPaste{margin-left:auto;height:36px}
