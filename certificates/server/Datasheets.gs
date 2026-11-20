@@ -42,6 +42,8 @@ function doPost(e) {
     if (req.action === 'companies') return json_({ ok: true, data: companies_() });
     if (req.action === 'save') return json_({ ok: true, data: save_(req.entry || {}, req.by || 'claude') });
     if (req.action === 'datasheet') return json_({ ok: true, data: lookup_(req.maker, req.model, req.description, !!req.fresh) });
+    if (req.action === 'photo') return json_({ ok: true, data: photo_(req) });
+    if (req.action === 'photoGet') return json_({ ok: true, data: photoGet_(req.id) });
     throw new Error('Unknown action');
   } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
 }
@@ -109,3 +111,30 @@ function company_(id, name, official, fresh) {
   if (at > 0) sh.getRange(at, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
   return coRow_(row);
 }
+
+/* photos of a customer's instrument (nameplate + display): kept in the Drive folder "Akhnaton – Device photos",
+   read by Gemini, so everybody on the team gets the same photos and the same reading – no Claude needed */
+function photoDir_() { var P = PropertiesService.getScriptProperties(), id = P.getProperty('PHOTO_DIR'); if (id) { try { return DriveApp.getFolderById(id); } catch (x) {} }
+  var f = DriveApp.createFolder('Akhnaton – Device photos'); P.setProperty('PHOTO_DIR', f.getId()); return f; }
+function photo_(req) {
+  var imgs = (req.images || []).slice(0, 8); if (!imgs.length) throw new Error('No photos');
+  var dir = photoDir_(), stamp = Utilities.formatDate(new Date(), 'Africa/Cairo', 'yyyy-MM-dd HH.mm');
+  var ids = imgs.map(function (b64, i) { return dir.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/jpeg', String(req.co || 'device').slice(0, 60) + ' ' + stamp + ' (' + (i + 1) + ').jpg')).getId(); });
+  if (req.saveOnly) return { ids: ids };
+  var gk = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'); if (!gk) throw new Error('GEMINI_KEY is missing in Script Properties');
+  var prompt = 'These ' + imgs.length + ' photo(s) show ONE measuring instrument at a customer of a calibration laboratory – usually its nameplate / label / asset sticker and its display while it is switched on.\n' +
+    'Read ONLY what is really visible. Answer with ONLY one JSON object, no other text:\n' +
+    '{"maker": "", "model": "", "serial": "", "code": "customer asset / tag code if a sticker shows one", "description": "short English name, e.g. Temperature & Humidity Indicator, Pressure Gauge, Digital Timer", ' +
+    '"items": [{"quantity": "Temperature", "unit": "°C", "resolution": "0.1", "shown": "23.4 – exactly as on the display", "rMin": "", "rMax": ""}], "notes": "one short line: anything unclear"}\n' +
+    'Rules: one entry in items for every quantity the display shows (temperature, humidity, pressure, time…). resolution = the smallest step of the digits shown (23.45 → 0.01, 23.4 → 0.1, 23 → 1); for a dial gauge use the smallest scale division if readable. ' +
+    'rMin / rMax only when the range is printed on the instrument or the dial. Units exactly: °C, %RH, bar, mbar, Pa, kPa, psi, g, kg, rpm, min, s, m/s, L/min, µS/cm, pH, lux. Never guess or invent – leave a field empty when it is not visible.';
+  var parts = [{ text: prompt }].concat(imgs.map(function (b) { return { inline_data: { mime_type: 'image/jpeg', data: b } }; }));
+  var call = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': gk }, payload: JSON.stringify({ contents: [{ parts: parts }] }) }); };
+  var res = call(); for (var t = 0; t < 3 && (res.getResponseCode() === 429 || res.getResponseCode() >= 500); t++) { Utilities.sleep(6000 * (t + 1)); res = call(); }
+  if (res.getResponseCode() !== 200) return { ids: ids, error: 'Gemini ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 160) };
+  var j = JSON.parse(res.getContentText()), c = (j.candidates || [])[0] || {}, txt = ((c.content || {}).parts || []).map(function (q) { return q.text || ''; }).join(''), m = txt.match(/\{[\s\S]*\}/);
+  var o = {}; try { o = m ? JSON.parse(m[0]) : {}; } catch (x) { o = {}; }
+  return { ids: ids, read: o };
+}
+function photoGet_(id) { var f = DriveApp.getFileById(id), ok = false, it = f.getParents(); while (it.hasNext()) if (it.next().getId() === photoDir_().getId()) ok = true;
+  if (!ok) throw new Error('Not a device photo'); return { b64: Utilities.base64Encode(f.getBlob().getBytes()) }; }

@@ -1830,3 +1830,21 @@ td.tpla{white-space:nowrap}td.tpla .btn{margin:1px}
 /* phone: a long company name in "Continue …" no longer pushes the page sideways */
 .hact{max-width:100%;min-width:0}
 .hact .btn{max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* customer devices (library) */
+.cdtop{display:flex;gap:10px;align-items:flex-end;margin-bottom:8px}
+.cdbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.cdbar .fin{flex:1;min-width:180px}.cdbar .btn{display:inline-flex;align-items:center;gap:6px}
+.cdlist{display:flex;flex-direction:column;gap:6px}
+.cdrow{display:flex;gap:12px;align-items:center;text-align:left;background:#fff;border:1px solid var(--line,#E3E8EF);border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;width:100%}
+.cdrow:hover{border-color:var(--blue,#1971C2)}
+.cdrt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.cdrt small{color:var(--muted,#64748B);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cdsrc{font-size:11px;color:var(--muted,#64748B);flex:none}
+.cdth{width:64px;height:64px;object-fit:cover;border-radius:8px;background:#EEF2F7;flex:none;display:inline-flex;align-items:center;justify-content:center;color:#94A3B8;cursor:zoom-in}
+.cdths{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}.cdths .cdth{width:96px;height:96px}
+.cdtw{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.cdg{border:1px solid var(--line,#E3E8EF);border-radius:10px;padding:10px;margin:8px 0;background:#fff}
+.cdgh{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.cdgh small{color:var(--muted,#64748B)}.cdgh .btn{margin-left:auto}
+.cdstep{display:flex;gap:10px;align-items:center;margin-bottom:8px}.cdstep small{color:var(--muted,#64748B)}
+.cdqh{display:flex;gap:8px;align-items:baseline;margin:12px 0 4px}.cdqh small{color:var(--muted,#64748B)}
+table.cdq{width:100%;border-collapse:collapse}table.cdq th{font-size:11px;text-align:left;color:var(--muted,#64748B);padding:4px}table.cdq td{padding:3px 4px;vertical-align:top}table.cdq .fin{padding:6px 8px}
+tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
+@media (max-width:600px){table.cdq thead{display:none}table.cdq tr{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}table.cdq td{padding:0}}
