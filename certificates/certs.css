@@ -2030,3 +2030,7 @@ body.hasTb #tbar{z-index:95}
 .tdi.lv3{box-shadow:inset 3px 0 0 #D92D20}.tdi.lv3 small{color:#B42318}.tdi.lv2{box-shadow:inset 3px 0 0 #E8A317}
 .tdmore,.tdok{font-size:12.5px;color:#6B7280;text-align:center;margin:6px 0 2px}
 .tbtoday{position:relative}.tbbadge{position:absolute;top:3px;right:8px;background:#D92D20;color:#fff;font-style:normal;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;line-height:16px;text-align:center;padding:0 4px}
+
+.sqcp{font-size:11.5px;margin-left:8px;padding:0}.sqrh{display:flex;align-items:center;gap:4px}.sqrh .sqr{margin-left:auto}
+.inp.sqbad{border-color:#E8A317!important;background:#FFF8E6}.sqw{font-size:11.5px;color:#B54708;margin-top:3px;line-height:1.35}.sqw:empty{display:none}
+.sqf input::placeholder{color:#B4BCC8;font-size:12px}
