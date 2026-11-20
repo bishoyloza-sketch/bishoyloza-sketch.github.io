@@ -1869,3 +1869,18 @@ tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
 #tbar .tbb.lab span{display:block!important;font-size:10.5px!important;line-height:1;font-weight:700!important;letter-spacing:.2px}
 #tbar .tbb.lab[data-tb="back"]{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);margin-right:6px}
 #tbar .tbb.lab[data-tb="back"]:hover{background:rgba(255,255,255,.26)}
+/* opening screen: the logo, like the Lab Devices app and Office apps */
+.akhsp{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:radial-gradient(ellipse 80% 55% at 50% 42%,#1D3A66 0%,#13294B 72%);color:#fff;transition:opacity .45s ease}
+.akhsp.out{opacity:0;pointer-events:none}
+.akhsp .lz{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px;animation:akhIn .7s ease both}
+.akhsp .lz-eye{font-weight:500;letter-spacing:.42em;font-size:15px;color:#7FC0F0;margin-left:.42em}
+.akhsp .lz-t{font-weight:600;font-size:52px;line-height:1.05;margin-top:6px;font-family:Barlow Condensed,Barlow,system-ui,sans-serif}
+.akhsp .lz-rule{display:flex;align-items:center;gap:8px;margin:22px 0 24px}
+.akhsp .lz-rule i{display:block;width:64px;height:2px;background:linear-gradient(90deg,transparent,#4FA8EC)}
+.akhsp .lz-rule i:last-child{background:linear-gradient(90deg,#4FA8EC,transparent)}
+.akhsp .lz-rule b{width:8px;height:8px;border-radius:2px;background:#1C8A57;transform:rotate(45deg)}
+.akhsp img{width:min(250px,70vw)}
+.akhsp-bar{margin-top:34px;width:160px;height:3px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden}
+.akhsp-bar i{display:block;width:40%;height:100%;background:#4FA8EC;border-radius:3px;animation:akhBar 1.1s ease-in-out infinite}
+@keyframes akhBar{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+@keyframes akhIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}

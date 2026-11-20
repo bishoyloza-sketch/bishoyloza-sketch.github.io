@@ -16,6 +16,10 @@
 <link rel="stylesheet" href="certs.css">
 </head>
 <body>
+<div id="akhSplash" class="akhsp" aria-hidden="true"><div class="lz"><div class="lz-eye">AKHNATON</div><div class="lz-t">Certificates</div><div class="lz-rule"><i></i><b></b><i></i></div><img src="logo-en-light.png" alt="Akhnaton Trading and Representation"><div class="akhsp-bar"><i></i></div></div></div>
+<script>/* a fresh start of the app (not a reload) opens on the logo, then the home page */
+(function () { var live = false; try { live = sessionStorage.getItem('akhc.live') === '1'; sessionStorage.setItem('akhc.live', '1'); } catch (e) {} window.__FRESH = !live; var sp = document.getElementById('akhSplash'); if (live) { sp.remove(); return; }
+  var t0 = Date.now(); window.__splashDone = function () { var w = Math.max(0, 1500 - (Date.now() - t0)); setTimeout(function () { sp.classList.add('out'); setTimeout(function () { sp.remove(); }, 450); }, w); }; setTimeout(function () { if (document.getElementById('akhSplash')) window.__splashDone(); }, 4000); })();</script>
 <div id="app" aria-live="polite"></div>
 <div id="sheet-root"></div>
 <div id="dlg-root"></div>
