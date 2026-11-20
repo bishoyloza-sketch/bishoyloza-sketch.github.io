@@ -738,7 +738,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v461';
+var APP_V = 'v462';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -4441,7 +4441,7 @@ function prTotalLine(p, lid, tot) { var m = prMode(p), ref = String(p.prRef || '
   if (lid === 'xq' || m === 'cert' || m === 'mach') return null; if (m === 'later') return rf ? { t: 'Total price ' + rf, v: null } : null; var v = numv(p.prTotal || '');
   if (isNaN(v)) return rf ? { t: 'Total price ' + rf, v: null } : null; return { t: 'Total price without VAT:  ' + v.toLocaleString('en') + ' EGP' + (rf ? ' – ' + rf : ''), v: v }; }
 function letterData(p, groups, lid, items) { try { poHeal(p); } catch (e) {} var inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0, ok = {}; (items || []).forEach(function (it) { ok[it.id] = 1; });
-  var cal = s2d(inf.cal), mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
+  var cal = s2d(inf.cal), mm = cal ? lMY(cal, 0) : '', dd = cal ? lMY(cal, 1) : '';
   (lid === 'xq' ? coverGroups(p) : groups).forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '') || (items && !ok[it.id])) return; n++; var lp = prLP(p, gr, it, lid), pr = lp.t; if (lp.v != null) tot += lp.v; if (lp.star) rows.star = 1;
     var rw = [String(n), (gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || ''), it.code || it.serial || '', mm, dueShort(p, it) || dd, it.certNo]; if (!prNoCol(p, lid)) rw.push((pr || (lid === 'xq' ? '' : 'Lump sum')) + (lp.star ? ' *' : '')); rows.push(rw); }); });
   if (lid === 'xq') holSur(p).forEach(function (x) { if (items && !ok[x.it.id]) return; n++; tot += x.v; rows.sur = 1; rows.push([String(n), 'Holiday work – ' + (x.it.description || ''), x.it.code || x.it.serial || '', mm, dueShort(p, x.it) || dd, x.it.certNo, x.v.toLocaleString('en') + ' *']); });
@@ -4467,11 +4467,13 @@ function invSummary(p, groups, lid, items) { if (lid === 'xq' || prNoCol(p, lid)
   var o = letterOrder(p, lid), certs = [], L = [], by = {}, add = function (lab, q, v) { var key = lab + '|' + v; if (!by[key]) { by[key] = { t: lab, q: 0, v: v }; L.push(by[key]); } by[key].q += q; };
   groups.forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '') || (items && !ok[it.id])) return; if (it.certNo) certs.push(it.certNo); var pl = !lid && p.orderType === 'po' && it.poLine != null ? (((p.order || {}).items) || []).filter(function (l) { return String(l.no) === String(it.poLine); })[0] : null; if (pl && pl.price != null) { add(String(pl.desc || '').replace(/\s+/g, ' ').trim() || invLabel(it, gr.machine && gr.machine.name), 1, pl.price); return; } var lp = prLP(p, gr, it, lid); if (lp.v == null) return;
     if (/\(machine\)/.test(lp.t || '')) add('Calibration for ' + (gr.machine ? gr.machine.name : 'machine'), 1, lp.v); else { var cr = p.orderType === 'contract' ? ctRow(p, it) : null; add(cr ? '(No. ' + cr.id + ') ' + String(cr.text || '').trim() : invLabel(it, gr.machine && gr.machine.name), 1, lp.v); } }); });
-  certs.sort(); var dps = {}; groups.forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') === (lid || '') && (!items || ok[it.id]) && it.dept) dps[String(it.dept).trim()] = 1; }); });
+  certs.sort(function (a, b) { return String(a).localeCompare(String(b), 'en', { numeric: true }); }); var dps = {}; groups.forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') === (lid || '') && (!items || ok[it.id]) && it.dept) dps[String(it.dept).trim()] = 1; }); });
   var dept = Object.keys(dps).filter(Boolean).join(' & '), rng = certs.length ? (certs.length > 1 ? 'Cert from: ' + certs[0] + ' to ' + certs[certs.length - 1] : 'Cert from: ' + certs[0]) + (dept ? ' - ' + dept : '') : 'Calibration works' + (dept ? ' - ' + dept : '');
   /* contract discount: the invoice carries the discounted unit price (150 → 136.50 at 9 %) */
   var dc = p.orderType === 'contract' ? ((ctGet(p) || {}).disc || {}) : {}, dp = numv(dc.pct); if (!isNaN(dp) && dp > 0) L.forEach(function (l) { l.v = Math.round(l.v * (100 - dp)) / 100; });
   var ptl = prTotalLine(p, lid, 0), lump = (ptl && ptl.v != null) || (p.orderType === 'contract' && /\beva\b|ايفا|إيفا/i.test(p.company.name || ''));
+  /* EVA contract invoices write the lump line as "Letter 10HP-267-2026 To 10HP-351-2026" (Performa invoices 2026) */
+  if (lump && certs.length && /\beva\b|ايفا|إيفا/i.test(p.company.name || '')) rng = 'Letter ' + certs[0] + (certs.length > 1 ? ' To ' + certs[certs.length - 1] : '') + (dept ? ' - ' + dept : '');
   if (lump && L.length) { var sum = Math.round(L.reduce(function (s0, l) { return s0 + l.q * l.v; }, 0) * 100) / 100; L = [{ t: rng || 'Calibration works', q: 1, v: sum }]; }
   else if (ptl && ptl.v != null) L = [{ t: rng || 'Calibration works', q: 1, v: ptl.v }];
   if (!L.length) return null; var od = (lid ? '' : (p.order || {}).date) || '', ref = o.number ? 'PO.' + o.number + (od ? ' / ' + String(od).replace(/\//g, '-') : '') : (lump ? '' : rng);
@@ -7430,7 +7432,9 @@ function dfmt(p) { return genDefaults(p).dfmt === 'day' ? 'day' : 'month'; }
 function dShow(p, d) { if (!d) return ''; return (dfmt(p) === 'day' ? (d.getDate() < 10 ? '0' : '') + d.getDate() + ' ' : '') + M3[d.getMonth()] + ' ' + d.getFullYear(); }
 function calShow(p, it) { return dShow(p, s2d(it.calDate || (p.info && p.info.cal))); }
 function dueMon(p, it) { var d = dueDate(p, it); return d ? dShow(p, d) : ''; }
-function dueShort(p, it) { var d = dueDate(p, it); return d ? MON[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2) : ''; }
+/* receipt letters write the month the way the real ATR letters do: Feb.2026, Dec.2025, May 2026, June 2026 */
+function lMY(d, add) { return ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May ', 'June ', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'][d.getMonth()] + (d.getFullYear() + (add || 0)); }
+function dueShort(p, it) { var d = dueDate(p, it); return d ? lMY(d) : ''; }
 
 function deriveCal(it) { var o = it.old; if (!o || !(o.points || []).length || o.crPts) return false; o.crPts = 1; var f = o.fields || (o.fields = {});
   if (!isNum(it.cMin) && !isNum(it.cMax) && !String(f.calRange || '').replace(/full\s*range/i, '').trim()) { var pv = ptsSpan(o); if (pv) { it.cMin = pv[0]; it.cMax = pv[1]; f.calRange = calRangeText(it); it.crFromPts = 1; } } return true; }
@@ -7594,7 +7598,7 @@ function certXlsx(p, its) { var sheets = certSheets(p, its), nm = ((its.length =
 /* a code always on one line: the longer it is, the smaller its letters */
 function cdFs(c) { var L = String(c || '').length; return L > 22 ? ' style="font-size:6.5pt"' : L > 17 ? ' style="font-size:7.5pt"' : L > 13 ? ' style="font-size:8.5pt"' : ''; }
 function letterHtml(p, lid) { var all = buildAll(p), inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0, cal = s2d(inf.cal);
-  var mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
+  var mm = cal ? lMY(cal, 0) : '', dd = cal ? lMY(cal, 1) : '';
   var noP = prNoCol(p, lid); (lid === 'xq' ? coverGroups(p) : all.groups).forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '')) return; n++; var lp = prLP(p, gr, it, lid), pr = lp.t; if (lp.v != null) tot += lp.v; if (lp.star) rows.star = 1;
     var dsc0 = (gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || ''); rows.lines = rows.lines || []; rows.lines.push(Math.max(1, Math.ceil(dsc0.length / 46)));
     rows.push('<tr><td>' + n + '</td><td class="l">' + esc((gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || '')) + '</td><td class="cd"' + cdFs(it.code || it.serial || '') + '>' + esc(it.code || it.serial || '') + '</td><td>' + mm + '</td><td>' + (dueShort(p, it) || dd) + '</td><td class="cn">' + esc(it.certNo || '') + '</td>' + (noP ? '' : '<td>' + esc(pr || (lid === 'xq' ? '' : 'Lump sum')) + (lp.star ? ' *' : '') + '</td>') + '</tr>'); }); });
