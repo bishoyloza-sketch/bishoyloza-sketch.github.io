@@ -738,7 +738,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v463';
+var APP_V = 'v464';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -5692,6 +5692,10 @@ var REF_PREF = [
   [/hepa|\bdop\b/i, [/aerosol\s*photometer/i, /laskin|aerosol\s*generator/i]],
   [/pipette|burette|cylinder|pycnometer|volumetric/i, [/weight\s*balance|balance\s*5\s*digits/i, /digital\s*thermometer\s*&\s*probe/i]],
   [/sound/i, [/sound\s*level\s*meter/i]],
+  /* checked on real certificates 2024–2026: RPM → Amprobe TACH20 tachometer (10EC-6509-2026, 11-471-2026); timers → stop watch (10EP-2832-2026, 10EP-2990-2026); ORP → Hanna HI7021L 240 mV solution (10EG-161-2026) */
+  [/\brpm\b|r\.p\.m|tacho|rotational\s*speed/i, [/tachometer/i]],
+  [/\btimer\b|stop\s*watch/i, [/stop\s*watch/i]],
+  [/\borp\b|redox/i, [/\borp\b|redox/i]],
   [/safety\s*valve|pressure\s*switch|pressure\s*gauge|pressure\s*transmitter|^pressure|manometer/i, [/portable\s*pressure\s*calibrator(?!.*700)|digital\s*pressure\s*gauge/i]]];
 var REF_BAN = [[/air\s*velocity|anemometer|\blaf\b|laminar/i, /capture\s*hood|flow\s*-\s*matrix|pitot/i], [/flow\s*meter|flowmeter|rotameter/i, /^calibration\s*kit$/i], [/hepa|\bdop\b/i, /filter\s*integrity\s*tester/i], [/chlorine|conductiv|ph\b|redox|orp/i, /heating\s*block|metal\s*block/i], [/pressure|valve|switch/i, /analog\s*pressure\s*gauge/i], [/load\s*cell/i, /weight\s*balance/i], [/\bbalance\b|\bscale\b|checkweigh/i, /weight\s*balance|balance\s*5\s*digits|digital\s*balance/i]];
 function refPrefFix(p, it) { if (it.refUser) return false; var d = String(it.description || '') + ' ' + String(((it.old || {}).fields || {}).description || ''), ds = labDevices(), ch = false;
