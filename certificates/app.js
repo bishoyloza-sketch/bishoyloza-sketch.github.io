@@ -738,7 +738,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v458';
+var APP_V = 'v459';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -5659,6 +5659,7 @@ function autoRefsSoon(p) { if (ARS.busy[p.id]) return; var ver = labDevices().le
     if (i < todo.length) return setTimeout(step, 15); ARS.busy[p.id] = 0; if (got) { saveProjects(); if (S.cur === p.id && !sheetFn) qRender(); } }; setTimeout(step, 50); }
 /* the reference each kind of certificate really uses in this lab – checked against the lab's equipment list; a wrong pick (a dry block for chlorine, an analog gauge as a pressure standard, a balance for a load cell) never happens */
 var REF_PREF = [
+  [/air\s*velocity|anemometer|\blaf\b|laminar/i, [/digital\s*anemometer|anemometer/i]],
   [/torque/i, [/single\s*weight|weight\s*set/i, /digital\s*caliper/i]],
   [/load\s*cell|hardness/i, [/single\s*weight|stainless\s*weight\s*kit|weight\s*set/i]],
   [/chlorine/i, [/free\s*chlorine/i]],
@@ -5674,7 +5675,7 @@ var REF_PREF = [
   [/pipette|burette|cylinder|pycnometer|volumetric/i, [/weight\s*balance|balance\s*5\s*digits/i, /digital\s*thermometer\s*&\s*probe/i]],
   [/sound/i, [/sound\s*level\s*meter/i]],
   [/safety\s*valve|pressure\s*switch|pressure\s*gauge|pressure\s*transmitter|^pressure|manometer/i, [/portable\s*pressure\s*calibrator(?!.*700)|digital\s*pressure\s*gauge/i]]];
-var REF_BAN = [[/flow\s*meter|flowmeter|rotameter/i, /^calibration\s*kit$/i], [/hepa|\bdop\b/i, /filter\s*integrity\s*tester/i], [/chlorine|conductiv|ph\b|redox|orp/i, /heating\s*block|metal\s*block/i], [/pressure|valve|switch/i, /analog\s*pressure\s*gauge/i], [/load\s*cell/i, /weight\s*balance/i], [/\bbalance\b|\bscale\b|checkweigh/i, /weight\s*balance|balance\s*5\s*digits|digital\s*balance/i]];
+var REF_BAN = [[/air\s*velocity|anemometer|\blaf\b|laminar/i, /capture\s*hood|flow\s*-\s*matrix|pitot/i], [/flow\s*meter|flowmeter|rotameter/i, /^calibration\s*kit$/i], [/hepa|\bdop\b/i, /filter\s*integrity\s*tester/i], [/chlorine|conductiv|ph\b|redox|orp/i, /heating\s*block|metal\s*block/i], [/pressure|valve|switch/i, /analog\s*pressure\s*gauge/i], [/load\s*cell/i, /weight\s*balance/i], [/\bbalance\b|\bscale\b|checkweigh/i, /weight\s*balance|balance\s*5\s*digits|digital\s*balance/i]];
 function refPrefFix(p, it) { if (it.refUser) return false; var d = String(it.description || '') + ' ' + String(((it.old || {}).fields || {}).description || ''), ds = labDevices(), ch = false;
   REF_BAN.forEach(function (b) { if (!b[0].test(d)) return; var keep = (it.refs || []).filter(function (id) { var x = ds.filter(function (q) { return q.id === id; })[0]; return !(x && b[1].test(x.description || '')); }); if (keep.length !== (it.refs || []).length) { it.refs = keep; ch = true; } });
   for (var i = 0; i < REF_PREF.length; i++) { if (!REF_PREF[i][0].test(d) || (i === REF_PREF.length - 1 && /differential|\bdp\b|magnehelic/i.test(d))) continue; var hi = numv(it.cMax || it.rMax), pick = [];
