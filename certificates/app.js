@@ -738,7 +738,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v450';
+var APP_V = 'v451';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2496,7 +2496,7 @@ function poRead(file) { /* a File/Blob → { lines, number, date, b64 } */
   return file.arrayBuffer().then(function (buf) { var b64 = ''; if (buf.byteLength < 600000) { var u = new Uint8Array(buf), s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); b64 = btoa(s); }
     return LOC.pdf(buf.slice(0)).then(function (pages) { var r = poParse(pages.slice(0, 2).map(function (pg) { return pg.join('\n'); }).join('\n')); r.b64 = b64; return r; }).catch(function () { return { lines: [], b64: b64 }; }); }); }
 /* a PO found on SharePoint or attached earlier, whose lines were never read: read them once by itself */
-var POAR = {}; function poAutoRead(p) { var o = p.order || {}; if (o.fileName && !o.number) { var fn = String(o.fileName).match(/(?:^|[^A-Za-z0-9])([A-Z]?\d{6,})(?![0-9])/); if (fn) o.number = fn[1]; }
+var POAR = {}; function poAutoRead(p) { var o = p.order || {}; poHeal(p); if (o.fileName && !o.number) { var fn = String(o.fileName).match(/(?:^|[^A-Za-z0-9])([A-Z]?\d{6,})(?![0-9])/); if (fn) o.number = fn[1]; }
   if ((o.items || []).length || !(o.fileId && o.driveId || o.b64 || o.photo || o.fileName)) return; var K = p.id + '|' + (o.fileId || o.photo || o.fileName); if (POAR[K] && Date.now() - POAR[K] < 60000) return; POAR[K] = Date.now();
   /* every place the PO can be: kept text, the file on SharePoint, the copy kept on this device, or found again by its name */
   var fromB64 = function (b64) { return poRead(new Blob([Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); })], { type: 'application/pdf' })); };
@@ -2524,6 +2524,8 @@ function poAuto(p) { var o = p.order || {}, L = (o.items || []).filter(function 
   pairs.sort(function (x, y) { return y.s - x.s; }); var done = {};
   pairs.forEach(function (q) { if (done[q.it.id]) return; var cap = q.l.qty == null ? 1e9 : q.l.qty; if ((use[q.l.no] || 0) >= cap) return; done[q.it.id] = 1; use[q.l.no] = (use[q.l.no] || 0) + 1; q.it.poLine = q.l.no; });
   its.forEach(function (it) { if (!it.poSet && !done[it.id]) it.poLine = null; }); }
+/* while the PO lines are not read, nothing is moved off the receipt letter – items wrongly sent to the quotation letter come back (only those the user did not place himself) */
+function poHeal(p) { var o = p.order || {}; if (p.orderType !== 'po' || (o.items || []).length) return 0; var n = 0; (p.items || []).forEach(function (it) { if (it.letterId === 'xq' && !it.poSet) { it.letterId = ''; n++; } }); if (n) { p.letters = (p.letters || []).filter(function (x) { return x.id !== 'xq' || (p.items || []).some(function (it) { return it.letterId === 'xq'; }); }); saveProjects(); } return n; }
 /* prices and letters follow the PO: matched → its unit price on the main letter; extra → the quotation letter */
 function poApply(p) { var o = p.order || {}; if (!(o.items || []).length) return; var g = genDefaults(p), by = {}; o.items.forEach(function (l) { by[l.no] = l; }); var anyX = false;
   certList(p).forEach(function (it) { if (it.letterId && it.letterId !== 'xq') return; var l = it.poLine != null ? by[it.poLine] : null;
@@ -4395,7 +4397,7 @@ function prLP(p, gr, it, lid) { var m = prMode(p); if (lid === 'xq' || m === 'ce
 function prTotalLine(p, lid, tot) { var m = prMode(p), ref = String(p.prRef || '').trim(), rf = ref ? 'according to price offer No. ' + ref : '';
   if (lid === 'xq' || m === 'cert' || m === 'mach') return null; if (m === 'later') return rf ? { t: 'Total price ' + rf, v: null } : null; var v = numv(p.prTotal || '');
   if (isNaN(v)) return rf ? { t: 'Total price ' + rf, v: null } : null; return { t: 'Total price without VAT:  ' + v.toLocaleString('en') + ' EGP' + (rf ? ' – ' + rf : ''), v: v }; }
-function letterData(p, groups, lid, items) { var inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0, ok = {}; (items || []).forEach(function (it) { ok[it.id] = 1; });
+function letterData(p, groups, lid, items) { try { poHeal(p); } catch (e) {} var inf = p.info, g = genDefaults(p), o = letterOrder(p, lid), rows = [], tot = 0, n = 0, ok = {}; (items || []).forEach(function (it) { ok[it.id] = 1; });
   var cal = s2d(inf.cal), mm = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear()).slice(2) : '', dd = cal ? MON[cal.getMonth()] + ' ' + String(cal.getFullYear() + 1).slice(2) : '';
   (lid === 'xq' ? coverGroups(p) : groups).forEach(function (gr) { gr.items.forEach(function (it) { if ((it.letterId || '') !== (lid || '') || (items && !ok[it.id])) return; n++; var lp = prLP(p, gr, it, lid), pr = lp.t; if (lp.v != null) tot += lp.v; if (lp.star) rows.star = 1;
     var rw = [String(n), (gr.machine ? gr.machine.name + ' – ' : '') + (it.description || (it.old && it.old.fields.description) || ''), it.code || it.serial || '', mm, dueShort(p, it) || dd, it.certNo]; if (!prNoCol(p, lid)) rw.push((pr || (lid === 'xq' ? '' : 'Lump sum')) + (lp.star ? ' *' : '')); rows.push(rw); }); });
@@ -7971,7 +7973,7 @@ function holRate(p) { if (p.holRate > 0) return +p.holRate; var m = LS.get('holR
 function itHol(p, it) { if (it.hol === 0) return ''; if (it.hol === 1) return it.holWhy || 'Holiday work'; return holDay(it.calDate || (p.info || {}).cal); }
 function rateTx(r) { return '×' + String(+r); }
 /* what the letter prints for an item: { v: number or null, t: text, star } */
-function itLetterPrice(p, it, lid) { var g = genDefaults(p), b = g.prices[it.id], h = itHol(p, it), r = holRate(p), onPO = p.orderType === 'po' && it.poLine != null && (it.letterId || '') === '';
+function itLetterPrice(p, it, lid) { var g = genDefaults(p), b = g.prices[it.id]; if (!isNum(b) && it.letterId !== 'xq') { try { var c0 = ctGet(p), r0 = c0 && p.orderType !== 'po' && ctRow(p, it, c0); if (r0) b = ctPrice(p, r0); } catch (e) {} } var h = itHol(p, it), r = holRate(p), onPO = p.orderType === 'po' && it.poLine != null && (it.letterId || '') === '';
   if (!isNum(b)) return { v: null, t: String(b || '') || (it.letterId === 'xq' ? '' : 'Lump sum'), star: false }; var v = numv(b);
   if (h && !onPO && r !== 1) { var x = Math.round(v * r * 100) / 100; return { v: x, t: x.toLocaleString('en'), star: true }; }
   return { v: v, t: String(b), star: false }; }
