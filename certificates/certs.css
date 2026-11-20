@@ -2053,3 +2053,4 @@ body.hasTb #tbar{z-index:95}
 #todayCard{border-top:3px solid #0A66C2!important}
 .tdi{background:rgba(255,255,255,.72)!important;border:1px solid rgba(10,102,194,.10)!important}.tdi:hover{background:#fff!important}
 .tdx{background:rgba(10,102,194,.08)!important;color:#13294B!important}
+.tbl2{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}.tubo{text-align:left;border:1px solid var(--line);background:#fff;border-radius:11px;padding:9px 12px;cursor:pointer;font:inherit}.tubo b{display:block;font-size:13.5px;color:var(--navy)}.tubo small{color:var(--muted);font-size:12px}.tubo.on{border-color:#0A66C2;background:#EEF5FD;box-shadow:inset 0 0 0 1px #0A66C2}
