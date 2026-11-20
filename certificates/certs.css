@@ -1986,3 +1986,37 @@ body.hasTb #tbar{z-index:95}
 .fxqp{width:90px;height:26px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12.5px;margin-left:4px}
 .fxpr{flex-wrap:wrap}.fxadd{flex-basis:100%;font-size:11px;color:var(--muted);display:flex;gap:4px;align-items:center;cursor:pointer;margin-top:2px}.fxadd input{margin:0}
 .fxpr input{flex:1;width:auto!important;min-width:0}
+.cvno{flex-wrap:nowrap!important}.cvno small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cvno .cvnav{flex:none}
+.sgfold summary{cursor:pointer;list-style:none;display:flex;gap:6px;align-items:baseline}.sgfold summary::-webkit-details-marker{display:none}.sgfold summary span{margin-left:auto;font-size:12px;color:#8A6D00}.sgfold[open] summary span{display:none}
+
+/* messages – light and quiet, like an Apple alert: a soft blurred backdrop, a small frosted card, small buttons */
+.dlg:not(.fpv):not(#cdBigX){background:rgba(18,28,48,.18);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:dlgIn .18s ease-out}
+.dlg:not(.fpv):not(#cdBigX)>div{background:rgba(255,255,255,.84);-webkit-backdrop-filter:blur(28px) saturate(1.8);backdrop-filter:blur(28px) saturate(1.8);border:1px solid rgba(255,255,255,.7);border-radius:16px;box-shadow:0 18px 50px rgba(15,25,45,.18),0 2px 6px rgba(15,25,45,.06);padding:18px 18px 14px;max-width:380px}
+.dlg:not(.fpv) h3{font-size:16px;font-weight:600;letter-spacing:-.01em;color:#111827;margin:0 0 6px}
+.dlg:not(.fpv) p{font-size:13.5px;line-height:1.45;color:#4B5563;margin:0 0 12px}
+.dlg:not(.fpv) .btn{height:34px;min-height:34px;font-size:13.5px;border-radius:9px;padding:0 14px}
+.dlg:not(.fpv) .cf .btn{min-width:84px;height:34px}
+.dlg:not(.fpv) .inp{height:36px;font-size:14px;border-radius:9px}
+@keyframes dlgIn{from{opacity:0}to{opacity:1}}
+.dlg:not(.fpv)>div{animation:dlgPop .2s cubic-bezier(.2,.9,.3,1.2)}@keyframes dlgPop{from{transform:scale(1.06);opacity:0}to{transform:none;opacity:1}}
+/* the simple question: centred text, two quiet buttons split by a hairline */
+.dlg.al>div{max-width:300px;padding:18px 0 0;text-align:center;overflow:hidden}
+.dlg.al h3,.dlg.al p{padding:0 18px}
+.dlg.al .cf{display:flex;gap:0;margin:0;border-top:1px solid rgba(60,60,67,.18)}
+.dlg.al .cf .btn{flex:1;min-width:0;height:44px;border-radius:0;background:transparent!important;border:0!important;box-shadow:none!important;color:#0A66C2!important;font-size:15px;font-weight:500}
+.dlg.al .cf .btn+.btn{border-left:1px solid rgba(60,60,67,.18)!important;font-weight:600}
+.dlg.al .cf .btn:hover{background:rgba(0,0,0,.04)!important}
+/* the "item added" card */
+.dlg .mcask .btn{height:36px!important;font-size:13.5px}
+.dlg .mcask .mcok{width:36px;height:36px;font-size:17px}
+.dlg .mcask h3{font-size:16px}
+/* toast: a small frosted pill */
+#toast{background:rgba(28,32,40,.86)!important;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-radius:12px!important;font-size:13px!important;padding:8px 14px!important;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.dlg.al .cf .btn.rd{color:#D92D20!important}
+.dlg.al>div{max-width:290px!important;padding:18px 0 0!important}.dlg.al .cf{margin:0!important;padding:0!important;width:100%}
+
+.pkh.tm,.pkr.tm{grid-template-columns:minmax(130px,1fr) minmax(200px,1.5fr) 100px 190px 110px}.tmwk b{white-space:nowrap}
+.tmw{font-size:12.5px;color:#4B5563}.tmw b{color:#111827;font-weight:600}.tmon{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22C55E;margin-right:5px;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+.tmwk{display:flex;align-items:flex-end;gap:8px}.tmwk em{display:flex;align-items:flex-end;gap:2px;height:24px}.tmwk u{display:block;width:6px;background:#9CC3EA;border-radius:2px;text-decoration:none}
+.tmgo{grid-column:1/-1;justify-self:start;font-size:12px}
+@media (max-width:760px){.pkh.tm{display:none}.pkr.tm{grid-template-columns:1fr 1fr}}
