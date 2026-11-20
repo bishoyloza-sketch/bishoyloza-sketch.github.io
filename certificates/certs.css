@@ -1848,3 +1848,17 @@ td.tpla{white-space:nowrap}td.tpla .btn{margin:1px}
 table.cdq{width:100%;border-collapse:collapse}table.cdq th{font-size:11px;text-align:left;color:var(--muted,#64748B);padding:4px}table.cdq td{padding:3px 4px;vertical-align:top}table.cdq .fin{padding:6px 8px}
 tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
 @media (max-width:600px){table.cdq thead{display:none}table.cdq tr{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}table.cdq td{padding:0}}
+/* print – one press */
+.prw{display:flex;flex-direction:column;gap:8px}
+.prh{font-weight:700;margin-top:6px}.prh small{font-weight:400;color:var(--muted,#64748B);margin-left:6px}
+.prseg{display:flex;gap:6px;flex-wrap:wrap}.prwide .prs{flex:1;min-width:140px}
+.prs{border:1px solid var(--line,#D6DEE8);background:#fff;border-radius:10px;padding:8px 12px;font:inherit;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;font-weight:600}
+.prs small{font-weight:400;color:var(--muted,#64748B);font-size:12px}
+.prs.on{border-color:var(--navy,#14284B);background:#EEF3FB;box-shadow:inset 0 0 0 1px var(--navy,#14284B)}
+.prrow{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--line,#E3E8EF);border-radius:10px;padding:8px 10px;background:#fff;flex-wrap:wrap}
+.prn{display:flex;flex-direction:column}.prn small{color:var(--muted,#64748B)}.prck{display:flex;gap:6px;align-items:center}
+.prrg{display:flex;gap:10px}.prrg .f{flex:1;margin:0}
+.prplan{background:#F4F7FB;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.prplan i{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--navy,#14284B);color:#fff;font-style:normal;font-size:12px;align-items:center;justify-content:center;margin-right:6px}
+.prs.on{color:#fff;background:var(--navy,#14284B)}.prs.on small{color:#C9D6EA}
+/* the same edit row on every certificate */
+.shedrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}.shedrow>span{font-size:12px;font-weight:700;color:var(--muted,#64748B);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
