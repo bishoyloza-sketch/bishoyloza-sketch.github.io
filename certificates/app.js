@@ -732,7 +732,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v415';
+var APP_V = 'v416';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -4672,7 +4672,56 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !autoDone(genDefa
   var gl = $('#gLet'); if (gl) gl.onclick = function () { openSheet(function () { var pl = plGet(p); return { title: 'Receipt letter', body: '<div class="small" style="margin-bottom:8px">Prices from: <b>' + esc(pl ? pl.name : 'no price list yet') + '</b>' + (pl ? ' (' + pl.rows.length + ' prices)' : '') + ' · <a href="#" id="plCh2">change</a></div><div class="dgrid">' + signerFields(g) + '</div>', foot: '<button class="btn ghost" id="glP">Fill prices</button><button class="btn" id="glX">Done</button>',
       mount: function () { bindSigner(g, function () { renderSheet(); }); $('#glX').onclick = function () { closeSheet(); tGen(p); }; $('#glP').onclick = function () { closeSheet(); pricesThen(p, function () { if (S.cur === p.id && !sheetFn) tGen(p); }, true); }; $('#plCh2').onclick = function (e) { e.preventDefault(); plSheet(p, function () { tGen(p); }); }; } }; }); };
   genBoxes(p);
+  try { mfPage(p, { sp: doSP, pv: pv, pdf: doPdf, zip: doZip, lbl: function () { $('#gLbl').click(); }, ed: function () { var e = $('#gEd'); if (e) e.click(); }, pr: function () { var e = $('#gPr'); if (e) e.click(); }, let: function () { var e = $('#gLet'); if (e) e.click(); } }); } catch (e) { try { console.error('mfPage', e); } catch (x) {} }
 }
+/* ===== Make files – one page: what is MISSING (filled right here, nothing opens on top), what is READY, and one button ===== */
+var MFST = {};
+function mfPage(p, act) { var pm = $('#pm'); if (!pm || pm.querySelector('.mfw')) return; var g = genDefaults(p), inf = ensureInfo(p), L = certList(p), st = MFST[p.id] = MFST[p.id] && MFST[p.id].p === p ? MFST[p.id] : { p: p, as: {}, keys: [] };
+  var A = [], B = [], M = [], again = function () { var y = window.scrollY; tGen(p); window.scrollTo(0, y); };
+  var sug = function (title, sub, f, rec) { A.push(f); return '<button class="spo' + (rec ? ' fwrec' : '') + '" data-mfs="' + (A.length - 1) + '"><b>' + (rec ? '★ ' : '') + title + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</button>'; };
+  var lk = function (title, f) { B.push(f); return '<button class="lk" data-mfl="' + (B.length - 1) + '">' + title + '</button>'; };
+  var man = function (label, val, ph, f, type) { M.push(f); return '<div class="fwm"><label class="f" style="flex:1;margin:0"><span>' + label + '</span><input class="inp" data-mfv="' + (M.length - 1) + '"' + (type ? ' type="' + type + '"' : ' inputmode="decimal"') + ' value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '"></label><button class="btn" data-mfm="' + (M.length - 1) + '">Save</button></div>'; };
+  var done = function (msg) { saveProjects(); if (msg) toast(msg); again(); };
+  var steps = fwSteps(p);
+  /* signatures: the approver is checked here too */
+  if (!String(g.approver || '').trim()) steps.splice(1, 0, { key: 'appr', t: 'Approved by', why: 'Nobody is chosen to approve the certificates', kind: 'appr' });
+  var stepH = function (s) { var h = '';
+    if (s.kind === 'appr') { var ppl = (S.people || []).filter(function (u) { return u.role === 'admin' || u.role === 'engineer'; });
+      h = '<div class="spol">' + ppl.map(function (u) { var pos = (POS() || {})[u.name] || ''; return sug(esc(u.name), esc(pos), function () { g.approver = 'Eng. ' + String(u.name).replace(/^Eng\.\s*/i, ''); if (pos) g.approverPos = pos; done('Approved by ' + u.name); }, /ayman/i.test(u.name)); }).join('') + '</div>'; }
+    else { try { h = fwKind(p, s, st, sug, lk, man, again, done, 1); } catch (e) { h = '<div class="note warn">' + esc(e.message) + '</div>'; } }
+    if (s.load && !st.as[s.key] && !st.as[s.key + '#busy']) { st.as[s.key + '#busy'] = 1; s.load().then(function (r) { st.as[s.key] = r || { none: 1 }; }).catch(function () { st.as[s.key] = { none: 1 }; }).then(function () { st.as[s.key + '#busy'] = 0; if (S.cur === p.id && p.tab === 'gen' && !sheetFn) again(); }); }
+    return '<div class="mfs" data-mfk="' + esc(s.key) + '"><div class="mfsh"><span class="mfx">!</span><div><b>' + esc(s.t) + '</b>' + (s.why ? '<small>' + esc(s.why) + '</small>' : '') + '</div></div><div class="mfsb">' + h + '</div></div>'; };
+  var a0 = L[0] && L[0].certNo, z0 = L.length && L[L.length - 1].certNo, noRefSug = p.items.filter(function (it) { return it.refAuto; }).length, noPrice = L.filter(function (it) { return !String(g.prices[it.id] || '').trim(); }).length, tot = L.reduce(function (a, it) { var v = parseFloat(String(g.prices[it.id] || '').replace(/,/g, '')); return a + (isFinite(v) ? v : 0); }, 0);
+  var rdy = function (lab, val, ch) { return '<div class="mfr"><span class="mfl">' + lab + '</span><span class="mfv">' + val + '</span>' + (ch || '') + '<span class="mfok">✓</span></div>'; };
+  var dateIn = function (k) { return '<input class="inp mfd" type="date" data-mfdate="' + k + '" value="' + esc(inf[k] || '') + '">'; };
+  var keys = {}; steps.forEach(function (s) { keys[s.kind] = 1; keys[s.key] = 1; });
+  var ready = [];
+  if (!keys.dates) ready.push('<div class="mfr"><span class="mfl">Dates</span><span class="mfv mfdates"><label>Calibration ' + dateIn('cal') + '</label><label>Work order ' + dateIn('wo') + '</label><label>Issue ' + dateIn('iss') + '</label></span><span class="mfok">✓</span></div>');
+  if (!keys.tech && !keys.appr) ready.push(rdy('Signatures', esc(inf.tech || '') + ' <small>· ' + esc(g.techPos || 'Calibration') + '</small> &nbsp;·&nbsp; ' + esc(g.approver || '') + ' <small>· ' + esc(g.approverPos || '') + '</small>', lk('Change', function () { act.ed && act.ed(); })));
+  if (!keys.pfx && !keys.start) ready.push(rdy('Certificate numbers', esc(a0 || certNo(g, parseInt(g.start, 10))) + (z0 && z0 !== a0 ? ' → ' + esc(z0) : '') + ' <small>· ' + L.length + ' certificate' + (L.length === 1 ? '' : 's') + '</small>', lk('Change', function () { act.ed && act.ed(); })));
+  if (!keys.addr) ready.push(rdy('Customer', esc(coName(p)) + ' <small>· ' + esc(String(g.addr || '').slice(0, 60)) + '</small>'));
+  if (!keys.refs) ready.push(rdy('References', 'Chosen for every certificate' + (noRefSug ? ' <small>· ' + noRefSug + ' suggested by the app</small>' : ''), lk(noRefSug ? 'Review' : 'See', function () { gotoStep(p, 'refs'); })));
+  if (!steps.some(function (s) { return s.kind === 'price'; })) ready.push(rdy('Prices & letter', noPrice ? noPrice + ' without a price' : tot ? tot.toLocaleString('en-US') + ' EGP <small>· before the discount</small>' : 'No prices needed', lk('Prices', function () { act.pr && act.pr(); }) + lk('Letter', function () { act.let && act.let(); })));
+  if (!steps.some(function (s) { return /^(item|old|ph)$/.test(s.kind); })) ready.push(rdy('Certificates', 'Data and readings complete', lk('Open', function () { p.tab = 'cert'; p.ci = 0; p.cv = null; saveProjects(); render(); window.scrollTo(0, 0); })));
+  var n = steps.length, nSel = (function () { try { return mkList(p, p.mkSel || mkDefault(p)).length; } catch (e) { return L.length; } })();
+  var html = '<div class="mfw"><div class="mfst ' + (n ? 'bad' : 'good') + '"><span class="mfc">' + (n || '✓') + '</span><div><b>' + (n ? n + ' thing' + (n > 1 ? 's' : '') + ' missing before the files' : 'Everything is ready') + '</b><small>' + (n ? 'Fill them right here – the star (★) is the suggestion' : nSel + ' certificate' + (nSel === 1 ? '' : 's') + ' · press Make the files') + '</small></div></div>' +
+    (n ? '<h3 class="mfh">Missing</h3><div class="mfcard">' + steps.map(stepH).join('') + '</div>' : '') +
+    (ready.length ? '<h3 class="mfh">Ready ✓</h3><div class="mfcard">' + ready.join('') + '</div>' : '') +
+    '<div class="mfgo"><button class="mfbig" id="mfMake"' + (n ? ' disabled' : '') + '>Make the files<small>Word on SharePoint – covers, certificates and the receipt letter</small></button><button class="mfsm" id="mfPv">Preview</button><button class="mfsm" id="mfLb">Labels</button></div>' +
+    (n ? '<div class="mfany"><button class="lk" id="mfAny">Make them anyway (with what is missing)</button></div>' : '') +
+    '<details class="mfmore"' + (st.more ? ' open' : '') + '><summary>More – which certificates, print, PDF, Word (.zip), sent letters</summary><div class="mfold"></div></details></div>';
+  var keep = [].slice.call(pm.children); pm.insertAdjacentHTML('afterbegin', html); var old = pm.querySelector('.mfold'); keep.forEach(function (k) { old.appendChild(k); });
+  var fb = old.querySelector('.fwbar'); if (fb) fb.style.display = 'none';
+  /* the old boxes are not needed to confirm anything any more – the files are made from here */
+  $$('.mfw [data-mfs]').forEach(function (b) { b.onclick = function () { var f = A[+b.dataset.mfs]; if (f) f(); }; });
+  $$('.mfw [data-mfl]').forEach(function (b) { b.onclick = function () { var f = B[+b.dataset.mfl]; if (f) f(); }; });
+  $$('.mfw [data-mfm]').forEach(function (b) { var v = pm.querySelector('[data-mfv="' + b.dataset.mfm + '"]'); b.onclick = function () { var x = String(v.value || '').trim(); if (!x) return toast('Write it first', true); var f = M[+b.dataset.mfm]; if (f) f(x); }; if (v) v.onkeydown = function (e) { if (e.key === 'Enter') b.click(); }; });
+  $$('.mfw [data-mfdate]').forEach(function (e) { e.onchange = function () { if (!e.value) return; inf[e.dataset.mfdate] = e.value; done('Saved'); }; });
+  var md = pm.querySelector('.mfmore'); if (md) md.ontoggle = function () { st.more = md.open; };
+  $('#mfMake').onclick = function () { act.sp && act.sp(); };
+  $('#mfPv').onclick = function () { act.pv && act.pv(); };
+  $('#mfLb').onclick = function () { act.lbl && act.lbl(); };
+  var any = $('#mfAny'); if (any) any.onclick = function () { dialog('Make the files anyway?', n + ' still missing:<br>' + steps.slice(0, 8).map(function (x) { return esc(x.t); }).join('<br>'), 'Make them', 'Back').then(function (y) { if (y && act.sp) act.sp(); }); }; }
 /* fewer certificates than the PO orders: say it once, the user decides */
 function poUnder(p) { if (p.orderType !== 'po' || !((p.order || {}).items || []).length) return []; var s = poSum(p); return (s.open || []).filter(function (q) { return !q.l.grp && q.l.qty != null; }); }
 function poUnderSig(L) { return L.map(function (q) { return q.l.no + ':' + q.left; }).join('|'); }
@@ -4839,9 +4888,9 @@ function fixWiz(p, opt) { opt = opt || {}; var st = FW[p.id] && FW[p.id].p === p
       if ($('#fwGo')) $('#fwGo').onclick = function () { var g0 = st.go; closeSheet(); g0 && g0(); };
       if (s && s.load && !st.as[s.key + '#busy'] && !st.as[s.key]) { st.as[s.key + '#busy'] = 1; s.load().then(function (r) { st.as[s.key] = r || { none: 1 }; }).catch(function () { st.as[s.key] = { none: 1 }; }).then(function () { st.as[s.key + '#busy'] = 0; if (sheetFn === fn) renderSheet(); }); } } }; };
   steps(); re(); }
-function fwKind(p, s, st, sug, lk, man, re, done) { var inf = ensureInfo(p), g = genDefaults(p), h = '', L = function (t) { return '<div class="sec" style="margin:10px 0 0"><h2>' + t + '</h2></div><div class="spol">'; }, E = '</div>';
+function fwKind(p, s, st, sug, lk, man, re, done, inl) { var inf = ensureInfo(p), g = genDefaults(p), h = '', L = function (t) { return '<div class="sec" style="margin:10px 0 0"><h2>' + t + '</h2></div><div class="spol">'; }, E = '</div>';
   var openCert = function (it) { var ix = certList(p).indexOf(it); closeSheet(); p.stage = 'done'; p.tab = 'cert'; p.ci = ix < 0 ? 0 : ix; p.cv = null; saveProjects(); render(); window.scrollTo(0, 0); };
-  var back = function () { fixWiz(p); };
+  var back = function () { if (inl) { closeSheet(); render(); } else fixWiz(p); };
   if (s.kind === 'dates') { var D = fwDates(p), rows = [], today = d2s(new Date());
     if (!inf.cal || /Calibration date is/.test(s.why)) rows.push(sug('Calibration date: today ' + dmy(today), '', function () { inf.cal = today; done('Calibration date ' + dmy(today)); }, !inf.cal));
     if (inf.cal) { var need = function (k, rx) { return !inf[k] || rx.test(s.why); }, all = {}; if (need('wo', /Work order/)) all.wo = D.wo; if (need('iss', /Date of issue/)) all.iss = D.iss[0];
