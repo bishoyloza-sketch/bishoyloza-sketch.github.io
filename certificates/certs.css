@@ -1864,3 +1864,8 @@ tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
 .shedrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px}.shedrow>span{font-size:12px;font-weight:700;color:var(--muted,#64748B);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
 
 .tcount{display:block;font-size:10.5px;opacity:.6;margin-top:3px;font-style:italic}
+/* Back / Undo / Redo: the word under the icon, so everyone knows what they do */
+#tbar .tbb.lab{flex-direction:column;gap:1px;height:46px;width:auto!important;min-width:42px;padding:0 6px!important;justify-content:center}
+#tbar .tbb.lab span{display:block!important;font-size:10.5px!important;line-height:1;font-weight:700!important;letter-spacing:.2px}
+#tbar .tbb.lab[data-tb="back"]{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);margin-right:6px}
+#tbar .tbb.lab[data-tb="back"]:hover{background:rgba(255,255,255,.26)}
