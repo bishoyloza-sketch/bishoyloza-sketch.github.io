@@ -43,7 +43,6 @@ function doPost(e) {
     if (req.action === 'save') return json_({ ok: true, data: save_(req.entry || {}, req.by || 'claude') });
     if (req.action === 'datasheet') return json_({ ok: true, data: lookup_(req.maker, req.model, req.description, !!req.fresh) });
     if (req.action === 'photo') return json_({ ok: true, data: photo_(req) });
-    if (req.action === 'photoGet') return json_({ ok: true, data: photoGet_(req.id) });
     throw new Error('Unknown action');
   } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
 }
@@ -113,9 +112,7 @@ function company_(id, name, official, fresh) {
 }
 
 /* photos of a customer's instrument (nameplate + display): kept in the Drive folder "Akhnaton – Device photos",
-   read by Gemini, so everybody on the team gets the same photos and the same reading – no Claude needed */
-function photoDir_() { var P = PropertiesService.getScriptProperties(), id = P.getProperty('PHOTO_DIR'); if (id) { try { return DriveApp.getFolderById(id); } catch (x) {} }
-  var f = DriveApp.createFolder('Akhnaton – Device photos'); P.setProperty('PHOTO_DIR', f.getId()); return f; }
+   read by Gemini (the photos themselves are kept by the jobs server), so everybody on the team gets the same photos and the same reading – no Claude needed */
 function photo_(req) {
   var imgs = (req.images || []).slice(0, 8); if (!imgs.length) throw new Error('No photos');
   var ids = []; /* the photos themselves are kept by the jobs server (it already has Drive) */
@@ -134,5 +131,3 @@ function photo_(req) {
   var o = {}; try { o = m ? JSON.parse(m[0]) : {}; } catch (x) { o = {}; }
   return { ids: ids, read: o };
 }
-function photoGet_(id) { var f = DriveApp.getFileById(id), ok = false, it = f.getParents(); while (it.hasNext()) if (it.next().getId() === photoDir_().getId()) ok = true;
-  if (!ok) throw new Error('Not a device photo'); return { b64: Utilities.base64Encode(f.getBlob().getBytes()) }; }
