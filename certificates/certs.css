@@ -2034,3 +2034,12 @@ body.hasTb #tbar{z-index:95}
 .sqcp{font-size:11.5px;margin-left:8px;padding:0}.sqrh{display:flex;align-items:center;gap:4px}.sqrh .sqr{margin-left:auto}
 .inp.sqbad{border-color:#E8A317!important;background:#FFF8E6}.sqw{font-size:11.5px;color:#B54708;margin-top:3px;line-height:1.35}.sqw:empty{display:none}
 .sqf input::placeholder{color:#B4BCC8;font-size:12px}
+/* bottom bars – one quiet look like the messages: frosted bar, light buttons, blue text; the main action only bolder with a soft blue tint */
+.wiz-foot,.sheet-f{background:rgba(248,249,251,.82)!important;-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);border-top:1px solid rgba(60,60,67,.12)!important;box-shadow:none!important}
+.wiz-foot .btn,.sheet-f .btn{height:36px!important;min-height:36px;border-radius:10px!important;font-size:13.5px!important;font-weight:500!important;background:rgba(255,255,255,.8)!important;border:1px solid rgba(60,60,67,.16)!important;color:#0A66C2!important;box-shadow:none!important;transition:background .15s}
+.wiz-foot .btn:hover:not([disabled]),.sheet-f .btn:hover:not([disabled]){background:#fff!important;border-color:rgba(10,102,194,.35)!important}
+.wiz-foot .btn:not(.ghost),.sheet-f .btn:not(.ghost){background:rgba(10,102,194,.10)!important;border-color:rgba(10,102,194,.28)!important;font-weight:600!important}
+.wiz-foot .btn.danger,.sheet-f .btn.danger,.wiz-foot .btn.red,.sheet-f .btn.red,.wiz-foot #cfDel,.sheet-f .btn.del{color:#D92D20!important}
+.wiz-foot .btn[disabled],.sheet-f .btn[disabled]{opacity:.4}
+.wiz-foot [data-mt]{height:36px!important;border-radius:10px!important;font-size:13.5px!important;font-weight:500!important;background:rgba(255,255,255,.8)!important;border:1px solid rgba(60,60,67,.16)!important;color:#0A66C2!important;box-shadow:none!important;padding:0 14px}
+.wiz-foot [data-mt].mtdel,.wiz-foot .btn.danger,.sheet-f .btn.danger{color:#D92D20!important;background:rgba(255,255,255,.8)!important;border-color:rgba(217,45,32,.25)!important}
