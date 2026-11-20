@@ -1812,3 +1812,4 @@ td.tpla{white-space:nowrap}td.tpla .btn{margin:1px}
 .mfany{text-align:center;margin-top:6px}.mfmore{margin-top:14px}.mfmore>summary{cursor:pointer;color:#1F5FAE;font-weight:600;padding:8px 2px}.mfold{margin-top:8px}
 @media (max-width:600px){.mfl{flex-basis:100%}.mfsb{margin-left:0}.mfgo{flex-wrap:wrap}.mfbig{flex-basis:100%}}
 .mfs[data-mfk="dates"] .spo:nth-child(n+3){display:none}
+.mfsm small{display:block;font:500 10.5px system-ui;color:#5B6B80;margin-top:2px}
