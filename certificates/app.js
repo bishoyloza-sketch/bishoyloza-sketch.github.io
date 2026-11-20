@@ -5657,13 +5657,18 @@ function autoRefsSoon(p) { if (ARS.busy[p.id]) return; var ver = labDevices().le
 /* the reference each kind of certificate really uses in this lab – checked against the lab's equipment list; a wrong pick (a dry block for chlorine, an analog gauge as a pressure standard, a balance for a load cell) never happens */
 var REF_PREF = [
   [/load\s*cell|torque|hardness/i, [/single\s*weight|stainless\s*weight\s*kit|weight\s*set/i]],
+  [/\bbalance\b|\bscale\b|weigh|checkweigh|\bsqc\b|\bam\s?\d{2,3}\b/i, [/weight\s*set/i]],
+  [/calib(er|re)\b|caliper|vernier|micrometer/i, [/gauge\s*block/i]],
+  [/dissolution/i, [/digital\s*thermometer\s*&\s*probe/i, /digital\s*tachometer/i, /stop\s*watch/i]],
+  [/lyophili[sz]er|lypholi[sz]er|freeze\s*dr|water\s*bath|\bgc\b|chromatograph|autoclave|sterili[sz]er|oven|incubator|stability\s*chamber|endosafe|heating/i, [/digital\s*thermometer\s*&\s*probe/i]],
+  [/\blevel\b/i, [/loop\s*calibrator/i]],
   [/steam\s*quality/i, [/steam\s*quality\s*test\s*apparatus/i, /digital\s*thermometer\s*&\s*probe/i, /weight\s*balance/i]],
   [/particle\s*count/i, [/particle\s*counter/i]],
   [/hepa|\bdop\b/i, [/aerosol\s*photometer/i, /laskin|aerosol\s*generator/i]],
   [/pipette|burette|cylinder|pycnometer|volumetric/i, [/weight\s*balance|balance\s*5\s*digits/i, /digital\s*thermometer\s*&\s*probe/i]],
   [/sound/i, [/sound\s*level\s*meter/i]],
   [/safety\s*valve|pressure\s*switch|pressure\s*gauge|pressure\s*transmitter|^pressure|manometer/i, [/portable\s*pressure\s*calibrator(?!.*700)|digital\s*pressure\s*gauge/i]]];
-var REF_BAN = [[/hepa|\bdop\b/i, /filter\s*integrity\s*tester/i], [/chlorine|conductiv|ph\b|redox|orp/i, /heating\s*block|metal\s*block/i], [/pressure|valve|switch/i, /analog\s*pressure\s*gauge/i], [/load\s*cell/i, /weight\s*balance/i]];
+var REF_BAN = [[/hepa|\bdop\b/i, /filter\s*integrity\s*tester/i], [/chlorine|conductiv|ph\b|redox|orp/i, /heating\s*block|metal\s*block/i], [/pressure|valve|switch/i, /analog\s*pressure\s*gauge/i], [/load\s*cell/i, /weight\s*balance/i], [/\bbalance\b|\bscale\b|checkweigh/i, /weight\s*balance|balance\s*5\s*digits|digital\s*balance/i]];
 function refPrefFix(p, it) { if (it.refUser) return false; var d = String(it.description || '') + ' ' + String(((it.old || {}).fields || {}).description || ''), ds = labDevices(), ch = false;
   REF_BAN.forEach(function (b) { if (!b[0].test(d)) return; var keep = (it.refs || []).filter(function (id) { var x = ds.filter(function (q) { return q.id === id; })[0]; return !(x && b[1].test(x.description || '')); }); if (keep.length !== (it.refs || []).length) { it.refs = keep; ch = true; } });
   for (var i = 0; i < REF_PREF.length; i++) { if (!REF_PREF[i][0].test(d) || (i === REF_PREF.length - 1 && /differential|\bdp\b|magnehelic/i.test(d))) continue; var hi = numv(it.cMax || it.rMax), pick = [];
