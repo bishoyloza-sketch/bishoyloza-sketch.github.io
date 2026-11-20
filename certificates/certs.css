@@ -1787,3 +1787,9 @@ body:has(#sheet-root .sheet-bg) #newV,body:has(#dlg-root .dlg) #newV{top:auto;bo
 .gsgs{display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 12px}.gsg{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:1px solid #9CC3EA;background:#F4F9FE;border-radius:10px;padding:6px 10px;cursor:pointer;font:inherit;max-width:100%}.gsg b{font-size:13.5px;color:#13294B}.gsg small{font-size:11.5px;color:#5B6B80}.gsgn{font-size:12px;color:#8A6A2E;margin:-6px 0 12px}
 .lesg{display:block;font-size:10.5px;color:#8A6A2E;text-align:right;max-width:160px;margin-left:auto;line-height:1.2;margin-top:2px}
 .tph{margin:14px 0 6px;font-size:14px;color:#13294B}.tph small{font-weight:500;color:#6B7280;font-size:12px}
+
+/* certificate templates */
+.tplbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;margin:0 0 8px;background:#F3F6FA;border:1px solid #DDE4EE;border-radius:10px}.tplbar b{font-size:13px;margin-right:4px}.tplsp{flex:1}
+.tplrev{padding:8px 12px;margin:0 0 8px;border-radius:10px;background:#F1F8F3;border:1px solid #CFE6D6;font-size:13px}.tplrev ul{margin:6px 0 4px 18px;padding:0}.tplrev small{display:block;color:#5B6B80;margin-top:4px}
+td.tpla{white-space:nowrap}td.tpla .btn{margin:1px}
+@media (max-width:700px){table.tplt thead{display:none}table.tplt,table.tplt tbody{display:block}table.tplt tr{display:flex;flex-wrap:wrap;align-items:baseline;padding:8px 4px;border-bottom:1px solid #E3E8EF}table.tplt td{display:block;border:0!important;padding:2px 4px!important}table.tplt td.n{flex:0 0 22px;width:auto}table.tplt td.b{flex:1 1 60%;min-width:0;width:auto}table.tplt td.tpls{width:100%;padding-left:30px!important;font-size:12px;color:#5B6B80}table.tplt td.tpla{width:100%;white-space:normal;padding-left:26px!important}table.tplt td.tpla .btn{padding:5px 8px;font-size:12px}}
