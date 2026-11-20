@@ -1955,3 +1955,31 @@ tr.lmc td{background:#FFFBEF}
 .ctfx{display:flex;align-items:center;justify-content:space-between;gap:10px}.ctfx span{line-height:1.4}
 .seg button.segwarn{color:#B42318}.seg button.segwarn.on{color:#B42318}
 @media (max-width:760px){.pkh.fx,.pkr.fx{grid-template-columns:1fr 56px}.fxin,.fxbt{grid-column:1/-1}}
+
+/* v445: price rows – fixed columns so the price box is always visible; certificate peek */
+.pkr .cbx,.fxin .cbx{width:100%!important;max-width:none!important;min-width:0;display:block}
+.fxin{display:grid!important;grid-template-columns:minmax(0,1fr) 110px;gap:6px}.fxin input[data-fxp]{width:110px;max-width:none}
+.fxin .cbi,.pkr .cbi{width:100%;height:34px;font-size:13px}
+.pkh.fx,.pkr.fx{grid-template-columns:minmax(170px,1.1fr) 56px minmax(300px,2.2fr) auto}
+.pklk{all:unset;cursor:pointer;display:block;font-weight:600;color:var(--navy);font-size:13.5px}.pklk i{font-style:normal;font-weight:500;font-size:11px;color:var(--blue);margin-left:6px;white-space:nowrap}.pklk:hover{color:var(--blue)}.pklk small{display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:1px}
+.pkcodes button{font-size:11.5px;background:#EEF2F7;border:0;border-radius:6px;padding:3px 7px;color:#1F5FA8;cursor:pointer}.pkcodes button:hover{background:#DCE8F7}
+.pkov{position:fixed;inset:0;background:rgba(15,25,45,.45);z-index:9000;display:flex;align-items:center;justify-content:center}.pkpeek{background:#fff;border-radius:14px;max-width:1000px;width:94vw;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.pkph{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}.pkph b{font-size:15px;color:var(--navy)}.pkph small{margin-left:8px;color:var(--muted)}.pkph span{display:flex;gap:6px}
+.pkpb{display:grid;grid-template-columns:260px 1fr;gap:0;height:72vh}
+.pkfact{border-collapse:collapse;font-size:12.5px;align-self:start;margin:10px}.pkfact td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}.pkfact td:first-child{color:var(--muted);white-space:nowrap}
+.pkpf{background:#E9EDF2;overflow:auto;border-left:1px solid var(--line)}.pkpf iframe{width:820px;height:1160px;border:0;background:#fff;transform:scale(.8);transform-origin:0 0;margin:10px}
+@media (max-width:760px){.pkpb{grid-template-columns:1fr;height:auto}.pkpf{height:60vh}.pkpf iframe{transform:scale(.45)}}
+
+.pkh.fx,.pkr.fx{grid-template-columns:minmax(170px,1.1fr) 52px minmax(240px,2fr) 130px auto}
+.fxsel{min-width:0}.fxsel .cbx{width:100%!important;max-width:none!important}.fxpr{display:flex;align-items:center;gap:4px}.fxpr input{width:100%;min-width:0}.fxpr i{font-style:normal;font-size:11.5px;color:var(--muted)}
+#fxUndo{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);z-index:9999;background:#14213D;color:#fff;border-radius:10px;padding:8px 10px 8px 14px;display:flex;gap:12px;align-items:center;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.25)}#fxUndo .btn{background:#fff;color:var(--navy);border:0}
+@media (max-width:760px){.pkh.fx,.pkr.fx{grid-template-columns:1fr 52px}.fxsel,.fxpr,.fxbt{grid-column:1/-1}}
+
+.pkh.fx,.pkr.fx{grid-template-columns:minmax(170px,1.1fr) 52px minmax(240px,2fr) 130px 250px}.fxbt{justify-content:flex-end}
+.pkpn{display:flex;align-items:center;justify-content:center;padding:30px}.pkpn>div{max-width:380px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}.pkpn b{font-size:15px;color:var(--navy)}.pkpn span{font-size:13px;color:var(--muted);line-height:1.5}
+
+/* the program header stays on top of every screen and message – Back, Undo and Redo always in reach */
+body.hasTb .sheet-bg,body.hasTb .dlg,body.hasTb .pkov,body.hasTb .sopov{top:var(--tbh,64px)!important}
+body.hasTb .sheet.wide{height:100%!important}
+@media (min-width:1000px){body.hasTb .sheet:not(.wide){height:100%;max-height:100%}}
+body.hasTb #tbar{z-index:95}
