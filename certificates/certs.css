@@ -1824,3 +1824,9 @@ td.tpla{white-space:nowrap}td.tpla .btn{margin:1px}
 .mfbulk{margin-top:6px}.mfpv{margin:4px 0 6px}
 @media (max-width:600px){.mfpa{white-space:normal}.mfbh{flex-wrap:wrap}}
 @media (max-width:600px){.mfcf{flex-wrap:wrap}.mfcf .btn{white-space:normal;flex:1 1 100%}.mfcf small{flex:1 1 100%;text-align:right}}
+/* the step name (e.g. "Certificate 1 of 24") is never cut – the company name gives way first */
+.crumb b{flex:none;max-width:60%}
+.crumb #crCo{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* phone: a long company name in "Continue …" no longer pushes the page sideways */
+.hact{max-width:100%;min-width:0}
+.hact .btn{max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
