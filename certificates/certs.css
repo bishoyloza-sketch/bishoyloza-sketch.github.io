@@ -1884,3 +1884,11 @@ tr.cdsh td{padding-top:0}tr.cdsh small{color:var(--muted,#64748B)}
 .akhsp-bar i{display:block;width:40%;height:100%;background:#4FA8EC;border-radius:3px;animation:akhBar 1.1s ease-in-out infinite}
 @keyframes akhBar{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
 @keyframes akhIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* Make files: one problem open at a time, the others one line each */
+.mfs.mfsc{cursor:pointer;padding:9px 10px;margin:0 -10px;border-radius:10px}
+.mfs.mfsc:hover{background:#F4F7FB}
+.mfs.mfsc .mfsh{align-items:center}
+.mfs.mfsc .mfsh>div{flex:1;min-width:0}
+.mfs.mfsc small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mfgo{flex:none;font-size:13px;font-weight:700;color:#0B6FC7;padding:6px 12px;border:1px solid #C9DCF2;border-radius:999px;background:#fff}
+.mfs.mfsc:hover .mfgo{background:#0B6FC7;color:#fff;border-color:#0B6FC7}
