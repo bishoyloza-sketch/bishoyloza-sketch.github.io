@@ -794,7 +794,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v491';
+var APP_V = 'v492';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1283,7 +1283,7 @@ function wOrder(p) {
         (of.list.length ? '<div class="list">' + of.list.map(function (f, i) { var on = o.fileId === f.id;
           return '<div class="row' + (on ? ' sel' : '') + '"><button class="check" data-f="' + i + '" style="' + (on ? 'background:var(--blue);border-color:var(--blue)' : '') + '">' + (on ? '✓' : '') + '</button><span class="t" data-f2="' + i + '"><b>' + esc(f.name) + '</b><small>' + esc([f.number && 'No. ' + f.number, f.folder, fmtDate(f.mod)].filter(Boolean).join(' · ')) + '</small></span>' + fileActs(i) + '</div>'; }).join('') + '</div>'
           : '<div class="empty"><b>No ' + esc(tname) + ' found on SharePoint</b>' + (isPO ? 'Attach it above, or choose Later.' : 'You can skip this for now.') + '</div>'))) +
-    (p.orderType === 'offer' ? '<div class="sec"><h2>Not on SharePoint?</h2></div><div class="cf" style="margin-top:0"><button class="btn ghost" id="oAtt">Attach the document (PDF or photo)</button></div>' +
+    (p.orderType === 'offer' ? '<div class="sec"><h2>Not on SharePoint?</h2></div><div class="cf" style="margin-top:0"><button class="btn ghost" id="oAtt">Attach the document (PDF, Word or photo)</button></div>' +
       '<div class="small" style="margin-top:6px">It will be saved on SharePoint in <b>' + esc(ORDER_FOLDER + '/' + p.company.name) + '</b>.</div>' : '') +
     (spOn() && of ? '<div class="cf"><button class="btn ghost sm" id="reF" style="flex:none">Search again</button></div>' : '');
   var setO = function (x) { p.order = x; saveProjects(); wOrder(p); okNext(); };
@@ -1293,7 +1293,7 @@ function wOrder(p) {
   var cl = $('#oClr'); if (cl) cl.onclick = function () { setO(null); };
   var rf = $('#reF'); if (rf) rf.onclick = function () { p.orderFiles = null; if (p.order && p.order.auto) p.order = null; W.busy = false; wOrder(p); };
   var attachF = function (f) { if (!f) return; poAttachFile(p, f, function () { if (p.stage === 'order' && !sheetFn) { try { wOrder(p); } catch (x) {} } }); };
-  var at = $('#oAtt'); if (at) at.onclick = function () { pickFiles('application/pdf,image/*').then(function (fs) { attachF(fs[0]); }); };
+  var at = $('#oAtt'); if (at) at.onclick = function () { pickFiles('application/pdf,image/*,.doc,.docx').then(function (fs) { attachF(fs[0]); }); };
   var odz = $('#oDrop'); if (odz) { odz.ondragover = function (e) { e.preventDefault(); odz.classList.add('on'); }; odz.ondragleave = function () { odz.classList.remove('on'); }; odz.ondrop = function (e) { e.preventDefault(); odz.classList.remove('on'); attachF(e.dataTransfer.files[0]); }; }
   var ol = $('#oLater'); if (ol) ol.onclick = function () { p.order = { skipped: true, later: true }; saveProjects(); go(p, 'items'); };
   var must = false; /* PO: choose from SharePoint, attach it, or skip for now */
@@ -2512,7 +2512,33 @@ function poParse(text) { var t = String(text || '').replace(/\s*\|\s*/g, ' ').re
   if (!num || !dt) { var mt = poMeta(text); num = num || mt.number; dt = dt || mt.date; }
   /* table headers that stick to the first row ("Specifications Calibration of …") and an item code that repeats the first word ("Calibration Calibration of …") */
   out.forEach(function (l) { l.desc = String(l.desc || '').replace(/^(?:(?:Code|Description|Specifications?|Item\s*(?:Name|Description)?)\s+)+(?=\S)/i, '').replace(/^(\w+)\s+(?=\1\b)/i, '').trim(); });
+  /* our own price offer ("Calibration Offer · Ref. 02LL/15022026 · Date 15-Feb-2026"): its number and date, and a table with or without a quantity */
+  var of = poOffer(text); if (of) { if (of.number) num = of.number; if (of.date) dt = of.date; if (of.lines.length && (!of.hasQty || !out.length || (of.lines.length >= out.length - 3 && out.some(function (l) { return /\bOnly\b|Page\s+\d|[؀-ۿ]|\d+\s+\d+\s+\d{3,}/.test(l.desc || ''); })))) out = of.lines;
+    out.forEach(function (l) { l.desc = String(l.desc || '').replace(/^\s*(L\.?\s?E\.?|EGP)\s+/i, '').replace(/^.*?calibrat\w*\s+(for|of)\s+the\s+following\s+items?\s*:?\s*-?\s*/i, '').replace(/^\d{1,3}\s+(?=[A-Za-z(])/, '').trim(); }); }
   return { lines: out, number: num, date: dt }; }
+/* Akhnaton's price offer: rows "1 | Calibration of Temperature Sensor / Item | 163" (unit prices only) or "1 | … | 71 | 300 | 21300" */
+function poOffer(text) { var T = String(text || ''); if (!/kindly\s+find\s+below\s+our\s+quotation|Calibration\s+(Service\s+Department|Offer)|Thermal\s+Mapping\s+Offer/i.test(T)) return null;
+  var o = { number: '', date: '', lines: [], hasQty: false }, M = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  var r = T.match(/\bRef\.?\s*(?:No\.?)?\s*[|:]?\s*([A-Z0-9][A-Za-z0-9]*\/[0-9][0-9\-]*)/); if (r) o.number = r[1];
+  var d = T.match(/\bDate\s*[|:]?\s*(\d{1,2})[-\/ .]([A-Za-z]{3,9}|\d{1,2})[-\/ .](\d{2,4})/); if (d) { var mo = /\d/.test(d[2]) ? +d[2] : M[d[2].slice(0, 3).toLowerCase()], yy = d[3].length === 2 ? '20' + d[3] : d[3]; if (mo) o.date = ('0' + d[1]).slice(-2) + '/' + ('0' + mo).slice(-2) + '/' + yy; }
+  var ls = T.split(/\n/).map(function (x) { return x.replace(/\s+/g, ' ').trim(); }), on = false, last = null, pend = '';
+  for (var i = 0; i < ls.length; i++) { var L = ls[i];
+    if (!on) { if (/\b(Description|Study\s*Name|Items?)\b/i.test(L) && /\bprice|^\s*(ID|No\.?)\s*\|/i.test(L + ' ' + (ls[i + 1] || ''))) { on = true; o.hasQty = /\bQty\b|\bQuantity\b/i.test(L + ' ' + (ls[i + 1] || '') + ' ' + (ls[i - 1] || '')); } continue; }
+    if (/^(Price|14\s*%|VAT|Total|Terms|Thank|Notes?\b)/i.test(L)) { if (/^(Terms|Price\s*\|)/i.test(L)) break; continue; }
+    var c = L.split(/\s*\|\s*/).filter(Boolean), num = function (x) { return /^[\d,]+(\.\d+)?$/.test(x || '') ? +String(x).replace(/,/g, '') : null; };
+    if (c.length === 1 && /^\/\s*\w/.test(L) && last) { last.desc += ' ' + L; continue; }
+    if (c.length === 1 && /[A-Za-z]/.test(L) && !/^(unit\s*price|egp|l\.?e\.?)$/i.test(L) && !/following\s+items/i.test(L)) { pend = (pend ? pend + ' ' : '') + L; continue; }
+    if (c.length < 2) continue;
+    var no = /^\d{1,3}$/.test(c[0]) && c.length >= 2 ? c.shift() : '', nums = []; while (c.length && num(c[c.length - 1]) != null) nums.unshift(num(c.pop()));
+    if (!nums.length) { if (no) pend = c.join(' '); continue; } var ds = (c.join(' – ') || pend).trim(); pend = ''; if (!ds) continue;
+    var q = 1, pr = nums[nums.length - 1], tot = pr, ab = null; if (nums.length >= 3 && Math.abs(nums[nums.length - 3] * nums[nums.length - 2] - nums[nums.length - 1]) < 1) { ab = [nums[nums.length - 3], nums[nums.length - 2]]; q = ab[0]; pr = ab[1]; tot = nums[nums.length - 1]; }
+    if (!ab && nums.length >= 2 && nums[nums.length - 1] < 20) continue; /* a broken row ("| 120 | 2") */
+    last = { no: no || String(o.lines.length + 1), desc: ds, qty: q, uom: 'each', price: pr, cur: 'EGP', total: tot, vat: false, _ab: ab }; if (!ab) { last.unitOnly = 1; last.qty = null; last.total = null; } o.lines.push(last); }
+  /* which of the two numbers is the quantity: the same column in the whole table – the one that is smaller in most rows */
+  var R = o.lines.filter(function (l) { return l._ab; }), firstQ = R.filter(function (l) { return l._ab[0] <= l._ab[1]; }).length >= R.length / 2;
+  o.lines.forEach(function (l) { if (l._ab) { l.qty = firstQ ? l._ab[0] : l._ab[1]; l.price = firstQ ? l._ab[1] : l._ab[0]; } delete l._ab; });
+  o.lines = o.lines.filter(function (l) { return (l.total != null ? l.total : l.price) >= 20; });
+  return o; }
 /* any PO layout: a line is two numbers whose product is a third one after them (with or without 14% tax) */
 var PO_UOM = /^(each|ea|pcs?|pc|piece|units?|unt|u|lot|ls|nos?\.?|au)$/i;
 function poVals(s, eu) { s = String(s).replace(/^[^\d.,]+|[^\d]+$/g, ''); if (!s || !/\d/.test(s)) return [];
@@ -2584,7 +2610,9 @@ function poMeta(text) { var t = String(text || '').normalize('NFKC').replace(/\s
 function poRead(file) { /* a File/Blob → { lines, number, date, b64 } */
   if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|tiff?)$/i.test(file.name || '')) return shrink(file, 2600, 0.92).then(ocrText).then(function (t) { var r = poParse(t || ''); r.b64 = ''; r.fromPhoto = 1; if (!(r.lines || []).length) toast('The photo of the PO was read but no lines were found – take it straight and closer, or attach the PDF', true); return r; }).catch(function () { return { lines: [], b64: '' }; });
   return file.arrayBuffer().then(function (buf) { var b64 = ''; if (buf.byteLength < 600000) { var u = new Uint8Array(buf), s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); b64 = btoa(s); }
-    return LOC.pdf(buf.slice(0)).then(function (pages) { var r = poParse(pages.slice(0, 2).map(function (pg) { return pg.join('\n'); }).join('\n')); r.b64 = b64; return r; }).catch(function () { return { lines: [], b64: b64 }; }); }); }
+    /* a Word offer / PO is read as Word, not as a PDF */
+    var nm = file.name || '', rd = /\.(docx|docm|dotx)$/i.test(nm) ? LOC.docx(buf.slice(0)) : /\.(doc|dot)$/i.test(nm) ? LOC.doc(buf.slice(0)) : LOC.pdf(buf.slice(0)); if (!/\.pdf$/i.test(nm) && /\.(docx?|docm|dotx|dot)$/i.test(nm)) b64 = '';
+    return rd.then(function (pages) { var r = poParse(pages.slice(0, 2).map(function (pg) { return pg.join('\n'); }).join('\n')); r.b64 = b64; return r; }).catch(function () { return { lines: [], b64: b64 }; }); }); }
 /* a PO found on SharePoint or attached earlier, whose lines were never read: read them once by itself */
 var POAR = {}; function poAutoRead(p) { var o = p.order || {}; poHeal(p); if (o.fileName && !o.number) { var fn = String(o.fileName).match(/(?:^|[^A-Za-z0-9])([A-Z]?\d{6,})(?![0-9])/); if (fn) o.number = fn[1]; }
   if ((o.items || []).length || !(o.fileId && o.driveId || o.b64 || o.photo || o.fileName)) return; var K = p.id + '|' + (o.fileId || o.photo || o.fileName); if (POAR[K] && Date.now() - POAR[K] < 60000) return; POAR[K] = Date.now();
@@ -2727,7 +2755,7 @@ function poSplitSheet(p, l, done) { var parts0 = JSON.parse(JSON.stringify(l.grp
           if (k === 'one') { poKeepOne(p, l, st.parts); closeSheet(); toast('Line ' + l.no + ' kept as one line'); return done && done(); }
           if (k === 'manual') { st.mode = 'edit'; st.how = 'manual'; st.parts.forEach(function (x) { x.fixed = 1; }); return renderSheet(); }
           if (k === 'pricelist') { st.parts.forEach(function (x) { delete x.fixed; }); st.how = poSplitPrice(p, st.parts, tot); st.mode = 'view'; return renderSheet(); }
-          pickFiles('application/pdf,image/*').then(function (fs) { if (!fs.length) return; st.note = '<span class="spin dark"></span> Reading the offer…'; st.mode = 'view'; renderSheet();
+          pickFiles('application/pdf,image/*,.doc,.docx').then(function (fs) { if (!fs.length) return; st.note = '<span class="spin dark"></span> Reading the offer…'; st.mode = 'view'; renderSheet();
             poRead(fs[0]).then(function (r) { st.parts.forEach(function (x) { delete x.fixed; }); var n = poOfferPrices(st.parts, r.lines || []); if (n) { var left = st.parts.filter(function (x) { return !x.fixed; }); if (left.length) poSplitPrice(p, st.parts, tot); st.how = 'offer'; st.note = n === st.parts.length ? '' : (st.parts.length - n) + ' item' + (st.parts.length - n > 1 ? 's' : '') + ' not found in the offer – from the price list.'; }
               else { st.note = 'The offer did not list these items – choose another way.'; st.mode = 'opts'; } renderSheet(); }).catch(function () { st.note = 'The offer could not be read – choose another way.'; st.mode = 'opts'; renderSheet(); }); }); }; } };
     var ed = st.mode === 'edit', ok = tot == null || Math.abs(sum() - tot) < 0.51, good = st.parts.length && st.parts.every(function (x) { return x.kind && x.qty > 0; });
@@ -5213,7 +5241,7 @@ function genBoxes(p) { var pm = $('#pm'); if (!pm || pm.querySelector('.gbx')) r
   $$('[data-gbc]').forEach(function (b) { b.onclick = function () { var t = $(b.dataset.gbc); if (t) t.click(); }; });
   $$('[data-gble]').forEach(function (b) { b.onclick = function () { letterEditSheet(p, re); }; }); $$('[data-gbhr]').forEach(function (b) { b.onclick = function () { holRateAsk(p, re); }; }); $$('[data-gbhl]').forEach(function (b) { b.onclick = function () { holSheet(re); }; });
   $$('[data-gblt]').forEach(function (b) { b.onclick = function () { if (poMiss) return toast('Attach the PO first – the letter follows it', true); if (under.length && p.poUnderAck !== poUnderSig(under)) return poUnderAsk(p, under, function () { b.click(); }, re); exportSheet(p); setTimeout(function () { var x = $('[data-w="letter"]'); if (x) x.click(); }, 40); }; });
-  $$('[data-gbpo]').forEach(function (b) { b.onclick = function () { pickFiles('application/pdf,image/*').then(function (fs) { if (fs[0]) poAttachFile(p, fs[0], function () { if (S.cur === p.id && p.tab === 'gen' && !sheetFn) re(); }); }); }; });
+  $$('[data-gbpo]').forEach(function (b) { b.onclick = function () { pickFiles('application/pdf,image/*,.doc,.docx').then(function (fs) { if (fs[0]) poAttachFile(p, fs[0], function () { if (S.cur === p.id && p.tab === 'gen' && !sheetFn) re(); }); }); }; });
   $$('[data-gbps]').forEach(function (b) { b.onclick = function () { poSheet(p, re); }; });
   $$('[data-gbinv]').forEach(function (b) { b.onclick = function () { invSet(p, !invOn(p)); toast(invOn(p) ? 'The invoice summary is printed under the letter – kept for ' + p.company.name : 'The letter is printed as usual, without the invoice summary'); re(); }; });
   $$('[data-gbgr]').forEach(function (b) { b.onclick = function () { var l = poGrouped(p).filter(function (x) { return String(x.no) === b.dataset.gbgr; })[0]; if (l) poSplitSheet(p, l, re); }; });
@@ -5364,7 +5392,7 @@ function fwKind(p, s, st, sug, lk, man, re, done, inl) { var inf = ensureInfo(p)
     return L('Suggested') + rows5.join('') + E; }
   if (s.kind === 'ph') { var it3 = s.it;
     return L('Choose') + sug('Type the new readings ›', 'opens the certificate', function () { openCert(it3); }, true) + sug('Leave it out of this delivery', 'it is not printed now', function () { it3.phSkip = 1; it3.phOk = 0; done((it3.certNo || it3.code) + ' left out of this delivery'); }) + (s.nw ? '' : sug('Print last year\'s readings as they are', 'only if they were really read again the same', function () { it3.phOk = 1; it3.phSkip = 0; done((it3.certNo || it3.code) + ' keeps last year\'s readings'); })) + E; }
-  if (s.kind === 'po') return L('Suggested') + sug('Attach the PO (PDF or photo) ›', 'its lines and prices are read', function () { pickFiles('application/pdf,image/*').then(function (fs) { if (fs[0]) poAttachFile(p, fs[0], back); }); }, true) + sug('Look for it on SharePoint ›', 'the order in Job details', function () { closeSheet(); gotoStep(p, 'det'); }) + E;
+  if (s.kind === 'po') return L('Suggested') + sug('Attach the PO (PDF or photo) ›', 'its lines and prices are read', function () { pickFiles('application/pdf,image/*,.doc,.docx').then(function (fs) { if (fs[0]) poAttachFile(p, fs[0], back); }); }, true) + sug('Look for it on SharePoint ›', 'the order in Job details', function () { closeSheet(); gotoStep(p, 'det'); }) + E;
   if (s.kind === 'grp') return L('Check') + sug('Check how the line is split ›', '', function () { poSplitSheet(p, s.l, back); }, true) + E;
   if (s.kind === 'over') return L('Decide') + sug('Decide for each one ›', 'in the PO or on the extras price offer', function () { poOverAsk(p, poOverList(p), back); }, true) + E;
   if (s.kind === 'under') return L('Decide') + sug('See what is left ›', '', function () { poUnderAsk(p, poUnder(p), back, back); }, true) + E;
