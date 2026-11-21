@@ -815,7 +815,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v494';
+var APP_V = 'v495';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2434,6 +2434,30 @@ function parseResults(lines) { /* rows of numbers after the results header → p
   /* "Reference | U.U.T. | Deviation" with no point column (pipettes, dispensers…): the point is the U.U.T. value */
   var refFirst = dirs === 1 && /\(\s*[µu]l\s*\)|\(\s*ml\s*\)/i.test(head) && /reference|standard|average/i.test(head) && /u\.?\s*u\.?\s*t|indicat|nominal\s*volume|gauge\s*reading/i.test(head) && !/\bpoint\b|set\s*point|nominal\s*value|\bload\b/i.test(head) && head.search(/reference|standard|average/i) < head.search(/u\.?\s*u\.?\s*t|indicat|nominal\s*volume|gauge\s*reading/i);
   for (var i = start + 1; i < lines.length; i++) { var l = lines[i]; if (/not be duplicated|remarks|calibrated by|repeatab|eccentric|uncertainty|page \d|standard\(?s?\)?\s*utili[sz]ed|^\s*item\s*no/i.test(l)) break;
+    /* timers / stopwatches: times written h:m:s ("0:10:00.25", "00:00:05.20", even "0:0:5.00.10" or "0.05.00.00") become numbers in the unit of the
+       instrument's own column ("Timer Reading (Min.)" → minutes, "(Sec)" → seconds, "(Hr:Min:Sec)" → hours); each column's header says how its times are written */
+    var hdOf = function (re) { var m = head.match(re); return m ? m[m.length - 1].toLowerCase() : ''; };
+    var refH = hdOf(/reference[^()]{0,30}\(([^)]*)\)/i), uutH = hdOf(/(timer|stop\s*watch|u\.?\s*u\.?\s*t\.?|indicator|setting|display)[^()]{0,30}\(([^)]*)\)/i);
+    var outS = /hr|hour/.test(uutH) ? 3600 : /min/.test(uutH) ? 60 : /sec/.test(uutH) ? 1 : null, tUnitMin = outS === 60;
+    var secOf = function (x, hdr) { var p = String(x).split(':'), ld = p[p.length - 1].split('.'), sv = function (a) { return a.length > 2 ? +(a[0] + '.' + a.slice(1).join('')) : +(a[0] + (a[1] !== undefined ? '.' + a[1] : '')); }, c = [];
+      if (p.length === 4) c.push(+p[0] * 3600 + +p[1] * 60 + +p[2] + +('0.' + p[3]));
+      if (p.length === 3) { var hms3 = +p[0] * 3600 + +p[1] * 60 + sv(ld), ms3 = +p[0] * 60 + +p[1] + +('0.' + ld.join('')), odd = ld.length > 2 ? +ld[0] * 60 + +('0.' + ld.slice(1).join('')) : null;
+        if (/^\s*:?\s*min/.test(hdr) && !/hr/.test(hdr)) { c.push(ms3); c.push(hms3); } else { c.push(hms3); c.push(ms3); } if (odd != null) c.push(odd); }
+      if (p.length === 2) c.push(/hr|hour/.test(hdr) && !/sec/.test(hdr) ? +p[0] * 3600 + +p[1] * 60 : +p[0] * 60 + sv(ld));
+      return c.filter(function (v) { return isFinite(v); }); };
+    var fmt = function (sec) { return String(+(sec / (outS || 1)).toFixed(4)); };
+    if (!/clock/i.test(head)) l = l.split(/([|\s]+)/).map(function (x) { return /^\d{1,2}(\.\d{2}){3}$/.test(x) ? x.replace(/\./g, ':') : x; }).join('');
+    var tks = (l.match(/(^|[|\s])\d{1,3}:\d[\d:.]*/g) || []).map(function (x) { return x.replace(/^[|\s]+/, ''); }), hadT = tks.length >= 1 && tks.length <= 2 && !/clock/i.test(head);
+    if (hadT) { var plain = l.split(/[|\s]+/).filter(function (x) { return /^-?\d+(\.\d+)?$/.test(x); }), uutSec = null;
+      var l0 = l, rep = function (tok, val, nth) { var k = -1; l = l.split(/([|\s]+)/).map(function (x) { if (x === tok) { k++; if (k === nth) return val; } return x; }).join(''); };
+      if (tks.length === 2) { var cu = secOf(tks[1], uutH || refH); uutSec = cu[0]; }
+      else if (plain.length) uutSec = +plain[0] * (outS || 60);
+      var cr = secOf(tks[0], refH), best = cr[0];
+      if (uutSec != null && cr.length > 1) { var cl = cr.filter(function (v) { return Math.abs(v - uutSec) <= Math.max(0.05 * uutSec, 1); }); best = cl.length ? cl[0] : cr.slice().sort(function (a, b) { return Math.abs(a - uutSec) - Math.abs(b - uutSec); })[0]; }
+      if (outS == null && uutSec != null && plain.length && tks.length === 1) { outS = Math.abs(best - +plain[0] * 60) < Math.abs(best - +plain[0]) ? 60 : 1; }
+      /* a clock (time of day against time of day, "1:39:30 | 14:48:02") is not a timer: its row is left as it is */
+      if (tks.length === 2 && (best == null || uutSec == null || Math.abs(best - uutSec) > Math.max(0.01 * uutSec, 30))) { l = l0; hadT = false; }
+      else { if (tks.length === 2) rep(tks[1], fmt(uutSec), tks[0] === tks[1] ? 1 : 0); if (best != null) rep(tks[0], fmt(best), 0); } }
     var toks = l.replace(/±\s*/g, '±').replace(/-\s+(\d)/g, '-$1').split(/[|\s]+/).filter(Boolean), nums = toks.filter(function (x) { return NUM.test(x); }); if (nums.length < 2) continue;
     var lim = nums.filter(function (x) { return x[0] === '±'; }).pop() || ''; var v = nums.filter(function (x) { return x[0] !== '±'; });
     /* a "No." column first (1, 2, 3 …) is the row number, not the point */
@@ -2443,6 +2467,7 @@ function parseResults(lines) { /* rows of numbers after the results header → p
     else if (refFirst && v.length >= 2) { var rf = parseFloat(v[0]), uu = parseFloat(v[1]); pt.point = v[1]; pt.ref = v[0]; pt.reading = v[1]; pt.deviation = v[2] || '';
       /* a typing slip on last year's certificate (10.3 | 100): the point is set from the reference and the row is flagged */
       if (rf > 0 && uu > 0 && (uu / rf > 3 || rf / uu > 3)) { var k = Math.round(Math.log10(rf / uu)), fixd = +(uu * Math.pow(10, k)).toPrecision(6); pt.point = String(fixd); pt.reading = String(fixd); pt.typo = v[1]; } }
+    if (hadT && dirs === 1 && pt.reading !== '' && isFinite(+pt.reading)) pt.point = pt.reading; /* a timer row: the point is the timer's own value (5 min), the reference keeps its seconds */
     pts.push(pt); }
   return { points: pts, dirs: dirs }; }
 /* ---- weight balances: repeatability + eccentricity tables (page 2 of the certificate) ---- */
