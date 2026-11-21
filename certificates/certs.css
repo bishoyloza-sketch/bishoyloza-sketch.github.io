@@ -2105,3 +2105,51 @@ body.hasTb #tbar{z-index:95}
 .hcgh{flex-wrap:wrap}.hcgt{flex:1 1 60%;min-width:0}.hcgh .sp{display:none}.hcch span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}.hcg{padding:11px 11px 12px}}
 .hcgh{flex-wrap:wrap}.hcgr{display:inline-flex;align-items:center;gap:10px}.hcgh .hcch{flex-basis:100%;margin:2px 0 0 45px}
 @media (max-width:640px){.hcgh .sp{display:block}.hcgt{flex:1 1 auto}.hcgh .hcch{margin-left:0}}
+
+/* home boxes (v479) – soft colours, thin lines */
+.hcards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:6px 0 18px}
+.hcard{--bg:#F3F8FE;--bd:#DCE9F8;--ac:#3A78C2;--ac2:#DCEAFB;text-align:left;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;gap:3px;padding:16px 18px 16px;border-radius:18px;border:1px solid var(--bd);background:linear-gradient(180deg,#fff 0%,var(--bg) 100%);box-shadow:0 1px 2px rgba(19,41,75,.04);transition:transform .15s ease,box-shadow .15s ease,border-color .15s;min-height:196px;color:#22344F}
+.hcard:hover{transform:translateY(-2px);box-shadow:0 10px 24px -12px rgba(19,41,75,.22);border-color:var(--ac2)}
+.hc-print{--bg:#FEF8EF;--bd:#F3E6CF;--ac:#B98227;--ac2:#F5E3C2}
+.hc-send{--bg:#F7F5FE;--bd:#E6E1F7;--ac:#6E61C2;--ac2:#E2DCF7}
+.hc-fin{--bg:#F1FAF5;--bd:#D9EFE3;--ac:#2F8A61;--ac2:#D2EDDF}
+.hcard-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.hcico{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:12px;background:var(--ac2,#DCEAFB);color:var(--ac,#3A78C2);font-style:normal}
+.hcard-go{font-size:12px;font-weight:600;color:var(--ac);opacity:0;transition:opacity .15s}.hcard:hover .hcard-go{opacity:1}
+.hcard-n{font-size:34px;font-weight:600;line-height:1;color:#1D3354;letter-spacing:-.5px}
+.hcard-t{font-size:15px;font-weight:600;color:#1D3354;margin-top:4px}
+.hcard-h{font-size:12.5px;color:#7A889C}
+.hcard-l{font-size:12.5px;color:#4A5B73;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hcard-bar{display:block;height:4px;border-radius:4px;background:#E3ECF7;margin-top:6px;overflow:hidden}.hcard-bar i{display:block;height:100%;background:#7FAEE6;border-radius:4px}
+.hcard-f{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:10px;flex-wrap:wrap}
+.hcard-m{display:flex;gap:4px;flex-wrap:wrap}.hcard-m span{font-size:11px;font-weight:600;color:var(--ac);background:#fff;border:1px solid var(--bd);border-radius:999px;padding:1px 8px}
+.hcard-w{font-size:11px;font-weight:600;color:#B4532A;background:#FDF1EA;border:1px solid #F6DCCD;border-radius:999px;padding:1px 8px}
+.hcard-p{display:inline-flex;margin-left:auto}.hcard-p .hjdot{border:2px solid #fff;margin-left:-6px;width:24px;height:24px;font-size:11px}.hcard-p em{font-style:normal;font-size:11px;color:#7A889C;margin-left:4px}
+.hcard.empty .hcard-n{color:#A9B6C7}.hcard.empty{background:#FAFBFD}
+.hsech{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid #EDF1F6}
+.hback{border:1px solid #DCE5F0;background:#fff;border-radius:10px;padding:7px 12px;font:600 13.5px inherit;font-family:inherit;color:#33445C;cursor:pointer}.hback:hover{background:#F3F7FC}
+.hsect{display:inline-flex;align-items:center;gap:10px}.hsect b{font-size:20px;color:#1D3354;font-weight:600}.hsect em{font-style:normal;font-size:12.5px;font-weight:600;color:#5B7594;background:#EEF3FA;border-radius:999px;padding:2px 9px}
+.hsect .hcico{width:34px;height:34px;border-radius:10px}
+.hin-print .hsect .hcico{--ac2:#F5E3C2;--ac:#B98227}.hin-send .hsect .hcico{--ac2:#E2DCF7;--ac:#6E61C2}.hin-fin .hsect .hcico{--ac2:#D2EDDF;--ac:#2F8A61}
+.hsech .sp{flex:1}.hsecsw{display:flex;gap:6px;flex-wrap:wrap}
+.hsecsw button{border:1px solid #E3E9F2;background:#fff;border-radius:999px;padding:5px 12px;font:500 12.5px inherit;font-family:inherit;color:#5B6B82;cursor:pointer}.hsecsw button em{font-style:normal;color:#9AA8BA;margin-left:2px}.hsecsw button:hover{background:#F5F8FC}
+/* softer months */
+.hcm button{background:#FAFBFD;border-color:#EAEFF5}
+.hcm button.lit{background:#EEF5FD;border-color:#CFE0F5;box-shadow:none}.hcm button.lit b{color:#4C77A8}.hcm .hcn{color:#1D3354;font-weight:600}.hcm button>small{color:#5B7594}
+.hcal.hcfin .hcm button.lit{background:#EEF8F2;border-color:#CDE9DA;box-shadow:none}.hcal.hcfin .hcm button.lit b{color:#3D8A66}
+.hcm button.lit:hover{transform:translateY(-1px);box-shadow:0 6px 16px -10px rgba(19,41,75,.25)}
+.hcbar{background:#DCE8F6}.hcbar i{background:#7FAEE6}.hcal.hcfin .hcbar{background:#D5ECE0}.hcal.hcfin .hcbar i{background:#7CC4A1}
+.hcm button.on{outline:none;border:1.5px solid #5B9BE0;box-shadow:0 0 0 3px #E3EFFC}.hcal.hcfin .hcm button.on{border-color:#59B387;box-shadow:0 0 0 3px #E1F3EA}
+.hcid{color:#C46A3C}.hcnow{color:#6E8FB8}.hcm button.now:not(.lit){border:1px dashed #C9D6E6}
+.hcleg i{background:#CFE0F5;border:1px solid #A9C7EC}.hcal.hcfin .hcleg i{background:#CDE9DA;border-color:#9FD3B9}
+.hcm .hcall{background:#fff;border:1px solid #D7E3F1}.hcm .hcall b{color:#1D3354}.hcm .hcall .hcn{color:#1D3354;font-weight:600}.hcm .hcall .hcbar i{background:#7FAEE6}
+.hcy button{border-color:#E1E8F1;font-weight:600}.hcy button.on{background:#EEF5FD;border-color:#B9D2F0;color:#1D3354}.hcy button.on em{background:#fff;color:#4C77A8}
+.hcg{border-color:#EAEFF5;box-shadow:none;border-radius:16px}.hcgh{border-bottom-color:#F0F3F7}
+.hcring{background:conic-gradient(#7FAEE6 calc(var(--pc)*1%),#E8EEF6 0)}
+@media (max-width:1000px){.hcards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.hcards{gap:10px}.hcard{min-height:170px;padding:13px 14px}.hcard-n{font-size:28px}.hcard-p{display:none}.hsecsw{display:none}}
+.hopen .hpbar{background:#E8EEF6}.hopen .hpbar i{background:#7FAEE6}
+.hjwho button.on{background:#EEF5FD;border-color:#B9D2F0;color:#1D3354}.hjwho button.on em{color:#4C77A8}
+.hjt2,.hjr{border-color:#EAEFF5}
+.hchart .hcol span{background:#CFE0F5}.hchart .hcol.on span{background:#7FAEE6}
+.htop2 .hpbar{background:#EEF2F7}.htop2 .hpbar i{background:#9CC3EE}
