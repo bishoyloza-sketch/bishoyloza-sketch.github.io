@@ -794,7 +794,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v484';
+var APP_V = 'v485';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2302,7 +2302,7 @@ function pdfPages(driveId, id) { /* SharePoint converts the Word file to PDF; we
         out.push(rows.map(function (r) { r.it.sort(function (a, b) { return a.x - b.x; }); var s = '', end = null; r.it.forEach(function (t) { if (end != null) s += (t.x - end > 6 ? ' | ' : (t.x - end > 1 ? ' ' : '')); s += t.s; end = t.x + t.w; }); return s.replace(/\s+/g, ' ').trim(); })); }); }); })(i);
       return chain.then(function () { return out; }); }); }
 var LABELS = ['Manufacturer', 'Calibration Date', 'Description', 'Calibration interval', 'Code or S/N', 'Code', 'Cal. Due Date', 'Calibration Due Date', 'Accepted Limit', 'Acceptance Limit', 'Status before calibration', 'Status after calibration', 'Cal. Points', 'Calibration Points', 'Range', 'Environmental Condition', 'Temperature & Humidity', 'Cal. Range', 'Resolution', 'Procedure No.', 'Accepted Limits', 'Received status', 'Data Sheet Ref.', 'Delivered status', 'Model', 'Serial No.', 'Serial', 'Location', 'Type', 'Accuracy'];
-function tidy(s) { return String(s || '').replace(/\*+/g, '').replace(/^[\s:|]+|[\s:|]+$/g, '').replace(/\s*\|\s*/g, ' ').replace(/(\d)\s+(\d)/g, '$1$2').replace(/-\s+(\d)/g, '-$1').replace(/(\d)\s+\.\s*(\d)/g, '$1.$2').replace(/\s+/g, ' ').trim(); }
+function tidy(s) { return String(s || '').replace(/[◦º˚]\s*([CF])\b/g, '°$1').replace(/\*+/g, '').replace(/^[\s:|]+|[\s:|]+$/g, '').replace(/\s*\|\s*/g, ' ').replace(/(\d)\s+(\d)/g, '$1$2').replace(/-\s+(\d)/g, '-$1').replace(/(\d)\s+\.\s*(\d)/g, '$1.$2').replace(/\s+/g, ' ').trim(); }
 function parseFields(text) { /* "Data of item" table → fields */
   var t = text.replace(/\s+/g, ' '), found = [];
   LABELS.forEach(function (l) { var re = new RegExp('(^|[\\s|])' + l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s*') + '(?=[\\s|:*])', 'gi'), m; while ((m = re.exec(t))) found.push({ l: l, i: m.index + m[1].length, e: m.index + m[0].length }); });
@@ -2322,7 +2322,7 @@ function parseFields(text) { /* "Data of item" table → fields */
   if (f.range) { var rgm = f.range.match(/^\(\s*[-+\d.,]+\s*[:\-–]\s*[-+\d.,]+\s*\)\s*[^\s\d(]*/); if (rgm && rgm[0].length < f.range.length) f.range = rgm[0].trim(); }
   ['accepted limits', 'accepted limit', 'acceptance limit'].forEach(function (k) { if (f[k] && !/[\d±%]|n\/?a|oiml|according/i.test(f[k])) delete f[k]; });
   if (f['procedure no.']) f['procedure no.'] = f['procedure no.'].replace(/\s+Status\b.*$/i, '').trim();
-  ['serial no.', 'serial', 'model'].forEach(function (k) { if (f[k] && (/^(calibration|range|model|code|description|manufacturer)$/i.test(f[k]) || /^(number|no\.?|num\.?)?\s*\/?\s*model\b|^(number|no\.?)\b.*\b(model|class)\b/i.test(f[k]))) delete f[k]; }); /* the header of the standards table ("Serial Number /Model | Class") is not the device's serial (Ohaus P1-231) */
+  ['serial no.', 'serial', 'model'].forEach(function (k) { if (f[k] && (/^(calibration|range|model|code|description|manufacturer)$/i.test(f[k]) || /^(number|no\.?|num\.?)?\s*\/?\s*model\b|^(number|no\.?)\b.*\b(model|class)\b|^s\s*\/\s*n\.?$|^serial(\s*(no\.?|number))?$/i.test(f[k]))) delete f[k]; }); /* the header of the standards table ("Serial Number /Model | Class") is not the device's serial (Ohaus P1-231) */
   return { certNo: cn ? tidy(cn[1]).replace(/\s/g, '') : '', manufacturer: f.manufacturer || '', description: f.description || '', code: (f.code || f['code or s/n'] || '').replace(/^or\s*s\s*\/\s*n\s*/i, ''), range: f.range || '', calRange: f['cal. range'] || '', resolution: f.resolution || '', limits: f['accepted limits'] || f['accepted limit'] || f['acceptance limit'] || '', calDate: f['calibration date'] || '', dataSheetRef: f['data sheet ref.'] || '', model: f.model || '', serial: f['serial no.'] || f.serial || '', procedure: f['procedure no.'] || '', form: formLearn(t) }; }
 var NUM = /^[-+±]?\d+(?:\.\d+)?$/;
 function parseResults(lines) { /* rows of numbers after the results header → points */
@@ -3664,8 +3664,18 @@ function isCalCert(n, f) { var b = String(n).replace(/\.(docx?|pdf)$/i, ''); if 
   return num && (!path || /\/Certificates\/[^\/]*Cert/i.test(path)) && /^[\s\d\-_,.()A-Za-z]*$/.test(b.replace(/integrity|test|certificates?/gi, '')); }
 function isCover(n) { return /cover/i.test(n) && /\.(docx?|pdf)$/i.test(n); }
 function certBase(n) { return String(n).replace(/\.(docx?|pdf)$/i, '').replace(/[\s.]*(cover\s*page|cover|cal\.?\s*cert(ificate)?|cert(ificate)?\s*page|cert(ificate)?)[\s.]*$/i, '').trim(); }
+/* linked folder (OneDrive): a code is found by the text inside last year's files, so the company's certificate texts are read first – once – before the codes are looked up (before, every pasted code came back "missing" until “choose the folders” was pressed; Bishoy's review 21 Nov 2026) */
+var LOCCO = {};
+function locEnsureCo(p) { if (!LOC.on || !p || !p.company) return Promise.resolve(); var co = p.company.name, k = norm(co); if (LOCCO[k] === 'done') return Promise.resolve(); if (LOCCO[k] && LOCCO[k].then) return LOCCO[k];
+  var go = function () { if (LOC.scanning) return new Promise(function (r) { setTimeout(r, 400); }).then(go); var sv = LS.get(lcKey(co), null); if (!sv || !sv.length) { sv = lcGuess(co, lcSubs()); if (sv.length) LS.set(lcKey(co), sv); } var dirs = sv && sv.length ? lcDirs(sv) : []; if (!dirs.length) { LOCCO[k] = 'done'; return; }
+    var pre = dirs.map(function (d) { return d + '/'; }), todo = LOC.files.filter(function (f) { return !f.dir && pre.some(function (d) { return f.path.indexOf(d) === 0; }) && LOC.certLike(f, dirs) && !LOC.txt[f.id]; });
+    if (!todo.length) { LOCCO[k] = 'done'; return; }
+    var wait = function () { return LOC.tBusy ? new Promise(function (r) { setTimeout(r, 300); }).then(wait) : null; };
+    return Promise.resolve(wait()).then(function () { return new Promise(function (res) { LCB.state[k] = { run: 1 }; LOC.texts(dirs, function () { LCB.state[k] = { ok: 1, n: LOC.tAll }; LS.set('lcOk:' + k, LCB.state[k]); res(); }); if (!LOC.tBusy) res(); }); }).then(function () { LOCCO[k] = 'done'; }); };
+  LOCCO[k] = Promise.resolve().then(go).catch(function () { LOCCO[k] = 'done'; }); return LOCCO[k]; }
 function codeHits(p, code) { code = String(code || '').trim(); if (!code) return Promise.resolve([]);
-  var key = (p && p.company && p.company.name || '') + '|' + code.toUpperCase(); if (CODE_CACHE[key]) return Promise.resolve(CODE_CACHE[key]);
+  var key = (p && p.company && p.company.name || '') + '|' + code.toUpperCase(); if (CODE_CACHE[key] && CODE_CACHE[key].length) return Promise.resolve(CODE_CACHE[key]);
+  if (LOC.on && LOCCO[norm((p && p.company && p.company.name) || '')] !== 'done') return locEnsureCo(p).then(function () { return codeHits(p, code); });
   var pre = String((p && p.company && p.company.code) || '').replace(/[^A-Za-z0-9]/g, ''), q = '"' + code + '"';
   var qs = [q, q + ' "Calibration Due Date"', q + ' (filename:cert OR filename:cover)'].concat(pre ? [q + ' filename:' + pre + '*', q + ' filename:' + pre + '* (filename:cert OR filename:cover)'] : []);
   var all = {}, add = function (fs) { (fs || []).forEach(function (f) { if (!all[f.id]) all[f.id] = f; }); };
@@ -4162,7 +4172,7 @@ function ptRows(p, it) { /* new readings; if missing or OUT → last year's read
       var oRd = dr === 2 ? q.reading2 : q.reading, oDv = dr === 2 ? q.deviation2 : q.deviation;
       /* last year's certificate had the reading but its deviation was not read: work it out (reading − reference) */
       if (!ok && !String(oDv == null ? '' : oDv).trim() && isNum(oRd) && isNum(q.ref) && !isTimer(it)) { var dd = Math.max(decOf(String(oRd)), decOf(String(q.ref))); oDv = (numv(oRd) - numv(q.ref)).toFixed(dd); if (/^-0(\.0+)?$/.test(oDv)) oDv = oDv.slice(1); }
-      row.cells.push(ok ? (isTimer(it) ? v.reading : padTo(v.reading, d)) : oRd, ok ? (isTimer(it) ? tmDev(it, r.dev) : d == null ? String(r.dev) : r.dev.toFixed(d)) : oDv); });
+      row.cells.push(ok ? (isTimer(it) ? v.reading : padTo(v.reading, d)) : oRd, ok ? (isTimer(it) ? tmDev(it, r.dev) : devStr(r.dev, Math.max(d == null ? 0 : d, corOn(it) ? 0 : decOf(v.ref), decOf(v.reading)))) : oDv); });
     row.st = row.cells.some(function (c) { return String(c == null ? '' : c).trim(); }) ? 'Accepted' : '';
     rows.push(row); });
   var bd = balData(p, it); if (bd) ph = ph.concat(bd.ph);
@@ -4617,11 +4627,15 @@ function lettersSave(p, rid, yr, data, fileName, b64) { var comp = String(p.comp
   return clDir(rid, 'Letters by program', '/Reports ' + yr + '/Letters by program').then(function (id) { if (!id) throw new Error('Could not open Letters by program'); lb = id; return clDir(lb, comp, '/Letters by program/' + comp); }).then(function (id) { if (!id) throw new Error('Could not open the ' + comp + ' letters folder'); cf = id; return clList(cf); })
     .then(function (L) { var j = L.filter(function (x) { return x.name.toLowerCase() === 'letters-data.json'; })[0]; if (!j) return; dataId = j.id; return clRead('file:///' + CL_DRIVE + '/' + j.id).then(function (t) { try { var s = t.indexOf('{'), o = JSON.parse(t.slice(s, t.lastIndexOf('}') + 1)); all = o.letters || []; } catch (e) { all = []; } }); })
     .then(function () { data.file = fileName; all = all.filter(function (x) { return x.file !== fileName; }).concat([data]); all.sort(function (a, b) { return String(a.iss).localeCompare(String(b.iss)); });
-      return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: cf, filename: fileName, contentBase64: b64(new TextEncoder().encode(W.doc(letterBody(data), {}))), conflictBehavior: 'replace' }); })
+      return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: cf, filename: fileName, contentBase64: b64(docU8(W.doc(letterBody(data), {}))), conflictBehavior: 'replace' }); })
     .then(function (r) { var one = (clObjs(r)[0] || {}).webUrl; var json = JSON.stringify({ company: p.company.name, year: yr, letters: all }, null, 1);
       return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: cf, filename: 'letters-data.json', contentBase64: b64(new TextEncoder().encode(json)), conflictBehavior: 'replace' })
-        .then(function () { var book = W.doc(all.map(function (d, i) { return letterBody(d, i > 0); }).join(''), {}); return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: cf, filename: comp + ' ' + yr + ' - all letters.docx', contentBase64: b64(new TextEncoder().encode(book)), conflictBehavior: 'replace' }); })
+        .then(function () { var book = W.doc(all.map(function (d, i) { return letterBody(d, i > 0); }).join(''), {}); return clCall(M365, 'sharepoint_upload_file', { driveId: CL_DRIVE, parentItemId: cf, filename: comp + ' ' + yr + ' - all letters.docx', contentBase64: b64(docU8(book)), conflictBehavior: 'replace' }); })
         .then(function (r2) { return { one: one, book: (clObjs(r2)[0] || {}).webUrl, n: all.length }; }); }); }
+/* the Word file as bytes – W.doc gives bytes; encoding them again as text wrote "80,75,3,4…" into the letters saved in Letters by program (found in the SharePoint test, 21 Nov 2026) */
+/* a deviation keeps the decimals of the reference / reading (30 − 30.1 = −0.1, not −0) and is never written "-0" */
+function devStr(v, dec) { var t = (+v).toFixed(Math.min(Math.max(dec || 0, 0), 8)); return /^-0(\.0+)?$/.test(t) ? t.slice(1) : t; }
+function docU8(x) { if (x instanceof Uint8Array) return x; if (x instanceof ArrayBuffer) return new Uint8Array(x); if (Array.isArray(x)) return new Uint8Array(x); return new TextEncoder().encode(String(x)); }
 function letterDoc(p, groups, lid) { return W.doc(letterBody(letterData(p, groups, lid, p._sub ? p.items : null)), {}); }
 function fileBase(g, gr) { var pre = String(g.prefix).replace(/[\/\\]/g, ''), a = gr.from.slice(g.prefix.length).split('-')[0], b = gr.to.slice(g.prefix.length).split('-')[0]; return pre + a + (b !== a ? ',' + b : '') + '-' + g.year; }
 function isTestItem(it) { return genOn(it) && /integrity|filter\s*line|test\s*program|bubble\s*point|diffusion/i.test(((it.old.gen || {}).title || '') + ' ' + (it.description || '')); }
