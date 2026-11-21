@@ -794,7 +794,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v487';
+var APP_V = 'v488';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -4176,14 +4176,15 @@ function ptRows(p, it) { /* new readings; if missing or OUT → last year's read
     /* a blank point (no point value, nothing typed, nothing from last year) is not printed at all */
     if (!String(q.point == null ? '' : q.point).trim() && !String(nvi.ref || nvi.reading || '').trim() && !String(q.ref || q.reading || '').trim()) return;
     dirs.forEach(function (dr) { var r = evalPt(it, i, dr), v = (it.nv || {})[i + (dr === 2 ? 'd' : '')] || {};
-      var ok = r.ref != null && r.rd != null && r.res !== 'OUT', d = resDec(it);
-      if (!ok) { ph.push({ point: q.point + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), why: r.res === 'OUT' ? 'OUT' : 'no new reading', reading: r.rd, dev: r.dev, lim: r.lim }); if (r.res === 'OUT') out = true; }
+      /* an OUT reading prints as it is – its own reading and deviation, status Rejected (Bishoy, 21 Nov 2026); it is still listed for checking */
+      var ok = r.ref != null && r.rd != null, d = resDec(it);
+      if (!ok || r.res === 'OUT') { ph.push({ point: q.point + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), why: r.res === 'OUT' ? 'OUT' : 'no new reading', reading: r.rd, dev: r.dev, lim: r.lim }); if (r.res === 'OUT') out = true; }
       row.ref = lead0(ok ? v.ref : q.ref); if (dr === 1 && corOn(it)) row.exp = corShow(it, ok ? v.ref : q.ref); if (dr === 1 && x3On(it)) row.x3 = lead0(String(v.x3 != null && String(v.x3).trim() ? v.x3 : q.x3 || ''));
       var oRd = dr === 2 ? q.reading2 : q.reading, oDv = dr === 2 ? q.deviation2 : q.deviation;
       /* last year's certificate had the reading but its deviation was not read: work it out (reading − reference) */
       if (!ok && !String(oDv == null ? '' : oDv).trim() && isNum(oRd) && isNum(q.ref) && !isTimer(it)) { var dd = Math.max(decOf(String(oRd)), decOf(String(q.ref))); oDv = (numv(oRd) - numv(q.ref)).toFixed(dd); if (/^-0(\.0+)?$/.test(oDv)) oDv = oDv.slice(1); }
       row.cells.push(ok ? (isTimer(it) ? v.reading : padTo(v.reading, d)) : oRd, ok ? (isTimer(it) ? tmDev(it, r.dev) : devStr(r.dev, Math.max(d == null ? 0 : d, corOn(it) ? 0 : decOf(v.ref), decOf(v.reading)))) : oDv); });
-    row.st = row.cells.some(function (c) { return String(c == null ? '' : c).trim(); }) ? 'Accepted' : '';
+    row.st = row.cells.some(function (c) { return String(c == null ? '' : c).trim(); }) ? (out ? 'Rejected' : 'Accepted') : '';
     rows.push(row); });
   var bd = balData(p, it); if (bd) ph = ph.concat(bd.ph);
   if (genOn(it)) { rows = []; ph = genPh(it); }
@@ -5044,7 +5045,7 @@ function tGen(p) { if (!String(genDefaults(p).start).trim() && !autoDone(genDefa
   var nSel = function () { var P = PJ(); return P ? certList(P).length : 0; };
   /* Print: which certificates, which paper for each part (covers · certificates · receipt letter), then ONE press –
      everything on letterhead first, then the app asks for plain paper and prints the rest. Printed certificates are marked. */
-  $('#gPrint').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); prSheet(p, iss.length || ph.length); };
+  $('#gPrint').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true); prSheet(p, iss.length || ph.filter(function (x) { return x.why !== 'OUT'; }).length); };
   /* Export: Word files on SharePoint · one PDF · Word in a .zip */
   $('#gExp').onclick = function () { if (!String(g.start).trim()) return toast('Write the first certificate number', true);
     openSheet(function () { var n = nSel(); return { title: 'Export – ' + n + ' certificate' + (n === 1 ? '' : 's'), body: '<div class="gpo"><button data-gx="sp"><b>Word → SharePoint</b><small>Certificates › Cert ' + ((s2d(inf.cal) || new Date()).getFullYear()) + ' › ' + esc(certFolderName(p)) + (p.savedSP ? ' · saved ' + esc(fmtDate(p.savedSP.at)) : '') + '</small></button><button data-gx="pdf"><b>PDF</b><small>one PDF with every certificate in order</small></button><button data-gx="zip"><b>Word (.zip)</b><small>a cover page and a cal. cert. for every cover, plus the receipt letter</small></button></div>',
@@ -6932,7 +6933,7 @@ function itemSheet2(p, gi, it0, pick) { if (it0 && mqSetup(it0)) saveProjects();
             D('rcvSt', 'Received status', it0.rcvSt || 'In A Good Condition') + D('dlvSt', 'Delivered status', it0.dlvSt || '', 'automatic from the readings') + '</div></div>'; })()) + (isNew ? '<div class="small">If this code had a certificate last year, its points and readings are brought in after you add it.</div>' : '') + '</div>',
       foot: '<button class="btn ghost" id="isX">Cancel</button>' + (isNew ? '' : '<button class="btn ghost" id="isO">Open its certificate</button>') + '<button class="btn" id="isOk">' + (isNew ? 'Add item' : 'Save') + '</button>',
       mount: mountIs }; });
-  function mountIs() { setTimeout(function () { try { dsMount(st); } catch (e) {} }, 0);
+  function mountIs() { try { st._old = it0 && it0.old && it0.old.status === 'found' ? it0.old.fields : null; st._src = it0 ? it0.src || '' : ''; } catch (e) {} setTimeout(function () { try { dsMount(st); } catch (e) {} }, 0);
         if (!st._m) { st._m = 1; var sbx = document.querySelector('#sheet-root .sheet-b'); if (sbx) sbx.scrollTop = 0; setTimeout(function () { var sb2 = document.querySelector('#sheet-root .sheet-b'); if (sb2) sb2.scrollTop = 0; }, 30); }
         $$('[data-dfm2]').forEach(function (b) { b.onclick = function () { genDefaults(p).dfmt = b.dataset.dfm2; try { coKeep(p); } catch (e) {} saveProjects(); $$('[data-dfm2]').forEach(function (x) { x.classList.toggle('on', x === b); }); var sh = $('#dfShow'); if (sh) sh.textContent = calShow(p, it0); }; });
         $$('[data-is]').forEach(function (e) { var ev = e.tagName === 'SELECT' ? 'onchange' : 'oninput'; e[ev] = function () { if (e.dataset.is === 'procedure' && e.value === '__other') { var tx = window.prompt('Procedure No.', ''); if (tx && tx.trim()) { st.procedure = tx.trim(); touched.procedure = 1; } renderSheet(); return; } st[e.dataset.is] = e.value.trim(); touched[e.dataset.is] = 1;
@@ -7589,14 +7590,16 @@ function lMY(d, add) { return ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May ', 'June ', 
 function dueShort(p, it) { var d = dueDate(p, it); return d ? lMY(d) : ''; }
 
 function deriveCal(it) { var o = it.old; if (!o || !(o.points || []).length || o.crPts) return false; o.crPts = 1; var f = o.fields || (o.fields = {});
-  if (!isNum(it.cMin) && !isNum(it.cMax) && !String(f.calRange || '').replace(/full\s*range/i, '').trim()) { var pv = ptsSpan(o); if (pv) { it.cMin = pv[0]; it.cMax = pv[1]; f.calRange = calRangeText(it); it.crFromPts = 1; } } return true; }
-function syncCalRange(it) { /* the Cal. Range follows the calibration points – unless the user typed one (item data, certificate or cover) */ if (it.calUser) return; var o = it.old, pv = o && ptsSpan(o); if (!pv) return; var f = o.fields || (o.fields = {});
+  if (!isNum(it.cMin) && !isNum(it.cMax) && !String(f.calRange || '').replace(/full\s*range/i, '').trim()) { var pv = ptsSpanIt(it, o); if (pv) { it.cMin = pv[0]; it.cMax = pv[1]; f.calRange = calRangeText(it); it.crFromPts = 1; } } return true; }
+function syncCalRange(it) { /* the Cal. Range follows the calibration points – unless the user typed one (item data, certificate or cover) */ if (it.calUser) return; var o = it.old, pv = o && ptsSpanIt(it, o); if (!pv) return; var f = o.fields || (o.fields = {});
   if (String(it.cMin) === pv[0] && String(it.cMax) === pv[1]) return; it.cMin = pv[0]; it.cMax = pv[1]; it.crFromPts = 1; it.saved = 0; f.calRange = calRangeText(it); }
 /* after the points change: a point outside the device Range → ask to widen the Range or keep it out of range */
 function rangeAsk(p, it, done) { var o = it.old, pv = o && ptsSpan(o); if (!pv || !isNum(it.rMin) || !isNum(it.rMax)) return done(); var lo = +pv[0], hi = +pv[1], r0 = numv(it.rMin), r1 = numv(it.rMax); if (lo >= r0 && hi <= r1) return done();
   var n0 = Math.min(lo, r0), n1 = Math.max(hi, r1), u = it.unit || '';
   dialog('Outside the Range?', 'The points go from <b>' + esc(pv[0]) + '</b> to <b>' + esc(pv[1]) + ' ' + esc(u) + '</b>, the device Range is <b>(' + esc(it.rMin) + ' : ' + esc(it.rMax) + ') ' + esc(u) + '</b>.<br><br>Change the Range to <b>(' + n0 + ' : ' + n1 + ') ' + esc(u) + '</b>? The certificate and the cover follow. Or keep it – the certificate stays marked out of range and can not be saved.', 'Change the Range', 'Keep it').then(function (y) { if (y) { it.rMin = String(n0); it.rMax = String(n1); it.saved = 0; saveProjects(); toast('Range changed to (' + n0 + ' : ' + n1 + ') ' + u); } done(); }); }
 
+/* points read from an old certificate that has only reference readings (10.012 bar on a 0 : 10 bar gauge) do not push the Cal. Range past the instrument range */
+function ptsSpanIt(it, o) { var pv = ptsSpan(o); if (!pv) return pv; var lo = isNum(it.rMin) ? numv(it.rMin) : null, hi = isNum(it.rMax) ? numv(it.rMax) : null; if (lo == null || hi == null || hi <= lo) return pv; var tol = (hi - lo) * 0.02; if (+pv[1] > hi && +pv[1] - hi <= tol) pv[1] = String(hi); if (+pv[0] < lo && lo - +pv[0] <= tol) pv[0] = String(lo); return pv; }
 function ptsSpan(o) { var v = (o.points || []).map(function (q) { var m = String(q.point == null ? '' : q.point).replace(',', '.').match(/-?\d+(?:\.\d+)?/); return m ? +m[0] : null; }).filter(function (x) { return x != null && isFinite(x); }); if (!v.length) return null; return [String(Math.min.apply(null, v)), String(Math.max.apply(null, v))]; }
 
 function cleanName(n) { return String(n || '').replace(/^\s*(eng\.?|m\/|dr\.?)\s*/i, '').trim(); }
@@ -8621,6 +8624,15 @@ function dsLocal(st) { var out = [], n = function (v) { return isNum(v) ? +Strin
   if (rs != null && [st.rMin, st.rMax].some(function (v) { return isNum(v) && dec(v) > dec(st.res); })) add('res', 'The range has more decimals than the resolution ' + st.res, null, 'one of them is wrong');
   var ty = st.ty || (typeof kind8 === 'function' ? kind8(st.description) : ''), U = String(st.unit || ''), cat = { 'Temperature': /°?C$|°?F$|^K$/, 'Humidity': /%\s*R\.?H/i, 'Pressure': /bar|psi|pa|kpa|mpa|mbar|kg\/cm|mmhg|inh2o|mmh2o/i, 'Differential Pressure': /pa|mbar|inh2o|mmh2o/i, 'Weight': /^(g|kg|mg)$/i, 'RPM': /rpm/i, 'Air Velocity': /m\/s|fpm/i };
   if (ty && U && cat[ty] && !cat[ty].test(U)) add('unit', 'Unit “' + U + '” does not fit a ' + ty + ' item', null, 'check the unit or the description');
+  /* code / serial / model mixed up – common in old certificates and customer lists (Bishoy, 21 Nov 2026) */
+  var nz = function (v) { return String(v || '').toLowerCase().replace(/[\s\-_.\/]/g, ''); }, NA = /^(n\/?a|-|—)?$/i, cd = String(st.code || '').trim(), sr = String(st.serial || '').trim(), md = String(st.model || '').trim();
+  if (cd && sr && !NA.test(sr) && nz(cd) === nz(sr)) add('serial', 'Serial No. is the same as the code “' + cd + '”', null, 'the code is the customer\'s tag, the serial is the maker\'s number on the nameplate – check it');
+  else if (cd && sr && !NA.test(sr) && nz(cd).length > 2 && nz(sr).length > 2 && (nz(sr).indexOf(nz(cd)) >= 0 || nz(cd).indexOf(nz(sr)) >= 0)) add('serial', 'Code and serial look joined – code “' + cd + '”, serial “' + sr + '”', null, 'split them: the code goes in Code, the maker\'s number in Serial');
+  if (md && sr && !NA.test(md) && nz(md) === nz(sr)) add('model', 'Model and serial are the same (“' + md + '”)', null, 'one of them is wrong – check the nameplate');
+  if (/^(s\/?n|serial|model|code|number|no\.?)\b/i.test(sr)) add('serial', 'Serial “' + sr + '” looks like a heading, not a number', 'N/A', 'a merged cell in the old certificate');
+  /* the customer's list or what was typed vs last year's certificate */
+  var O = st._old; if (O) [['manufacturer', 'Manufacturer'], ['model', 'Model'], ['serial', 'Serial No.']].forEach(function (x) { var a1 = String(O[x[0]] || '').trim(), b1 = String(st[x[0]] || '').trim(); if (a1 && b1 && !NA.test(a1) && !NA.test(b1) && nz(a1) !== nz(b1)) add(x[0], x[1] + ': last year’s certificate says “' + a1 + '”, here “' + b1 + '”', a1, st._src === 'list' ? 'the customer\'s list is newer – keep it unless the nameplate says otherwise' : 'check the nameplate'); });
+  if (O && rs != null) { var orr = String(O.resolution || '').match(/-?\d*\.?\d+/); if (orr && +orr[0] > 0 && Math.abs(+orr[0] - rs) > 1e-12) add('res', 'Resolution: last year ' + String(O.resolution).trim() + ', here ' + st.res, null, 'check the display – a wrong resolution changes every reading'); }
   if (!String(st.serial || '').trim()) add('serial', 'Serial No. is empty', 'N/A', 'write it from the nameplate, or N/A');
   if (!String(st.model || '').trim()) add('model', 'Model is empty', 'N/A', 'write it from the nameplate, or N/A');
   return out; }
