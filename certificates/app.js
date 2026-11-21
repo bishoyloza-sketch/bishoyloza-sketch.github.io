@@ -816,7 +816,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v505';
+var APP_V = 'v506';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1431,54 +1431,7 @@ function addChoice(p) {
 }
 function deptField(p, val, attr) { if (!p.depts.length) return '';
   return '<label class="f"><span>Department</span><div class="seg">' + p.depts.map(function (d) { return '<button ' + attr + '="' + esc(d) + '" class="' + (val === d ? 'on' : '') + '">' + esc(d) + '</button>'; }).join('') + '</div></label>'; }
-function unitSelect(id, val, ph) { var known = UNITS.indexOf(val) >= 0 || !val;
-  return '<select class="inp" id="' + id + '"><option value="">' + (ph || 'Unit') + '</option>' + UNITS.map(function (u) { return '<option' + (u === val ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') + '<option value="__other"' + (!known ? ' selected' : '') + '>Other…</option></select>' +
-    (!known ? '<input class="inp" id="' + id + 'O" value="' + esc(val) + '" placeholder="Type the unit" style="margin-top:6px">' : ''); }
 var SHEET_RET = null;
-function itemSheet(p, id, fresh) {
-  var it = fresh || p.items.filter(function (x) { return x.id === id; })[0]; if (!it) return; var isNew = !!fresh, tried = false;
-  var m = it.machineId ? p.machines.filter(function (x) { return x.id === it.machineId; })[0] : null;
-  openSheet(function () { var iss = tried ? itemIssues(it) : [], bad = function (k) { return iss.some(function (x) { return x.indexOf(k) === 0; }) ? ' bad' : ''; };
-    var F = function (k, l, ph, cls, mode) { return '<label class="f"><span>' + l + '</span><input class="inp' + (cls || '') + '" data-k="' + k + '" value="' + esc(it[k]) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (mode ? ' inputmode="' + mode + '"' : '') + '></label>'; };
-    return { title: isNew ? (m ? 'Add instrument' : 'Add a unit') : 'Item', body:
-      (m ? '<div class="note">Under machine <b>' + esc(m.name) + '</b></div>' : '') +
-      (it.photo ? '<img id="itImg" alt="" style="width:100%;border-radius:14px;margin-bottom:12px;background:#ddd;min-height:80px">' : '') +
-      '<div class="cf" style="margin:0 0 14px"><button class="btn ghost" id="itPh">' + I.cam.replace(/28/g, '20') + (it.photo ? ' Change photo' : ' Photo of the nameplate') + '</button></div>' +
-      (iss.length ? '<div class="note warnbox"><b>Missing:</b> ' + esc(iss.join(' · ')) + (it.photo ? '<br>Or save it as photo only and fill the data later.' : '') + '</div>' : '') +
-      F('description', 'Description', 'e.g. Pressure gauge, Temperature sensor', bad('Description')) + F('code', 'Code', 'Equipment code on the sticker') +
-      '<div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">' + F('manufacturer', 'Manufacturer') + F('model', 'Model') + '</div>' + F('serial', 'Serial no.') +
-      '<div class="sec" style="margin:4px 0 8px"><h2 style="font-size:16px">Range</h2><small>numbers + unit</small></div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">' + '<input class="inp' + bad('Range') + '" data-k="rMin" inputmode="decimal" placeholder="From" value="' + esc(it.rMin) + '"><input class="inp' + bad('Range') + '" data-k="rMax" inputmode="decimal" placeholder="To" value="' + esc(it.rMax) + '"><div>' + unitSelect('uSel', it.unit) + '</div></div>' +
-      '<div class="sec" style="margin:14px 0 8px"><h2 style="font-size:16px">Calibration range</h2><small>empty = full range</small></div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center">' + '<input class="inp' + bad('Calibration') + '" data-k="cMin" inputmode="decimal" placeholder="' + esc(it.rMin || 'From') + '" value="' + esc(it.cMin) + '"><input class="inp' + bad('Calibration') + '" data-k="cMax" inputmode="decimal" placeholder="' + esc(it.rMax || 'To') + '" value="' + esc(it.cMax) + '"><span class="small">' + esc(it.unit || '') + '</span></div>' +
-      '<div class="sec" style="margin:14px 0 8px"><h2 style="font-size:16px">Resolution</h2><small>required</small></div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + '<input class="inp' + bad('Resolution (') + '" data-k="res" inputmode="decimal" placeholder="e.g. 0.1" value="' + esc(it.res) + '"><div>' + unitSelect('ruSel', it.resUnit || it.unit, 'Same unit') + '</div></div>' +
-      '<div style="height:14px"></div>' + (m ? '' : deptField(p, it.dept, 'data-dp')) +
-      '<label class="f"><span>Calibration date – only if different from the job (' + fmtD((p.info || {}).cal) + ')</span><input class="inp" type="date" data-k="calDate" value="' + esc(it.calDate || '') + '"></label>',
-      foot: (isNew ? '' : '<button class="btn danger" id="itDel">Delete</button>') + (it.photo && !hasData(it) ? '<button class="btn ghost" id="itPhOnly">Photo only</button>' : '') + '<button class="btn" id="itOk">' + (isNew ? 'Add' : 'Save') + '</button>',
-      mount: function () {
-        if (it.photo) IDB.get(it.photo).then(function (d) { var im = $('#itImg'); if (im && d) im.src = d; });
-        $$('[data-k]').forEach(function (e) { e.oninput = function () { it[e.dataset.k] = e.value.trim(); }; });
-        var us = function (sel, key) { var s = $('#' + sel); s.onchange = function () { if (s.value === '__other') { it[key] = ' '; renderSheet(); var o = $('#' + sel + 'O'); if (o) { o.value = ''; o.focus(); } } else { it[key] = s.value; if (key === 'unit' && !it.resUnit) {} renderSheet(); } };
-          var o = $('#' + sel + 'O'); if (o) o.oninput = function () { it[key] = o.value.trim() || ' '; }; };
-        us('uSel', 'unit'); us('ruSel', 'resUnit');
-        $$('[data-dp]').forEach(function (b) { b.onclick = function () { it.dept = b.dataset.dp; renderSheet(); }; });
-        $('#itPh').onclick = function () { pickFiles(PHOTO_ACCEPT).then(function (fs0) { return asPhotos(fs0); }).then(function (fs) { if (!fs.length) return; shrink(fs[0], 1400, 0.8).then(function (d) { if (!d) return; it.photo = it.photo || 'it-' + it.id; IDB.put(it.photo, d).then(function () { if (isNew && p.items.indexOf(it) < 0) { /* keep it until saved */ } renderSheet(); return ocrText(d).catch(function () { return ''; }); }).then(function (t) { t = String(t || ''); if (!t.trim()) return; var got = [];
-      if (!it.code) { var c = (impCodesFromText(t)[0] || {}).code; if (c) { it.code = c; got.push('code'); } }
-      if (!it.serial) { var mm = t.match(/(?:s\/?n|serial(?:\s*no)?)\s*[:.#]?\s*([A-Z0-9\-\/]{4,})/i); if (mm) { it.serial = mm[1]; got.push('serial'); } }
-      if (!it.model) { var md = t.match(/model\s*[:.#]?\s*([A-Z0-9\-\/ ]{2,20})/i); if (md) { it.model = md[1].trim(); got.push('model'); } }
-      if (!it.prevCert) { var cn = impCertNos(t)[0]; if (cn) { it.prevCert = cn; got.push('last cert. no.'); } }
-      if (got.length) { toast('Read from the photo: ' + got.join(', ') + ' – check them'); renderSheet(); } }); }); }); };
-        var del = $('#itDel'); if (del) del.onclick = function () { delItem(p, it.id, function () { back(); }); };
-        var po = $('#itPhOnly'); if (po) po.onclick = function () { if (isNew) p.items.push(it); saveProjects(); back(); };
-        $('#itOk').onclick = function () { it.unit = String(it.unit || '').trim(); it.resUnit = String(it.resUnit || '').trim();
-          if (it.photo && !hasData(it)) { if (isNew) p.items.push(it); saveProjects(); return back(); }
-          var e = itemIssues(it); if (e.length && !(isNew && it.code && !it.rMin && !it.res && spOn())) { tried = true; renderSheet(); return toast('Missing: ' + e[0], true); }
-          if (isNew && it.code && e.length) { p.items.push(it); saveProjects(); back(); toast('Added – loading last year\'s certificate'); queueOld(p); return; }
-          if (!it.resUnit) it.resUnit = it.unit; if (isNew) p.items.push(it); saveProjects(); back(); }; } }; });
-  function backQ() {}
-  function back() { if (SHEET_RET) { var rf = SHEET_RET; SHEET_RET = null; return rf(); } if (m) machineSheet(p, m.id); else closeSheet(); }
-}
 function machineSheet(p, id, fresh) {
   var m = fresh || p.machines.filter(function (x) { return x.id === id; })[0]; if (!m) return; var isNew = !!fresh;
   openSheet(function () { var its = p.items.filter(function (i) { return i.machineId === m.id; });
@@ -1927,7 +1880,6 @@ function docBin(buf) { var u = new Uint8Array(buf), dv = new DataView(buf), r16 
 function impXlsx(file) { return needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) { var all = [];
   wb.worksheets.forEach(function (ws) { var rows = []; ws.eachRow({ includeEmpty: false }, function (row) { var v = row.values; rows.push(v.slice(1).map(cellStr)); }); impKeep(rows, ''); all = all.concat(impAkh(rows) || impForm(rows) || impRowTable(rows) || impPlan(rows) || impTable(rows)); }); return all; }); }
 /* ---- understanding the values ---- */
-function impNum(s) { var v = String(s).replace(/,(?=\d{3}\b)/g, '').match(/-?\d+(?:\.\d+)?/); return v ? v[0] : ''; }
 var IMP_UNIT = /(?:^|[\s()\d\/])(mmh2o|inh2o|°\s?C|°\s?F|%\s?RH|rpm|bar|mbar|psi|kpa|pa|kg|g|gm|mm|m\/s|l\/min|lpm|µs\/cm|us\/cm|ms\/cm|ppm|ph|v|a|hz|s|min|hr|lux|db|n\.?m|%)\b/i;
 function impUnit(s) { s = String(s || '').replace(/[ºᵒ]/g, '°'); if (/rh\s*%|%\s*rh/i.test(s)) return '%RH'; var m = s.match(IMP_UNIT); if (!m) return ''; var u = m[1].replace(/\s/g, ''); return ({ '°c': '°C', '°f': '°F', '%rh': '%RH', rpm: 'RPM', kg: 'kg', g: 'g', gm: 'g', bar: 'bar', mbar: 'mbar', pa: 'Pa', kpa: 'kPa', psi: 'psi', mm: 'mm', 'm/s': 'm/s', 'µs/cm': 'µS/cm', mmh2o: 'mmH2O', inh2o: 'inH2O', 'us/cm': 'µS/cm', 'ms/cm': 'mS/cm', ph: 'pH', v: 'V', a: 'A', hz: 'Hz', s: 's', min: 'min', lux: 'lux', db: 'dB', '%': '%' })[u.toLowerCase()] || u; }
 function impRange(s) { var m = String(s || '').replace(/(\d)\s*°?\s*[cf]?°?\s*(?=:|to\b|–|~)/ig, '$1').replace(/(\d)\s*%\s*(?=:|–|~)/g, '$1').match(/\(?\s*(-?\d+(?:\.\d+)?)\s*(?::|to|-|–|~)\s*(-?\d+(?:\.\d+)?)\s*([^)]*)\)?/i); return m ? { a: m[1], b: m[2], u: impUnit(m[3]) || impUnit(s) } : null; }
@@ -2332,39 +2284,11 @@ var NAVI = {
   det: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>'
 };
 function ensureInfo(p) { p.info = p.info || { cal: '', wo: '', iss: '', rec: '', due: '', woPre: (String((p.company || {}).code || '').match(/^\d+/) || [''])[0], tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [], refRes: {} }; var d0 = { cal: '', wo: '', iss: '', rec: '', due: '', tech: '', techId: '', eT: '21', eH: '55', eLoc: 'On Site', refs: [] }; Object.keys(d0).forEach(function (k) { if (p.info[k] == null) p.info[k] = d0[k]; }); p.info.refRes = p.info.refRes || {}; if (!p.info.tech && S.me && S.me.name) { p.info.tech = cleanName(S.me.name); p.info.techId = S.me.id || ''; } return p.info; }
-function renderOverview(p) {
-  ensureInfo(p);
-  if (!p.tab || p.tab === 'over') p.tab = 'certs'; PT.tab = p.tab;
-  var titles = { certs: ['Old certificates', 'Last year\'s certificate of every item'], refs: ['References', 'A reference for every item'], det: ['Details', 'Technician, dates and conditions'], read: ['Readings', 'New readings next to last year\'s'], gen: ['Certificates', 'Covers, certificates and the receipt letter'] }[p.tab];
-  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + topC(esc(hub ? titles[0] : titles[0]), esc(hub ? titles[1] : p.company.name + ' · ' + titles[1])) + '<main id="pm"></main></div>' + projFoot(p);
-  bindStepBar(p); bindHome(); bindProjFoot(p);
-  ({ certs: tCerts, refs: tRefs, read: tRead, det: tDet, gen: tGen })[p.tab](p);
-}
 function goHome() { RESTORE.done = true; S.view = null; sheetFn = null; renderSheet(); $('#dlg-root').innerHTML = ''; S.cur = null; render(); window.scrollTo(0, 0); }
 document.addEventListener('click', function (e) { var t = e.target && e.target.closest && e.target.closest('.top .brand, .top .bname, .top .tclogo, [data-home]'); if (!t || !S.session) return; e.preventDefault(); goHome(); });
 function bindHome() { var h = $('#goHome2'); if (h) h.onclick = goHome; $$('[data-home], .top .brand').forEach(function (b) { b.style.cursor = 'pointer'; b.onclick = goHome; }); }
-function certCounts(p) { var c = { found: 0, similar: 0, missing: 0, todo: 0 }; p.items.forEach(function (it) { var s = (it.old || {}).status; if (s === 'found') c.found++; else if (s === 'similar') c.similar++; else if (s === 'missing' || s === 'error') c.missing++; else c.todo++; }); return c; }
 
 /* ---- overview ---- */
-function tOver(p) {
-  var o = p.order || {}, inf = p.info, c = certCounts(p), pr = readProgress(p), warn = dateWarns(inf).concat(refWarns(p)).concat(refResWarn(p) ? [refResWarn(p) + ' chosen reference(s) without a resolution'] : []);
-  var step = function (n, done, title, sub, btn, tab) { return '<div class="card"><div style="display:flex;gap:12px;align-items:center"><span style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:18px;flex:none;' + (done ? 'background:var(--office);color:#fff' : 'background:var(--blue-soft);color:var(--navy)') + '">' + (done ? '✓' : n) + '</span><div style="flex:1;min-width:0"><h3>' + title + '</h3><div class="meta">' + sub + '</div></div></div><div class="cf"><button class="btn ' + (done ? 'ghost' : '') + '" data-go="' + tab + '">' + btn + '</button></div></div>'; };
-  $('#pm').innerHTML = warn.map(function (w) { return '<div class="note warnbox">' + esc(w) + '</div>'; }).join('') +
-    '<div class="card bar"><h3>Order</h3><dl class="kv" style="margin-top:8px"><dt>Type</dt><dd>' + esc(TYPES[p.orderType][0]) + '</dd>' + (o.number ? '<dt>Number</dt><dd>' + esc(o.number) + '</dd>' : '') +
-      (o.fileName ? '<dt>File</dt><dd>' + (o.webUrl ? '<a href="' + esc(o.webUrl) + '" target="_blank" rel="noopener">' + esc(o.fileName) + '</a>' : esc(o.fileName)) + (o.attached && !o.uploaded ? ' · on this phone' : '') + '</dd>' : '') + (o.skipped ? '<dt>Document</dt><dd>Skipped for now</dd>' : '') +
-      '<dt>Items</dt><dd>' + p.items.length + (p.machines.length ? ' · ' + p.machines.length + ' machines' : '') + '</dd></dl>' +
-      '<div class="cf"><button class="btn ghost sm" data-g="company">Company</button><button class="btn ghost sm" data-g="dept">Department</button><button class="btn ghost sm" data-g="order">Order</button><button class="btn ghost sm" data-g="items">Items</button></div></div>' +
-    '<div class="sec"><h2>Steps</h2></div>' +
-    step(1, !!(inf.cal && inf.tech), 'Job details', inf.cal ? 'Calibration ' + fmtD(inf.cal) + ' · ' + esc(inf.tech || 'no technician yet') : 'Dates, technician, references', 'Details', 'det') +
-    step(2, p.items.length && !c.todo, 'Old certificates', (c.found + c.similar) + ' of ' + p.items.length + ' have last year\'s data', 'Old certificates', 'certs') +
-    step(3, pr.tot && pr.fil === pr.tot, 'New readings', pr.tot ? pr.fil + ' of ' + pr.tot + ' points' + (pr.out ? ' · <span class="warn">' + pr.out + ' OUT</span>' : '') : 'After the old certificates', 'Readings', 'read') +
-    step(4, false, 'Certificates', 'Covers, certificates and the receipt letter – Word and PDF', 'Certificates', 'gen') +
-    '<div class="cf"><button class="btn ghost" id="home">All jobs</button><button class="btn danger" id="delP">Delete job</button></div>';
-  $$('[data-g]').forEach(function (b) { b.onclick = function () { go(p, b.dataset.g); }; });
-  $$('[data-go]').forEach(function (b) { b.onclick = function () { PT.tab = b.dataset.go; render(); window.scrollTo(0, 0); }; });
-  $('#home').onclick = function () { S.cur = null; PT.tab = 'over'; render(); };
-  $('#delP').onclick = function () { dialog('Delete this job?', 'Only this job on this phone is deleted.', 'Delete').then(function (y) { if (!y) return; try { if (SYNC.on() && p.company) jcall('del', { id: p.id }).catch(function () {}); } catch (e) {} S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); S.cur = null; render(); }); };
-}
 
 /* ---- details: dates, technician, references, conditions ---- */
 function d2s(d) { if (!d) return ''; var z = function (n) { return String(n).padStart(2, '0'); }; return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); }
@@ -2453,11 +2377,6 @@ function unitKey(u) { u = String(u || '').trim().replace(/^l\s*\/\s*(hr?|hour)$/
 function toBase(v, u) { var c = UCAT[unitKey(u)]; return c ? v * c[2] + (c[3] || 0) : v; }
 function devRange(d) { var t = String(d.range || '').replace(/amb\.?/i, '20').replace(/\s+/g, ' '), m = t.match(/\(?\s*(-?\d+(?:\.\d+)?)\s*(?::|to|~)\s*(-?\d+(?:\.\d+)?)\s*\)?\s*([^\d\s()][^()]*)?/i);
   if (!m) return null; var u = unitKey((m[3] || '').trim().split(/[\s,;&]/)[0]); return { lo: Math.min(+m[1], +m[2]), hi: Math.max(+m[1], +m[2]), unit: u }; }
-function suggestRefs(p) { var out = {}; labDevices().forEach(function (d) { var r = devRange(d); if (!r || !UCAT[r.unit]) return;
-    p.items.forEach(function (it) { var u = unitKey(it.unit); if (!UCAT[u] || UCAT[u][1] !== UCAT[r.unit][1]) return;
-      var lo = isNum(it.cMin) ? numv(it.cMin) : (isNum(it.rMin) ? numv(it.rMin) : null), hi = isNum(it.cMax) ? numv(it.cMax) : (isNum(it.rMax) ? numv(it.rMax) : null); if (lo == null || hi == null) return;
-      if (toBase(r.lo, r.unit) <= toBase(lo, u) + 1e-9 && toBase(r.hi, r.unit) >= toBase(hi, u) - 1e-9) (out[d.id] = out[d.id] || []).push(it.code || it.description); }); });
-  return out; }
 /* standards with a certified value and no display (buffer and conductivity solutions, gauge blocks, weights, viscosity oils, capillaries, metal cards): no resolution to ask for */
 function refNominal(id) { var d = labDevices().filter(function (x) { return x.id === id; })[0]; if (!d) return false; var t = (d.description || '') + ' ' + (d.model || '') + ' ' + (d.manufacturer || ''); return /buffer|standard\s*solution|conductivity\s*standard|calibration\s*solution|reference\s*(solution|material)|gauge\s*block|weight\s*set|single\s*weight|mass\s*piece|viscosity\s*standard|capillar|test\s*card|metal\s*card|distilled\s*water/i.test(t) && !/balance|meter|indicator|scale|calibrator/i.test(d.description || ''); }
 function refResFill(p) { var inf = p.info = p.info || {}; inf.refRes = inf.refRes || {}; inf.refResSrc = inf.refResSrc || {}; var memo = LS.get('refRes', {}), ch = 0;
@@ -2465,29 +2384,6 @@ function refResFill(p) { var inf = p.info = p.info || {}; inf.refRes = inf.refRe
     if (!spOn()) { inf.refResSrc[id] = 'not in any datasheet I have – write it once, it is kept'; return; } if (typeof refResAuto === 'function' && !inf.refResSrc[id]) { inf.refResSrc[id] = 'looking in its certificate on SharePoint…'; try { refResAuto(p, id, function () { inf.refResSrc[id] = 'From its certificate'; saveProjects(); if (S.cur === p.id && !sheetFn) render(); }); } catch (e) {} setTimeout(function () { if (!isNum(inf.refRes[id])) { inf.refResSrc[id] = 'not in its certificate or any datasheet I found – write it once, it is kept'; if (S.cur === p.id && !sheetFn) render(); } }, 25000); } });
   if (ch) saveProjects(); }
 function refResWarn(p) { try { refResFill(p); } catch (e) {} return (p.info.refs || []).filter(function (id) { return !isNum(p.info.refRes[id]) && !refNominal(id); }).length; } /* a weight set or a buffer is a nominal value – no resolution needed (same rule as Make files) */
-function tDet(p) {
-  var inf = p.info, people = (S.people || []).filter(function (u) { return u.role === 'engineer' || u.role === 'admin'; }), ds = labDevices(), q = norm(PT.rq || '');
-  var cats = {}; ds.forEach(function (d) { (cats[d.category || 'Other'] = cats[d.category || 'Other'] || []).push(d); });
-  $('#pm').innerHTML = '<div class="sec" style="margin-top:4px"><h2>Calibrated by</h2></div><div class="chips">' + people.map(function (u) { return '<button class="chip' + (inf.techId === u.id ? ' on' : '') + '" data-tech="' + u.id + '">' + esc(u.name) + '</button>'; }).join('') + '</div>' +
-    '<div class="sec"><h2>Dates</h2><button class="btn ghost sm" id="chD">Change</button></div><dl class="kv"><dt>Calibration</dt><dd>' + fmtD(inf.cal) + '</dd><dt>Work order</dt><dd>' + esc(woNo(inf) || '—') + '</dd><dt>Date of issue</dt><dd>' + fmtD(inf.iss) + '</dd><dt>Date received</dt><dd>' + fmtD(inf.rec) + '</dd></dl>' +
-    '<div class="sec"><h2>Environmental conditions</h2>' + (PT.envEdit ? '<small>editing</small>' : '<button class="btn ghost sm" id="envE">Edit</button>') + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px"><label class="f"><span>Temperature (°C)</span><input class="inp" inputmode="decimal" data-i="eT" value="' + esc(inf.eT) + '"' + (PT.envEdit ? '' : ' readonly') + '></label><label class="f"><span>Humidity (%RH)</span><input class="inp" inputmode="decimal" data-i="eH" value="' + esc(inf.eH) + '"' + (PT.envEdit ? '' : ' readonly') + '></label></div>' +
-    '<label class="f"><span>Location</span><input class="inp" data-i="eLoc" value="' + esc(inf.eLoc) + '"></label>' +
-    '';
-  var cd = $('#chD'); if (cd) cd.onclick = function () { gotoStep(p, 'date'); };
-  var ee = $('#envE'); if (ee) ee.onclick = function () { PT.envEdit = true; tDet(p); };
-  $$('[data-tech]').forEach(function (b) { b.onclick = function () { var u = people.filter(function (x) { return x.id === b.dataset.tech; })[0]; inf.techId = u.id; inf.tech = u.name; saveProjects(); tDet(p); }; });
-  $$('[data-i]').forEach(function (e) { e.oninput = function () { inf[e.dataset.i] = e.value; if (e.dataset.i === 'cal') { calcDates(inf); ['wo', 'iss', 'rec', 'due'].forEach(function (k) { var e2 = $('[data-i="' + k + '"]'); if (e2) { e2.value = inf[k]; dpSync(e2); } }); }
-    saveProjects(); }; });
-  var memo = LS.get('refRes', {});
-  $$('[data-rr]').forEach(function (e) { e.onchange = function () { var v = e.value.trim(); if (!isNum(v)) { toast('Resolution must be a number', true); return; } inf.refRes[e.dataset.rr] = v; saveProjects(); rrScope(e.dataset.rr, v, memo).then(function () { tDet(p); }); }; });
-  $$('[data-rre]').forEach(function (b) { b.onclick = function () { var id = b.dataset.rre, was = inf.refRes[id];
-    $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>Reference resolution</h3><p>Now: <b>' + esc(was) + '</b></p><input class="inp" id="rrv" inputmode="decimal" value="' + esc(was) + '"><div class="cf"><button class="btn ghost" id="rrc">Cancel</button><button class="btn" id="rrs">Save</button></div></div></div>';
-    $('#rrc').onclick = function () { $('#dlg-root').innerHTML = ''; };
-    $('#rrs').onclick = function () { var v = $('#rrv').value.trim(); $('#dlg-root').innerHTML = ''; if (!isNum(v)) return toast('Resolution must be a number', true); if (numv(v) === numv(was)) return;
-      dialog('Are you sure?', 'The reference resolution changes from <b>' + esc(was) + '</b> to <b>' + esc(v) + '</b>.', 'Yes, I\'m sure').then(function (y) { if (!y) return; inf.refRes[id] = v; saveProjects(); rrScope(id, v, memo).then(function () { tDet(p); }); }); }; }; });
-  var rq = $('#rq'); if (rq) rq.oninput = function () { PT.rq = rq.value; var pos = rq.selectionStart; tDet(p); var n = $('#rq'); n.focus(); n.setSelectionRange(pos, pos); };
-  $$('[data-ref]').forEach(function (b) { b.onclick = function () { var id = b.dataset.ref, a = inf.refs || (inf.refs = []), i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else { a.push(id); if (!inf.refRes[id] && LS.get('refRes', {})[id]) inf.refRes[id] = LS.get('refRes', {})[id]; var d = ds.filter(function (x) { return x.id === id; })[0]; if (d && refExpired(d, inf)) toast('This reference\'s certificate is expired!', true); } saveProjects(); tDet(p); }; });
-}
 
 /* ---- old certificates: find last year's certificate on SharePoint and read it ---- */
 var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
@@ -2647,7 +2543,6 @@ function can(k) { return !!S.me && !!certInfo(S.me).p[k]; }
 function certAdmin() { return can('users'); }
 /* buttons a person may not use are hidden everywhere (also inside sheets) */
 function permPaint() { try { PERMS.forEach(function (x) { document.body.classList.toggle('np-' + x[0], !!S.me && !can(x[0])); }); } catch (e) {} }
-function rolesLoad() { if (!SYNC.on()) return Promise.resolve(); return jcall('list', { since: 0 }).then(function (r) { (r.jobs || []).forEach(function (j) { if (j.id === '__roles') rolesTake(j); }); }).catch(function () {}); }
 function rolesTake(j) { try { SYNC.roles = JSON.parse(j.json || '{}') || {}; } catch (e) { SYNC.roles = {}; } SYNC.rolesRev = j.rev; LS.set('certRoles', SYNC.roles); permPaint(); }
 function rolesSet(id, role, who, what) { var put = function (base, rev) { var m = Object.assign({}, base || {}); m[id] = role;
     return jcall('save', { meta: { id: '__roles', company: '(app settings – do not delete)', done: 0, total: 0 }, json: JSON.stringify(m), baseRev: rev == null ? null : rev }).then(function (r) {
@@ -2999,7 +2894,6 @@ function poSplitApply(p, l, parts, how) { var o = p.order, at = o.items.indexOf(
   o.items.splice.apply(o.items, [at, 1].concat(kids)); certList(p).forEach(function (it) { if (it.poLine === l.no) { it.poLine = null; it.poSet = 0; } else if (!it.poSet) it.poLine = null; });
   poAuto(p); poApply(p); saveProjects(); return tot; }
 function poKeepOne(p, l, parts) { var n = parts.reduce(function (a, x) { return a + x.qty; }, 0), tot = poLineTotal(l); l.qty = n; if (tot != null) { l.price = Math.round(tot / n * 100) / 100; l.total = tot; } l.grpOk = 1; l.oneLine = parts.map(function (x) { return x.qty + ' ' + x.kind; }).join(' + '); delete l.grp; poAuto(p); poApply(p); saveProjects(); }
-function poSplitUndo(p, no) { var o = p.order || {}, orig = (o.splitFrom || {})[no]; if (!orig) return; var at = -1; o.items = o.items.filter(function (l, i) { if (l.from === no) { if (at < 0) at = i; return false; } return true; }); orig.grpOk = 0; orig.grp = null; o.items.splice(at < 0 ? o.items.length : at, 0, orig); delete o.splitFrom[no]; poDetectGroups(p); saveProjects(); }
 /* the offer's lines give the unit prices of the kinds */
 function poOfferPrices(parts, lines) { var n = 0; parts.forEach(function (x) { var best = null, bs = 0; lines.forEach(function (ol) { if (ol.vat || ol.price == null) return; var k = poKind(ol.desc), s = k === x.kind ? 5 : 0; if (s > bs) { bs = s; best = ol; } }); if (best) { x.price = best.price; x.fixed = 1; n++; } }); return n; }
 function poSplitSheet(p, l, done) { var parts0 = JSON.parse(JSON.stringify(l.grp || [{ kind: '', qty: 1 }])), st = { mode: 'view', parts: parts0, how: l.grpHow || 'pricelist', pick: 'offer', note: '' }, tot = poLineTotal(l), cur = l.cur || 'EGP';
@@ -3629,7 +3523,6 @@ function anyDate(t) { t = String(t || '').trim(); var M = ['jan', 'feb', 'mar', 
   if ((m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return m[1] + '-' + pad(m[2]) + '-' + pad(m[3]);
   if ((m = t.match(/^(\d{1,2})\s*[\/.\- ]\s*([A-Za-z]{3,9})\.?\s*[\/.\- ]\s*(\d{4})$/))) { var k = M.indexOf(m[2].slice(0, 3).toLowerCase()); if (k >= 0) return m[3] + '-' + pad(k + 1) + '-' + pad(m[1]); }
   if ((m = t.match(/^(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{4})$/))) return m[3] + '-' + pad(m[2]) + '-' + pad(m[1]); return ''; }
-function genFind(it, rx) { var g = it.old && it.old.gen; if (!g) return null; for (var bi = 0; bi < g.blocks.length; bi++) { var b = g.blocks[bi]; if (b.kind !== 'kv') continue; for (var r = 0; r < b.rows.length; r++) for (var c = 1; c < (b.rows[r] || []).length; c += 2) if (rx.test(genLab(b, r, c))) return { bi: bi, r: r, c: c }; } return null; }
 function genNum(v) { var m = String(v || '').replace(',', '.').match(/-?\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; }
 function genRaw(it, bi, r, c) { var b = it.old.gen.blocks[bi]; if (!b || !b.rows) return ''; var nv = (it.ngen || {})[bi + '|' + r + '|' + c]; return nv != null && nv !== '' ? nv : (b.rows[r] || [])[c] || ''; }
 function genBP(it) { var f = genFind(it, /^bubble\s*point(\s*\(.*\))?$/i), m = genFind(it, /min(imum)?\.?\s*bubble\s*point/i); if (!f || !m) return null; var bv = genNum(genRaw(it, f.bi, f.r, f.c)), mv = genNum(genRaw(it, m.bi, m.r, m.c)); return { bv: bv, mv: mv, low: bv != null && mv != null && bv < mv }; }
@@ -3730,7 +3623,6 @@ function genTwo(it) { var g = it.old.gen; g.two = 1; var map = {}, nb = g.blocks
       if (!lab && !String(val).trim() && nv[k1] == null) continue; var nr = rows.length; rows.push([lab, val]); map[k0] = bi + '|' + nr + '|0'; map[k1] = bi + '|' + nr + '|1'; } });
     return Object.assign({}, b, { rows: rows }); });
   if (Object.keys(map).length) { var ng = {}; Object.keys(it.ngen || {}).forEach(function (k) { ng[map[k] || k] = it.ngen[k]; }); it.ngen = ng; } g.blocks = nb; }
-function genVal0(it, bi, r, c) { var b = it.old.gen.blocks[bi], k = bi + '|' + r + '|' + c, nv = (it.ngen || {})[k]; if (nv != null && nv !== '') return { v: nv, ph: false }; var ov = (b.rows[r] || [])[c] || ''; return { v: ov, ph: genMeas(b, r, c) && ov !== '' }; }
 function genText(it, bi) { var nv = (it.ngen || {})[bi + '|t']; return nv != null ? nv : it.old.gen.blocks[bi].text; }
 function genPh(it) { var L = []; if (!(it.old && it.old.gen && it.old.gen.use)) return L; if (isStdGen(it)) { qsInit(it).forEach(function (q) { var T = stdTbl(it, q.bi); (T ? T.rows : []).forEach(function (r) { if (!r.live) L.push({ point: q.title.replace(/^Calibration Results\s*–\s*/i, '') + ' · ' + r.point, why: 'no new reading' }); }); }); return L; } it.old.gen.blocks.forEach(function (b, bi) { (b.rows || []).forEach(function (row, r) { row.forEach(function (x, c) { if (genVal(it, bi, r, c).ph) L.push({ point: (b.h || 'Table') + ' · ' + (b.kind === 'table' && b.head ? (b.rows[0][c] || '') + ' ' : '') + (row[0] || ''), why: 'no new reading' }); }); }); }); return L; }
 function genOn(it) { if (it.old && it.old.gen && !it.old.gen.use && /integrity|filter\s*line/i.test((it.old.gen.title || '') + ' ' + (it.description || ''))) it.old.gen.use = true; var on = !!(it.old && it.old.gen && it.old.gen.use); if (on && !it.old.gen.two && /integrity|filter\s*line|test\s*program|bubble\s*point|diffusion/i.test((it.old.gen.title || '') + ' ' + (it.description || ''))) try { genTwo(it); } catch (e) {} return on; }
@@ -3842,20 +3734,6 @@ function qEdit(it, w) { return (it.qs || []).map(function (q) { var k = it.id + 
 function stdTblHead(u) { var w = function (t) { return t + '\n' + (u ? '(' + u + ')' : ''); }; return ['No.', w('Point'), w('Reference'), w('UUT Reading'), w('Deviation'), w('Limits'), 'Status']; }
 
 /* "Edit table" of a temperature & humidity (copied) certificate: the whole table in a sheet, like the normal certificates */
-function stdEditSheet(p, it, bi0) { var L = stdGenBlocks(it); if (L.indexOf(bi0) < 0) bi0 = L[0];
-  openSheet(function () { var b = it.old.gen.blocks[bi0], T = stdTbl(it, bi0) || { rows: [], u: '' };
-    return { title: esc(stdGenTitle(b)) + ' – ' + esc(it.code || ''), wide: 1,
-      body: (L.length > 1 ? '<div class="seg sm" style="margin-bottom:10px">' + L.map(function (bj) { return '<button class="' + (bj === bi0 ? 'on' : '') + '" data-stb="' + bj + '">' + esc(stdGenTitle(it.old.gen.blocks[bj]).replace(/^Calibration Results\s*–\s*/i, '')) + '</button>'; }).join('') + '</div>' : '') +
-        '<div class="small" style="margin-bottom:8px">Type the reference and the reading – grey = last year. Deviation and status are worked out.</div><table class="stt"><thead><tr><th>No.</th><th>Point (' + esc(T.u) + ')</th><th>Reference</th><th>UUT Reading</th><th>Deviation</th><th>Limits</th><th>Status</th></tr></thead><tbody>' +
-        T.rows.map(function (q, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(q.point) + '</td><td><input class="inp" inputmode="decimal" data-stk="' + q.kR + '" value="' + (q.tR ? esc(q.ref) : '') + '" placeholder="' + esc(q.point) + '"></td><td><input class="inp" inputmode="decimal" data-stk="' + q.kU + '" value="' + (q.tU ? esc(q.uut) : '') + '" placeholder="' + esc(q.uut) + '"></td><td data-std="' + i + '">' + (q.live ? esc(q.dev) : '') + '</td><td>' + esc(q.lim) + '</td><td data-sts="' + i + '">' + (q.live ? (q.bad ? '<b style="color:var(--danger)">OUT</b>' : 'Accepted') : '') + '</td></tr>'; }).join('') + '</tbody></table>',
-      foot: '<button class="btn ghost" id="stClr">Clear new readings</button><button class="btn" id="stOk">Done</button>',
-      mount: function () { $$('[data-stb]').forEach(function (x) { x.onclick = function () { bi0 = +x.dataset.stb; renderSheet(); }; });
-        var upd = function () { var T2 = stdTbl(it, bi0); (T2 ? T2.rows : []).forEach(function (q, i) { var d = $('[data-std="' + i + '"]'), st = $('[data-sts="' + i + '"]'); if (d) d.textContent = q.live ? q.dev : ''; if (st) st.innerHTML = q.live ? (q.bad ? '<b style="color:var(--danger)">OUT</b>' : 'Accepted') : ''; }); };
-        $$('[data-stk]').forEach(function (inp) { inp.oninput = function () { var v = inp.value.replace(',', '.').trim(); it.ngen = it.ngen || {}; if (v) it.ngen[inp.dataset.stk] = v; else delete it.ngen[inp.dataset.stk]; it.saved = 0; saveProjects(); upd(); };
-          inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); var all = $$('[data-stk]'), k = all.indexOf(inp); if (all[k + 1]) all[k + 1].focus(); } }; });
-        var f0 = $('[data-stk]'); if (f0) try { f0.focus(); } catch (e) {}
-        $('#stClr').onclick = function () { var T3 = stdTbl(it, bi0); (T3 ? T3.rows : []).forEach(function (q) { delete (it.ngen || {})[q.kR]; delete (it.ngen || {})[q.kU]; }); saveProjects(); renderSheet(); };
-        $('#stOk').onclick = function () { closeSheet(); window.__keepY = window.scrollY; render(); }; } }; }); }
 function genHtml(p, it, newPage, opt) { genSyncStd(p, it); var g = it.old.gen, h = '', sn = opt && opt.n0 || 1;
   g.blocks.forEach(function (b, bi) { if (opt && opt.only && opt.only.indexOf(bi) < 0) return; if (b.pb && bi && !(opt && opt.std)) h += newPage(); if (opt && opt.std) h += '<h4>' + (sn++) + ' - ' + esc(stdGenTitle(b)) + '</h4>'; else if (b.h) h += '<h4>' + esc(b.h) + '</h4>';
     if (b.kind === 'text') { h += String(genText(it, bi)).split(/\n+/).filter(function (x) { return x.trim(); }).map(function (x) { return '<p class="nt">' + esc(x.trim()) + '</p>'; }).join(''); return; }
@@ -4184,7 +4062,6 @@ function scAsk(p, it, key, done, o) { o = o || {}; var L = certList(p).filter(fu
   $$('[data-sco]').forEach(function (b) { b.onclick = function () { var sc = b.dataset.sco; if ($('#scRem').checked) { var m = LS.get('scRem', {}) || {}; m[key] = sc; LS.set('scRem', m); toast('Remembered – to be asked again: your name menu (top right) ▸ Ask again where changes go'); } root.innerHTML = ''; apply(sc); }; }); }
 /* every default the app keeps (rules, remembered answers, resolutions, rates, label dates, paper, learned words) – each can be cleared alone, or all at once (Bishoy, 21 Nov 2026) */
 /* a typed reference resolution: this job only, or kept as a default for every job (shown in Clear defaults) */
-function rrScope(id, v, memo) { return dialog('Reference resolution – where?', 'Use <b>' + esc(v) + '</b> as the resolution of this reference:', 'Always – every job', 'This job only').then(function (y) { if (y) { memo[id] = v; LS.set('refRes', memo); try { shPush && shPush(); } catch (e) {} toast('Kept as a default – clear it from your name menu ▸ Clear defaults'); } }); }
 function defaultsList() { var L = [], vs = function (v) { if (v == null) return '—'; if (typeof v === 'object') { try { v = Array.isArray(v) ? v.join(', ') : Object.keys(v).map(function (k) { return v[k] == null || v[k] === '' ? '' : (/^\d+$/.test(k) ? '' : k + ' ') + v[k]; }).filter(Boolean).join(' · '); } catch (e) { v = ''; } } v = String(v); return v.length > 70 ? v.slice(0, 68) + '…' : v || '—'; };
   var coN = function (id) { if (id === '*') return 'every company'; var c = ((S.data && S.data.companies) || []).filter(function (x) { return x.id === id; })[0]; return c ? c.name : id; };
   var R = LS.get('scRules', {}) || {}; Object.keys(R).forEach(function (w) { Object.keys(R[w] || {}).forEach(function (rk) { var sp = rk.split('|'); var rv = R[w][rk]; if (rv && typeof rv === 'object') { if (sp[0] === 'unc' && rv.unc != null) rv = '± ' + rv.unc + ' ' + (rv.u || ''); else if (sp[0] === 'lim' && rv.lim) rv = rv.lim; } L.push({ g: 'Saved rules for new items', t: scLbl(sp[0]) + ' – ' + (sp[1] || ''), v: vs(rv), sc: w === '*' ? 'Always – every company' : 'Always for ' + coN(w), clr: function () { var R1 = LS.get('scRules', {}) || {}; if (R1[w]) { delete R1[w][rk]; if (!Object.keys(R1[w]).length) delete R1[w]; } LS.set('scRules', R1); } }); }); });
@@ -4205,7 +4082,6 @@ function defaultsSheet() { openSheet(function () { var L = defaultsList(), gs = 
       '<div class="cf" style="margin-top:14px"><button class="btn rd" id="dfAll">Clear all defaults</button></div>' : '<div class="empty" style="padding:26px 6px;text-align:center;color:#5B6B80">No saved defaults – the program asks you every time.</div>'),
     mount: function () { var L2 = defaultsList(); $$('[data-dfc]').forEach(function (b) { b.onclick = function () { var x = L2[+b.dataset.dfc]; if (!x) return; x.clr(); try { shPush && shPush(); } catch (e) {} toast('Cleared – ' + x.t); renderSheet(); }; });
       var a = $('#dfAll'); if (a) a.onclick = function () { dialog('Clear all defaults?', 'All ' + L2.length + ' saved defaults are removed. The program will ask you again each time.', 'Clear all').then(function (y) { if (!y) return; L2.forEach(function (x) { try { x.clr(); } catch (e) {} }); try { shPush && shPush(); } catch (e) {} toast('All defaults cleared'); renderSheet(); }); }; } }; }); }
-function scResetAll() { LS.set('scRem', {}); LS.set('sptRemember', ''); toast('All remembered choices cleared – you will be asked again'); }
 /* a company that never wants the set point: new items of its jobs start hidden */
 function sptDefault(p, it) { if (it.hidePt != null) return; var co = p.company || {}, c = (LS.get('coInfo', {}) || {})[co.id || coName(p)]; if (p.hidePtJob != null) it.hidePt = p.hidePtJob; else if (c && c.hidePt != null) it.hidePt = c.hidePt; }
 function rMode(it) { var m = it && (it.rmode != null ? it.rmode : it.old && it.old.rmode); return m === 'set' || m === 'none' ? m : 'read'; } /* last year's "Measured" certificate (no indicator reading) comes in its own mode */
@@ -4308,79 +4184,8 @@ function evalPt(it, i, dir) { var q = it.old.points[i], v = (it.nv || {})[i + (d
   return o; }
 function withPts(p) { return p.items.filter(function (it) { return it.old && (it.old.points || []).length; }); }
 function itemProg(it) { var t = 0, f = 0, out = 0; it.old.points.forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { t++; var r = evalPt(it, i, dr); if (r.rd != null && r.ref != null) f++; if (r.res === 'OUT') out++; }); }); return { tot: t, fil: f, out: out }; }
-function readProgress(p) { var a = { tot: 0, fil: 0, out: 0 }; withPts(p).forEach(function (it) { var x = itemProg(it); a.tot += x.tot; a.fil += x.fil; a.out += x.out; }); return a; }
-function tRead(p) { var L = withPts(p), pr = readProgress(p);
-  $('#pm').innerHTML = '<div class="cf" style="margin-top:0"><button class="btn ghost" id="xd">Download Excel</button><button class="btn ghost" id="xu">Upload Excel</button></div>' +
-    '<div class="small" style="margin:8px 2px 0">The Excel has last year\'s readings filled in – fill the yellow cells and upload it back. Or enter them here.</div><div id="upMsg" style="margin-top:12px"></div>' +
-    (pr.out ? '<div class="note warnbox"><b>' + pr.out + ' points OUT.</b> Their certificates will use last year\'s readings as placeholders until re-measured, and must be replaced before going to the customer. <a href="#" id="outR" style="color:inherit;font-weight:700">See the report</a></div>' : '') +
-    '<div class="sec"><h2>Items</h2><small>' + L.length + '</small></div>' +
-    (L.length ? '<div class="list">' + L.map(function (it) { var x = itemProg(it); return '<button class="row" data-r="' + it.id + '"><span class="t"><b>' + esc((it.code ? it.code + ' · ' : '') + (it.description || it.old.fields.description)) + '</b><small>Resolution ' + esc((it.res ? it.res + ' ' + (it.resUnit || it.unit) : it.old.fields.resolution) || '—') + ' · ' + x.tot + ' points</small></span>' +
-      (x.out ? '<span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">' + x.out + ' OUT</span>' : x.fil === x.tot ? '<span class="pill">Done</span>' : '<span class="pill" style="--s-fg:var(--muted);--s-bg:var(--oos-soft)">' + x.fil + '/' + x.tot + '</span>') + '</button>'; }).join('') + '</div>'
-      : '<div class="empty"><b>No items with old readings yet</b>Find the old certificates first.</div>');
-  $('#xd').onclick = function () { xlReadings(p); }; $('#xu').onclick = function () { pickFiles('.xlsx,.xlsm').then(function (fs) { if (fs.length) xlReadUp(p, fs[0]); }); };
-  var o = $('#outR'); if (o) o.onclick = function (e) { e.preventDefault(); outSheet(p); };
-  $$('[data-r]').forEach(function (b) { b.onclick = function () { readSheet(p, b.dataset.r); }; }); }
-function readSheet(p, id) { var it = p.items.filter(function (x) { return x.id === id; })[0]; it.nv = it.nv || {};
-  openSheet(function () { var o = it.old, f = o.fields || {}, d = resDec(it);
-    var card = function (q, i, dr) { var k = i + (dr === 2 ? 'd' : ''), v = it.nv[k] || {}, oldR = dr === 2 ? q.reading2 : q.reading, oldD = dr === 2 ? q.deviation2 : q.deviation;
-      return '<div class="box" data-pt="' + i + '|' + dr + '" style="margin-top:8px;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-family:var(--cond);font-size:18px;color:var(--navy)">' + esc(q.point) + (o.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : '') + '</b><small class="small">Limit ' + esc(ptLimit(it, q) || '—') + '</small><b data-rs style="font-family:var(--cond)"></b></div>' +
-        '<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px 8px;align-items:center;font-size:14px"><span></span><span class="small" style="text-align:center;font-weight:600">LAST YEAR</span><span class="small" style="text-align:center;font-weight:600">NEW</span>' +
-        '<span class="small">Ref</span><span style="background:var(--oos-soft);border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px">' + esc((fxU(it) ? fxOldRef(it, q, dr) : q.ref) || '—') + '</span><input class="inp" inputmode="decimal" data-k="ref" value="' + esc(v.ref || '') + '" placeholder="' + esc(fxU(it) ? fxOldRef(it, q, dr) : q.ref) + '" style="height:42px;text-align:center;background:#FFF6CF;border-color:#E7D27A;font-family:var(--cond);font-size:17px">' +
-        (fxU(it) ? '<span class="small">UUT</span><span class="small" style="grid-column:span 2;text-align:center">fixed on ' + esc(q.point) + ' – the reference is read ' + (dr === 2 ? 'coming down' : 'going up') + '</span>' : '<span class="small">Reading</span><span style="background:var(--oos-soft);border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px">' + esc(oldR || '—') + '</span><input class="inp" inputmode="decimal" data-k="reading" value="' + esc(v.reading || '') + '" style="height:42px;text-align:center;background:#FFF6CF;border-color:#E7D27A;font-family:var(--cond);font-size:17px">') +
-        '<span class="small">Dev</span><span style="background:var(--oos-soft);border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px">' + esc(oldD || '—') + '</span><span data-dv style="background:#FFF6CF;border-radius:8px;padding:9px;text-align:center;font-family:var(--cond);font-size:17px;min-height:40px"></span></div><div data-wn></div></div>'; };
-    return { title: esc(it.code || it.description), body:
-      '<div class="hero"><h3 style="margin-top:0">' + esc(it.description || f.description) + '</h3><div class="sub">' + esc([it.manufacturer || f.manufacturer, it.model || f.model].filter(Boolean).join(' · ')) + '</div>' +
-      '<dl class="kv" style="margin-top:12px"><dt>Range</dt><dd>' + esc(rangeText(it) || f.range || '—') + '</dd><dt>Cal. range</dt><dd>' + esc(calText(it) || f.calRange || '—') + '</dd><dt>Resolution</dt><dd><b>' + esc(it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution || '—') + '</b></dd><dt>Limits</dt><dd>' + esc(f.limits || '—') + '</dd></dl>' +
-      '<div class="cf"><button class="btn ghost sm" id="eRes">Edit resolution</button>' + (f.manufacturer || it.manufacturer ? '<a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.google.com/search?q=' + encodeURIComponent([it.manufacturer || f.manufacturer, it.model || f.model, 'datasheet'].filter(Boolean).join(' ')) + '">Check online</a>' : '') + '</div>' +
-      (o.status === 'similar' ? '<div class="note" style="margin:12px 0 0;background:var(--pending-soft);color:var(--pending)">Last year\'s values are from a similar device.</div>' : '') + '</div>' +
-      o.points.map(function (q, i) { return card(q, i, 1) + (o.dirs === 2 ? card(q, i, 2) : ''); }).join(''),
-      foot: '<button class="btn" id="rOk">Done</button>',
-      mount: function () { $('#rOk').onclick = closeSheet;
-        $('#eRes').onclick = function () { var was = it.res || f.resolution || '';
-          $('#dlg-root').innerHTML = '<div class="dlg"><div><h3>Edit resolution</h3><p>Last year\'s certificate: <b>' + esc(f.resolution || '—') + '</b></p><input class="inp" id="nr" inputmode="decimal" value="' + esc(it.res || '') + '"><div class="cf"><button class="btn ghost" id="nc">Cancel</button><button class="btn" id="ns">Save</button></div></div></div>';
-          $('#nc').onclick = function () { $('#dlg-root').innerHTML = ''; };
-          $('#ns').onclick = function () { var v = $('#nr').value.trim(); $('#dlg-root').innerHTML = ''; if (!isNum(v)) return toast('Resolution must be a number', true);
-            var old = oldNums(f).res; var save = function () { it.res = v; if (!it.resUnit) it.resUnit = oldNums(f).resUnit || it.unit; saveProjects(); renderSheet(); };
-            if (old && numv(old) !== numv(v)) dialog('Are you sure?', 'The resolution will be <b>' + esc(v) + '</b> – last year it was <b>' + esc(f.resolution) + '</b>.', 'Yes, I\'m sure').then(function (y) { if (y) save(); }); else save(); }; };
-        var upd = function (el) { var a = el.dataset.pt.split('|').map(Number), r = evalPt(it, a[0], a[1]); el.querySelector('[data-dv]').textContent = r.dev == null ? '' : (d == null ? String(r.dev) : r.dev.toFixed(d));
-          var rs = el.querySelector('[data-rs]'); rs.textContent = r.res; rs.style.color = r.res === 'OUT' ? 'var(--danger)' : 'var(--office)'; el.style.borderColor = r.res === 'OUT' ? '#E9A39C' : ''; el.style.background = r.res === 'OUT' ? '#FFF8F7' : '';
-          el.querySelector('[data-wn]').innerHTML = r.warn.map(function (w) { return '<div class="small" style="color:var(--danger);margin-top:6px">' + esc(w) + '</div>'; }).join(''); return r; };
-        $$('[data-pt]').forEach(function (el) { upd(el); el.querySelectorAll('input').forEach(function (inp) { inp.oninput = function () { var a = el.dataset.pt.split('|'), k = a[0] + (a[1] === '2' ? 'd' : ''); (it.nv[k] = it.nv[k] || {})[inp.dataset.k] = inp.value.trim(); saveProjects(); var r = upd(el); if (r.oor) toast(r.warn[0], true); else if (r.res === 'OUT' && inp.dataset.k === 'reading') toast('OUT – deviation ' + r.dev + ' is beyond ±' + r.lim, true); }; }); }); } }; }); }
-function outList(p) { var L = []; withPts(p).forEach(function (it) { it.old.points.forEach(function (q, i) { [1].concat(it.old.dirs === 2 ? [2] : []).forEach(function (dr) { var r = evalPt(it, i, dr); if (r.res === 'OUT') L.push({ code: it.code, cert: (it.old.fields || {}).certNo, point: q.point + (it.old.dirs === 2 ? (dr === 2 ? ' ↓' : ' ↑') : ''), reading: r.rd, dev: r.dev, lim: r.lim, ex: +(Math.abs(r.dev) - r.lim).toFixed(6) }); }); }); }); return L; }
-function outSheet(p) { openSheet(function () { var L = outList(p); return { title: 'OUT report', body: '<div class="note warnbox">Re-measure these with the technician. Their certificates use last year\'s readings as placeholders and must be replaced before going to the customer.</div>' +
-  '<div class="list">' + (L.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.code) + ' · point ' + esc(x.point) + '</b><small>Old cert ' + esc(x.cert || '—') + ' · reading ' + x.reading + ' · limit ±' + x.lim + '</small></span><span class="pill" style="--s-fg:var(--danger);--s-bg:var(--danger-soft)">+' + x.ex + '</span></div>'; }).join('') || '<div class="row">No OUT points</div>') + '</div>', foot: '<button class="btn" id="oc">Done</button>', mount: function () { $('#oc').onclick = closeSheet; } }; }); }
 function dlBlob(buf, name) { if (CL.on) { clSave(new Blob([buf]), name).then(function () { toast('Downloaded'); }).catch(function (e) { if (!e || e.code !== 'declined') toast((e && e.message) || 'Not downloaded', true); }); return; } var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 var RHDR = ['#', 'Department', 'Equipment', 'Code', 'Old cert no.', 'Direction', 'Resolution', 'Limit', 'Point', 'Old Ref', 'New Ref', 'Old Reading', 'New Reading', 'Old Dev', 'New Dev', 'Result', 'Remarks', 'Key'];
-function xlReadings(p) { var L = withPts(p); if (!L.length) return toast('No items with old readings yet', true);
-  needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Readings', { views: [{ state: 'frozen', ySplit: 1 }] });
-    var GR = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E9EC' } }, YL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2B3' } }, thin = { style: 'thin', color: { argb: 'FFBFC5CE' } };
-    ws.addRow(RHDR).eachCell(function (c) { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Arial', size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF13294B' } }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
-    var n = 0, fmt = function (d) { return d > 0 ? '0.' + '0'.repeat(d) : '0'; }, nv = function (s) { return isNum(s) ? numv(s) : (s || ''); };
-    L.forEach(function (it) { n++; var o = it.old, f = o.fields || {}, d = resDec(it), first = true;
-      o.points.forEach(function (q, i) { [1].concat(o.dirs === 2 ? [2] : []).forEach(function (dr) { var v = it.nv && it.nv[i + (dr === 2 ? 'd' : '')] || {}, lt = ptLimit(it, q);
-        var row = ws.addRow([first ? n : '', first ? it.dept : '', first ? (it.description || f.description) : '', first ? it.code : '', first ? (f.certNo || '') + (o.status === 'similar' ? ' (similar)' : '') : '', o.dirs === 2 ? (dr === 2 ? 'Down' : 'Up') : '', first ? (it.res ? it.res + ' ' + (it.resUnit || it.unit) : f.resolution) : '', lt, nv(q.point), nv(q.ref), v.ref ? nv(v.ref) : null, nv(dr === 2 ? q.reading2 : q.reading), v.reading ? nv(v.reading) : null, nv(dr === 2 ? q.deviation2 : q.deviation), null, null, '', it.id + '|' + i + '|' + dr]);
-        var r = row.number, lim = limitVal(lt, numv(q.ref), null), pct = String(lt).replace(/\s/g, '').match(/(\d*\.?\d+)%/);
-        row.getCell(15).value = { formula: 'IF(OR(K' + r + '="",M' + r + '=""),"",M' + r + '-K' + r + ')' };
-        row.getCell(16).value = pct ? { formula: 'IF(O' + r + '="","",IF(ABS(O' + r + ')<=' + parseFloat(pct[1]) / 100 + '*ABS(' + (/rdg|reading/i.test(lt) ? 'M' : 'K') + r + '),"OK","OUT"))' } : lim != null ? { formula: 'IF(O' + r + '="","",IF(ABS(O' + r + ')<=' + lim + ',"OK","OUT"))' } : '';
-        [10, 12, 14].forEach(function (c) { var cell = row.getCell(c); cell.fill = GR; if (typeof cell.value === 'number') cell.numFmt = fmt(decOf(c === 10 ? q.ref : c === 12 ? (dr === 2 ? q.reading2 : q.reading) : (dr === 2 ? q.deviation2 : q.deviation))); });
-        [11, 13, 15].forEach(function (c) { var cell = row.getCell(c); cell.fill = YL; cell.numFmt = fmt(d == null ? decOf(q.reading) : d); if (c !== 15) cell.dataValidation = { type: 'decimal', operator: 'between', formulae: [-1e9, 1e9], showErrorMessage: true, errorTitle: 'Number only', error: 'Type a number' }; });
-        row.eachCell({ includeEmpty: true }, function (c, ci) { if (ci > 18) return; c.font = { name: 'Arial', size: 10 }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: ci === 3 }; c.border = { top: first ? { style: 'medium', color: { argb: 'FF13294B' } } : thin, bottom: thin, left: thin, right: thin }; });
-        first = false; }); }); });
-    ws.addConditionalFormatting({ ref: 'P2:P' + ws.rowCount, rules: [{ type: 'containsText', operator: 'containsText', text: 'OUT', style: { font: { color: { argb: 'FFC2362B' }, bold: true }, fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFBE6E3' } } } }] });
-    [5, 12, 24, 14, 18, 9, 11, 14, 10, 11, 11, 12, 12, 10, 10, 8, 16, 4].forEach(function (w, i) { ws.getColumn(i + 1).width = w; }); ws.getColumn(18).hidden = true;
-    var ix = wb.addWorksheet('Index'); ix.addRow(['Code', 'Equipment', 'Note']).font = { bold: true, name: 'Arial' };
-    p.items.filter(function (i) { return L.indexOf(i) < 0; }).forEach(function (i) { ix.addRow([i.code, i.description, (i.old && i.old.note) || 'No old readings']); }); ix.columns.forEach(function (c) { c.width = 28; });
-    return wb.xlsx.writeBuffer(); }).then(function (b) { dlBlob(b, 'Readings - ' + p.company.name + '.xlsx'); }).catch(function (e) { toast(e.message, true); }); }
-function cellRaw(c) { var v = c.value; if (v == null || v === '') return ''; if (typeof v === 'number') { var m = (c.numFmt || '').match(/0\.(0+)/); return m ? v.toFixed(m[1].length) : String(v); } if (typeof v === 'object' && 'result' in v) return v.result == null ? '' : String(v.result); return cellStr(v).trim(); }
-function xlReadUp(p, file) { needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) {
-  var ws = wb.getWorksheet('Readings') || wb.worksheets[0], H = ws.getRow(1).values.map(function (v) { return cellStr(v).trim(); }), cK = H.indexOf('Key'), cR = H.indexOf('New Ref'), cN = H.indexOf('New Reading');
-  if (cK < 0 || cN < 0) throw new Error('This is not the readings file downloaded from the app'); var cnt = 0, probs = [], touched = {};
-  ws.eachRow(function (row, i) { if (i === 1) return; var key = cellStr(row.getCell(cK).value); if (!key) return; var a = key.split('|'), it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (!it || !it.old) return;
-    var ref = cellRaw(row.getCell(cR)), rd = cellRaw(row.getCell(cN)); if (ref === '' && rd === '') return; it.nv = it.nv || {}; var k = a[1] + (a[2] === '2' ? 'd' : '');
-    it.nv[k] = Object.assign(it.nv[k] || {}, ref !== '' ? { ref: ref } : {}, rd !== '' ? { reading: rd } : {}); cnt++; touched[it.id] = 1;
-    var r = evalPt(it, +a[1], +a[2]), pt = it.old.points[+a[1]].point; r.warn.forEach(function (w) { probs.push(it.code + ' · ' + pt + ': ' + w); }); if (r.res === 'OUT') probs.push(it.code + ' · ' + pt + ': OUT (dev ' + r.dev + ', limit ±' + r.lim + ')'); });
-  saveProjects(); render(); $('#upMsg').innerHTML = '<div class="note" style="background:var(--office-soft);color:#14603C">' + cnt + ' readings loaded for ' + Object.keys(touched).length + ' items.</div>' + (probs.length ? '<div class="note warnbox"><b>Please check:</b><br>' + probs.slice(0, 40).map(esc).join('<br>') + '</div>' : '');
-}).catch(function (e) { toast(e.message || String(e), true); }); }
 
 /* ================= certificates, covers and receipt letter (Word + print/PDF) ================= */
 /* --- tiny zip (stored) + Word writer: no library needed --- */
@@ -4599,7 +4404,6 @@ var LH_IMG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHBgk
 var PAPER_MM = { top: 34, bottom: 12, side: 13 };
 function paperGet() { var q = LS.get('paper', {}); return Object.assign({ v: 2, on: q.v === 2 ? q.on !== false : true }, PAPER_MM); }
 function paperMar() { var q = paperGet(); if (!q.on) return null; var tw = function (mm) { return Math.round(mm * 56.7); }; return { top: tw(q.top + 20), bottom: tw(q.bottom + 12), side: tw(q.side), header: tw(q.top), footer: tw(q.bottom) }; }
-function paperCss() { var q = paperGet(); if (!q.on) return ''; return '@page{size:A4;margin:' + q.top + 'mm ' + q.side + 'mm ' + q.bottom + 'mm ' + q.side + 'mm}.pg{min-height:' + (297 - q.top - q.bottom - 3) + 'mm!important}'; }
 function pagesOf(it) { if (tpOn(it)) return tpPages(it); if (sqOn(it)) return 1; if (genOn(it)) return it.old.gen.pages || 1; var n = (it.old.points || []).length; return Math.max(1, Math.ceil(n / ROWS_PER_PAGE)) + (it.old.bal && it.old.bal.ecc ? 1 : 0); }
 function topBlock(p, no, cont) { var inf = p.info; return wCertNo(no, cont) + W.tbl([kvRow('DATE OF ISSUE:', fmtD(inf.iss), 'CUSTOMER ID:', idUnify(p.company.code) || coIdGuess(p) || ''), [{ t: 'CUSTOMER:', b: true, jc: 'left' }, { t: p.company.official || p.company.name, jc: 'left', span: 3 }]], KVW, { sz: FS + 2, nb: true, h: 310 }); }
 function coverDoc(p, gr, total) { var inf = p.info, g = genDefaults(p), its = gr.items, body = '';
@@ -4883,7 +4687,6 @@ function certDoc(p, gr, total, pg0) { var forms = gr.items.map(itemForm), same =
   return W.doc(body, { header: wHeader(sqOn(gr.items[0]) ? 'Steam Quality Test' : tpOn(gr.items[0]) && gr.items[0].tp.t === 'ca' ? 'Compressed Air Measurement Certificate' : genOn(gr.items[0]) ? gr.items[0].old.gen.title : ''), footers: forms.map(function (f) { return wFooter(f, total); }), sects: true, pgStart: pg0 || 2, mar: paperMar(), sym: accGroup(p, gr.items) }); }
 /* ---------- deliveries: the finished certificates can go out before the rest; each delivery has its own letter, numbers never move ---------- */
 function delivs(p) { return p.deliv = p.deliv || []; }
-function delivOf(p, it) { return delivs(p).filter(function (d) { return d.id === it.delivId; })[0] || null; }
 /* which certificates go out now: 'ready' = saved and not sent yet, 'rest' = everything not sent yet, 'all' = every certificate (a copy, not a new delivery) */
 function mkList(p, sel) { var L = certList(p); return sel === 'all' ? L : L.filter(function (it) { return !it.delivId && (sel !== 'ready' || (it.saved && !it.phSkip)); }); }
 function mkDefault(p) { var L = certList(p), sent = L.filter(function (it) { return it.delivId; }).length, ok = L.filter(function (it) { return it.saved && !it.delivId; }).length; if (sent && sent < L.length) return 'rest'; return sent ? 'all' : 'rest'; }
@@ -5759,7 +5562,6 @@ function lblGuess(rows) { rows = (rows || []).map(function (r) { return (r || []
     if (map.sn < 0) { var b1 = best('code'); if (b1 && b1.code > 0) map.sn = b1.c; } if (map.by < 0) { var b2 = best('name'); if (b2 && b2.name > 0) map.by = b2.c; } if (map.sn < 0) { var b3 = best('any'); if (b3) map.sn = b3.c; } }
   return { rows: body, head: head, map: map, n: n, hrow: head ? rows[0] : null }; }
 function lblApply(G) { var M = G.map, g = function (r, k) { return M[k] >= 0 ? r[M[k]] : ''; }; return G.rows.map(function (r) { var cal = lblXDate(g(r, 'cal')), due = lblXDate(g(r, 'due')); if (!due && cal instanceof Date) due = new Date(cal.getFullYear() + 1, cal.getMonth(), cal.getDate()); return { sn: String(g(r, 'sn') || '').trim(), cal: cal, due: due, by: String(g(r, 'by') || '').trim() }; }).filter(function (x) { return x.sn || x.cal; }); }
-function lblRows(rows) { return lblApply(lblGuess(rows)); }
 function lblFromList(L, mode) { var f = function (v) { return v instanceof Date ? lblDate(v, mode) : mode === 'blank' ? '' : String(v || ''); }; return L.map(function (x) { return { sn: x.sn, cal: f(x.cal), due: f(x.due), by: mode === 'blank' ? '' : x.by }; }); }
 /* labels for work done outside the app – three ways: type or paste in the table here, fill our Excel template, or attach an Excel; then preview and print (or save as PDF) */
 function lblTpl() { needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Labels'); ws.columns = [{ header: 'Code', width: 24 }, { header: 'Cal. Date', width: 14 }, { header: 'Due Date', width: 14 }, { header: 'Cal. By', width: 22 }];
@@ -5858,13 +5660,6 @@ function findAddress(p, loud) { var g = genDefaults(p), code = p.company.code ||
 /* ================= assistant: last year's work (from the receipt letters in Certificates/Reports <year>) ================= */
 var LY_CACHE = LS.get('lyCache', {}); /* fileId|mod → rows */
 function lyYear(off) { return new Date().getFullYear() + (off || 0); }
-function lyLetterFiles(p) { /* the customer's letters file(s) in Reports <last year> and <this year> */
-  var terms = p ? companyTerms(p.company).slice(0, 2) : ['Reports'];
-  var qs = []; terms.forEach(function (t) { qs.push('filename:"' + t + '"', '"' + t + '" Reports'); });
-  return Promise.all(qs.map(function (t) { return spSearch(t, 50).catch(function () { return []; }); })).then(function (rs) {
-    var seen = {}, out = [];
-    [].concat.apply([], rs).forEach(function (f) { if (seen[f.id] || !/\.docx?$/i.test(f.name)) return; var pa = pathOf(f), m = pa.match(/\/Reports\s*(20\d\d)\//i); if (!m) return; seen[f.id] = 1; f.year = +m[1]; out.push(f); });
-    return out.sort(function (a, b) { return b.year - a.year; }); }); }
 function lyRowsFromText(txt) { /* web mode: one row per line that has a certificate number */
   var rows = [];
   txt.split(/\n+/).forEach(function (l) { var c = l.match(/(\d{1,3}\s*\/?\s*[A-Z]{0,4}\s*-\s*\d{2,5}\s*-\s*20\d\d)/), d = l.match(/\b(Jan|Feb|Mar|Apr|May|Jun|June|Jul|July|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*-?\s*(\d{2,4})\b/gi);
@@ -5956,64 +5751,6 @@ function dropSheet(p) { var st = { files: [], rows: [], on: {}, busy: 0, msg: []
             if (r.machine) { var mm = (p.machines = p.machines || []).filter(function (x) { return norm(x.name) === norm(r.machine) && norm(x.code || '') === norm(r.machineCode || ''); })[0]; if (!mm) { mm = { id: uid(), name: r.machine, code: r.machineCode || '', dept: (p.depts || [])[0] || '' }; p.machines.push(mm); } mid = mm.id; }
             var ni = newItem({ machineId: mid, code: r.code, description: r.description, manufacturer: r.manufacturer || '', prevCert: r.certNo, prevBase: r.from, src: 'last year', dept: (p.depts || [])[0] || '' }); if (r.cf && r.cf.id) ni.oldFile = fileRef(r.cf); p.items.push(ni); n++; });
           saveProjects(); st.on = {}; toast(n + (n === 1 ? ' certificate added – reading last year\'s data' : ' certificates added – reading last year\'s data')); queueOld(p); renderSheet(); }; } }; }); }
-function lastYearSheet(p, auto) { var st = { busy: true, rows: [], files: [], err: '', sel: null, on: {}, auto: auto };
-  var loadBatches = function () { var b = st.bat; b.busy = true; if (sheetFn) renderSheet();
-    certBatches(p, b.y, b.m).then(function (l) { b.list = l; b.busy = false; if (!l.length && b.triedPrev && st.auto && !b.prevShown) { if (sheetFn) closeSheet(); return; } if (!l.length) { var pm = new Date(b.y, b.m - 1, 1); if (!b.triedPrev) { b.triedPrev = 1; b.autoPrev = 1; b.y = pm.getFullYear(); b.m = pm.getMonth(); return loadBatches(); } } if (sheetFn) renderSheet(); })
-      .catch(function (e) { b.busy = false; b.err = e.message; if (sheetFn) renderSheet(); }); };
-  var addBatches = function () { var b = st.bat, sel = b.list.filter(function (f) { return b.on[f.id] !== false; }); if (!sel.length) return; b.adding = { d: 0, n: sel.length, items: 0 }; renderSheet();
-    var have = {}; p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; });
-    sel.reduce(function (pr, f) { return pr.then(function () { return batchItems(f).then(function (r) { var mid = '';
-        if (r.machine && r.items.length > 1) { var mm = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine) && norm(x.code) === norm(r.machineCode); })[0]; if (!mm) { mm = { id: uid(), name: r.machine, code: r.machineCode || '', dept: p.depts[0] || '' }; p.machines.push(mm); } mid = mm.id; }
-        r.items.forEach(function (x) { if (x.code && have[norm(x.code)]) return; if (x.code) have[norm(x.code)] = 1;
-          p.items.push(newItem({ machineId: mid, code: x.code, description: x.description, manufacturer: x.manufacturer, prevCert: x.certNo, src: 'last year', dept: p.depts[0] || '' })); b.adding.items++; }); })
-        .catch(function () { b.failed = (b.failed || []).concat(f.base); }).then(function () { b.adding.d++; saveProjects(); if (sheetFn) renderSheet(); }); }); }, Promise.resolve())
-      .then(function () { var n = b.adding.items, fl = b.failed; saveProjects(); closeSheet(); toast(n + ' items added from ' + MON[b.m] + ' ' + b.y + (fl ? ' – could not read ' + fl.join(', ') : ''), !!fl); queueOld(p); }); };
-  openSheet(function () { var groups = {}; st.rows.forEach(function (r, i) { var mm = lyMonth(r.cal); var k = mm ? mm.key : 'other'; (groups[k] = groups[k] || { label: mm ? mm.label : 'No date', rows: [], pos: {} }).rows.push(i); if (r.po) groups[k].pos[r.po] = 1; });
-    var keys = Object.keys(groups).sort().reverse(), g = null;
-    var prevKey = function (k) { var a = k.split('-').map(Number), d = new Date(a[0], a[1] - 2, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
-    if (st.sel && groups[st.sel]) { var pk = prevKey(st.sel), pg = st.withPrev !== false ? groups[pk] : null, seenC = {}, rowsAll = [];
-      groups[st.sel].rows.forEach(function (i) { var c = norm(st.rows[i].code); if (c) seenC[c] = 1; rowsAll.push({ i: i, prev: false }); });
-      if (pg) pg.rows.forEach(function (i) { var c = norm(st.rows[i].code); if (c && seenC[c]) return; rowsAll.push({ i: i, prev: true }); });
-      g = { label: groups[st.sel].label, prevLabel: groups[pk] ? groups[pk].label : '', hasPrev: !!groups[pk], list: rowsAll, nMain: groups[st.sel].rows.length, nPrev: rowsAll.length - groups[st.sel].rows.length }; }
-    if (st.bat) { var b = st.bat, nOn = b.list.filter(function (f) { return b.on[f.id] !== false; }).length;
-      return { title: 'Last year · ' + MON[b.m] + ' ' + b.y, body: b.adding ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Reading the cover pages… ' + b.adding.d + ' / ' + b.adding.n + '</b>' + b.adding.items + ' items so far</div>'
-        : b.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Looking for ' + esc(p.company.name) + ' certificates of ' + MON[b.m] + ' ' + b.y + '…</b></div>'
-        : b.err ? '<div class="note warnbox">' + esc(b.err) + '</div>'
-        : !b.list.length ? '<div class="empty"><b>No certificates of this company in ' + MON[b.m] + ' ' + b.y + '</b>Use Find a code, photo or Excel.</div>'
-        : '<div class="note">' + (b.autoPrev ? 'Nothing in the same month – these are from <b>the month before</b>. ' : '') + 'Last year in <b>' + MON[b.m] + ' ' + b.y + '</b> you made <b>' + b.list.length + '</b> batch' + (b.list.length > 1 ? 'es' : '') + ' for ' + esc(p.company.name) + '. Untick what is not in this year\'s order.</div>' +
-          '<div class="list">' + b.list.map(function (f) { var on = b.on[f.id] !== false; return '<button class="row' + (on ? ' sel' : '') + '" data-bt="' + esc(f.id) + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc(f.descs.slice(0, 3).join(' · ') || f.base) + '</b><small>' + esc(f.base) + '</small></span></button>'; }).join('') + '</div>',
-        foot: b.adding || b.busy ? '' : '<button class="btn ghost" id="btL">Letters</button><button class="btn ghost" id="btO">' + (b.prevShown ? 'Same month' : 'Month before') + '</button>' + (b.list.length ? '<button class="btn" id="btA">Add ' + nOn + ' batch' + (nOn === 1 ? '' : 'es') + '</button>' : ''),
-        mount: function () { $$('[data-bt]').forEach(function (x) { x.onclick = function () { var id = x.dataset.bt; b.on[id] = b.on[id] === false; renderSheet(); }; });
-          var o = $('#btO'); if (o) o.onclick = function () { var d = new Date(b.y, b.m + (b.prevShown ? 1 : -1), 1); b.prevShown = !b.prevShown; b.triedPrev = 1; b.autoPrev = 0; b.y = d.getFullYear(); b.m = d.getMonth(); b.on = {}; loadBatches(); };
-          var ad = $('#btA'); if (ad) ad.onclick = addBatches; var lt = $('#btL'); if (lt) lt.onclick = st.loadLetters; } }; }
-    return { title: 'From last year', body: st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Reading the receipt letters of ' + esc(p.company.name) + '…</b>Certificates / Reports ' + lyYear(-1) + ' and ' + lyYear() + '</div>'
-      : st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>'
-      : !st.rows.length ? '<div class="empty"><b>No receipt letters found for this company</b>Use photo, Excel or Add item.</div>'
-      : (!g ? '<div class="note">Choose the month to copy – you can edit the list after.</div><div class="list">' + keys.map(function (k) { var x = groups[k]; return '<button class="row" data-mo="' + k + '"><span class="t"><b>' + esc(x.label) + '</b><small>' + x.rows.length + (x.rows.length === 1 ? ' item' : ' items') + (Object.keys(x.pos).length ? ' · PO ' + esc(Object.keys(x.pos).join(', ')) : '') + '</small></span><span class="pill">Due ' + esc(dueOf(x.label)) + '</span></button>'; }).join('') + '</div>'
-        : '<div class="note"><b>' + esc(g.label) + '</b> – untick what is not in this year\'s order. The old certificate number of each item is kept, so its certificate is found right away.</div>' +
-          (g.hasPrev ? '<button class="row' + (st.withPrev !== false ? ' sel' : '') + '" id="lyP" style="border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface)"><span class="check">' + (st.withPrev !== false ? '✓' : '') + '</span><span class="t"><b>Also look in the month before (' + esc(g.prevLabel) + ')</b><small>Some companies do it one month earlier</small></span></button>' : '') +
-          (g.nPrev ? '<div class="note" style="background:var(--service-soft);color:#6A4300">Take care: <b>' + g.nMain + '</b> item' + (g.nMain === 1 ? ' was' : 's were') + ' done in <b>' + esc(g.label) + '</b> and <b>' + g.nPrev + '</b> in <b>' + esc(g.prevLabel) + '</b> (marked in orange).</div>' : '') +
-          '<div class="list">' + g.list.map(function (x) { var i = x.i, r = st.rows[i], on = st.on[i] !== false;
-          return '<button class="row' + (on ? ' sel' : '') + '" data-ly="' + i + '"><span class="check">' + (on ? '✓' : '') + '</span><span class="t"><b>' + esc([r.machine, r.item].filter(Boolean).join(' – ')) + '</b><small>' + esc([r.code, r.certNo, r.price].filter(Boolean).join(' · ')) + '</small></span><span class="pill" style="--s-fg:' + (x.prev ? 'var(--service)' : 'var(--client)') + ';--s-bg:' + (x.prev ? 'var(--service-soft)' : 'var(--client-soft)') + '">' + esc(x.prev ? g.prevLabel : g.label) + '</span></button>'; }).join('') + '</div>'),
-      foot: g ? '<button class="btn ghost" id="lyB">Other month</button><button class="btn" id="lyA">Add ' + g.list.filter(function (x) { return st.on[x.i] !== false; }).length + ' items</button>' : '',
-      mount: function () { $$('[data-mo]').forEach(function (b) { b.onclick = function () { st.sel = b.dataset.mo; renderSheet(); }; });
-        $$('[data-ly]').forEach(function (b) { b.onclick = function () { var i = +b.dataset.ly; st.on[i] = st.on[i] === false; renderSheet(); }; });
-        var bb = $('#lyB'); if (bb) bb.onclick = function () { st.sel = null; renderSheet(); };
-        var lp = $('#lyP'); if (lp) lp.onclick = function () { st.withPrev = st.withPrev === false; renderSheet(); };
-        var ba = $('#lyA'); if (ba) ba.onclick = function () { var have = {}; p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; }); var n = 0;
-          var gg = sheetFn && g; (g ? g.list : []).forEach(function (x) { var i = x.i; if (st.on[i] === false) return; var r = st.rows[i]; if (r.code && have[norm(r.code)]) return; if (r.code) have[norm(r.code)] = 1;
-            var mid = ''; if (r.machine) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(r.machine); })[0]; if (!m) { m = { id: uid(), name: r.machine, code: '', dept: p.depts[0] || '' }; p.machines.push(m); } mid = m.id; }
-            p.items.push(newItem({ machineId: mid, code: r.code, description: r.item, prevCert: r.certNo, src: 'last year', dept: p.depts[0] || '' })); n++; });
-          saveProjects(); closeSheet(); toast(n + ' items copied from ' + groups[st.sel].label); queueOld(p); }; } }; });
-  var cd0 = new Date((p.info && p.info.cal) || Date.now()); st.bat = { busy: true, y: cd0.getFullYear() - 1, m: cd0.getMonth(), list: [], on: {} }; loadBatches();
-  st.loadLetters = function () { st.bat = null; st.busy = true; renderSheet();
-  lyLetterFiles(p).then(function (fs) { st.files = fs; if (!fs.length) return [];
-    var use = fs.filter(function (f) { return f.year >= lyYear(-1); }).slice(0, 3); return Promise.all(use.map(function (f) { return lyExtract(f).catch(function () { return []; }); })); })
-    .then(function (rs) { st.rows = [].concat.apply([], rs || []); st.busy = false;
-      var cd = new Date((p.info && p.info.cal) || Date.now()), want = (cd.getFullYear() - 1) + '-' + String(cd.getMonth() + 1).padStart(2, '0'), pw = new Date(cd.getFullYear() - 1, cd.getMonth() - 1, 1), want2 = pw.getFullYear() + '-' + String(pw.getMonth() + 1).padStart(2, '0');
-      var ks = {}; st.rows.forEach(function (r) { var mm = lyMonth(r.cal); if (mm) ks[mm.key] = 1; }); if (ks[want]) st.sel = want; else if (ks[want2]) st.sel = want2;
-      if (sheetFn) renderSheet(); })
-    .catch(function (e) { st.busy = false; st.err = e.message; if (sheetFn) renderSheet(); }); }; }
 function dueOf(label) { var mm = lyMonth(label); return mm ? MON[mm.m] + ' ' + (mm.y + 1) : ''; }
 /* home: what is due soon (from all receipt letters of last year) */
 var DUE = LS.get('dueScan', null);
@@ -6023,88 +5760,12 @@ function dueScan() { var lastY = lyYear(-1); DUE = { busy: true, at: Date.now(),
       rows.forEach(function (r) { var mm = lyMonth(r.due) || (lyMonth(r.cal) ? { m: lyMonth(r.cal).m, y: lyMonth(r.cal).y + 1 } : null); if (!mm) return; var k = mm.y + '-' + String(mm.m + 1).padStart(2, '0'); (by[k] = by[k] || []).push(r); });
       Object.keys(by).forEach(function (k) { DUE.list.push({ file: f.name.replace(/\.docx?$/i, ''), fileId: f.id, month: k, count: by[k].length }); }); }).catch(function () {}).then(function () { DUE.done++; render(); }); }); }, Promise.resolve()); })
     .then(function () { DUE.busy = false; LS.set('dueScan', DUE); render(); }).catch(function (e) { DUE = { err: e.message }; render(); }); }
-function dueCard() { if (!spOn()) return '';
-  var now = new Date(), k0 = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'), n1 = new Date(now.getFullYear(), now.getMonth() + 1, 1), k1 = n1.getFullYear() + '-' + String(n1.getMonth() + 1).padStart(2, '0');
-  if (!DUE || (!DUE.busy && !DUE.list)) return '<div class="card"><h3>What is due?</h3><div class="meta">Checks last year\'s receipt letters and tells you which customers are due this month and next month.</div><div class="cf"><button class="btn ghost" id="dueGo">Check now</button></div>' + (DUE && DUE.err ? '<div class="note warnbox" style="margin:10px 0 0">' + esc(DUE.err) + '</div>' : '') + '</div>';
-  if (DUE.busy) return '<div class="card"><div class="okline"><span class="spin dark"></span> Reading last year\'s letters… ' + DUE.done + ' / ' + (DUE.n || '?') + '</div></div>';
-  var soon = DUE.list.filter(function (x) { return x.month === k0 || x.month === k1; }).sort(function (a, b) { return a.month.localeCompare(b.month) || b.count - a.count; });
-  var ml = function (k) { var a = k.split('-'); return MON[+a[1] - 1] + ' ' + a[0]; };
-  return '<div class="card bar" style="--c:var(--service)"><h3>Due this month and next</h3><div class="meta">From last year\'s receipt letters · checked ' + fmtDate(DUE.at) + '</div>' +
-    (soon.length ? '<div class="list" style="margin-top:10px">' + soon.map(function (x) { return '<div class="row"><span class="t"><b>' + esc(x.file) + '</b><small>' + x.count + ' items due ' + ml(x.month) + '</small></span></div>'; }).join('') + '</div>' : '<div class="small" style="margin-top:8px">Nothing due this month or next.</div>') +
-    '<div class="cf"><button class="btn ghost sm" id="dueGo">Check again</button></div></div>'; }
 /* ================= one flow: step bar from the company to the certificates ================= */
 var FLOW = [['company', 'Company'], ['date', 'Cal. date'], ['dept', 'Department'], ['type', 'Order type'], ['order', 'Order'], ['items', 'Items'], ['certs', 'Old certs'], ['refs', 'References'], ['det', 'Details'], ['read', 'Readings'], ['gen', 'Certificates']];
 var FIDX = {}; FLOW.forEach(function (f, i) { FIDX[f[0]] = i; });
-function curStep(p) { return p.stage !== 'done' ? p.stage : (p.tab || 'certs'); }
 function reach(p) { var i = FIDX[curStep(p)]; if (!(p.reached >= i)) p.reached = i; return p.reached; }
-function stepBar(p) { var cur = FIDX[curStep(p)], r = reach(p);
-  return '<div class="stepbar" id="stepbar">' + FLOW.map(function (f, i) { var cls = i === cur ? 'on' : (i <= r ? 'ok' : '');
-    return '<button class="' + cls + '" data-step="' + f[0] + '"' + (i > r ? ' disabled' : '') + '><i>' + (i !== cur && i <= r ? '✓' : i + 1) + '</i><span>' + f[1] + '</span></button>'; }).join('') + '</div>'; }
-function bindStepBar(p) { var sb = $('#stepbar'); if (!sb) return; var on = sb.querySelector('.on'); if (on) sb.scrollLeft = on.offsetLeft - 40;
-  $$('[data-step]').forEach(function (b) { b.onclick = function () { gotoStep(p, b.dataset.step); }; }); }
-function gotoStep(p, s) { if (FIDX[s] > reach(p)) return; if (FIDX[s] <= FIDX.items) { p.stage = s; } else { p.stage = 'done'; p.tab = s; } p.reached = Math.max(p.reached || 0, FIDX[s]); saveProjects(); W.q = ''; W.busy = false; render(); window.scrollTo(0, 0); }
-function projFoot(p) { var k = FIDX[curStep(p)], nx = FLOW[k + 1];
-  return '<div class="wiz-foot"><div><button class="btn ghost" id="pBack">Back</button>' + (nx ? '<button class="btn blue" id="pNext">Next: ' + nx[1] + '</button>' : '') + '</div></div>'; }
-function bindProjFoot(p) { var k = FIDX[curStep(p)];
-  $('#pBack').onclick = function () { gotoStep(p, FLOW[k - 1][0]); };
-  var n = $('#pNext'); if (n) n.onclick = function () { var nx = FLOW[k + 1]; if (nx) { p.reached = Math.max(p.reached || 0, k + 1); gotoStep(p, nx[0]); } }; }
 
 /* ================= items: find a code that was calibrated before ================= */
-function findSheet(p) { var st = { q: '', busy: false, res: [], err: '' }, timer = null;
-  var many = function () { return st.q.split(/[\n,;]+/).map(function (x) { return x.trim(); }).filter(function (x) { return x.length >= 2; }); };
-  var runMany = function (list) { st.busy = true; st.multi = []; renderSheet(); var i = 0;
-    var next = function () { if (i >= list.length) { st.busy = false; renderSheet(); return; } var c = list[i++];
-      codeHits(p, c).then(function (fs) { var f = fs[0];
-        var txt = f ? (f.summary || '') : '', cn = (txt.match(/CERTI\s*FICATE\s*NO\.?\s*:?\s*([0-9A-Z][0-9A-Z \/\-]{2,24}?\d{4})/i) || [])[1];
-        st.multi.push({ code: c, found: !!f, certNo: cn ? cn.replace(/\s+/g, '') : '', base: f ? certBase(f.name) : '', folder: f ? pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / ') : '', on: !!f }); })
-        .catch(function () { st.multi.push({ code: c, found: false, on: false }); }).then(function () { st.done = i; renderSheet(); next(); }); };
-    next(); };
-  var run = function () { var q = st.q.trim(); if (/[\n,;]/.test(q)) { st.res = []; return runMany(many()); } st.multi = null; if (q.length < 2) { st.res = []; renderSheet(); return; } st.busy = true; renderSheet();
-    var terms = companyTerms(p.company), toks = terms.map(function (t) { return t.toLowerCase().split(/[^a-z0-9؀-ۿ]+/).filter(function (w) { return w.length > 2 && !/pharma|company|egypt|for|the|and/.test(w); }); });
-    var exactQ = codeHits(p, q), wild = q.indexOf(' ') > 0 ? Promise.resolve([]) : spSearch(q + '*', 40).then(function (fs) { return fs.filter(function (f) { return isCalCert(f.name, f); }); }).catch(function () { return []; });
-    /* words (integrity, filter, HEPA…) are searched inside this company's certificates too – filter tests have no cover and no "Code" line */
-    var cw = (toks[0] || [])[0] || '', pre0 = String(p.company.code || '').replace(/[^0-9]/g, ''), qq = /\s/.test(q) ? '"' + q + '"' : q + '*',
-      inCo = Promise.all([cw ? spSearch(qq + ' ' + cw, 50) : Promise.resolve([]), pre0 ? spSearch(qq + ' filename:' + pre0 + '*', 50) : Promise.resolve([]), /integ|filter|hepa|leak|bubble|diffusion/i.test(q) && cw ? spSearch('"Integrity Test" ' + cw, 50) : Promise.resolve([])])
-        .then(function (rs) { return [].concat.apply([], rs).filter(function (f) { return isCalCert(f.name, f); }); }).catch(function () { return []; });
-    Promise.all([exactQ, wild, inCo]).then(function (rr) { var seen = {}, out = [], ids = {}, fs = rr[0].concat(rr[1], rr[2]).filter(function (f) { if (ids[f.id]) return false; ids[f.id] = 1; return true; });
-      fs.forEach(function (f) {
-        var pa = pathOf(f).toLowerCase(), mine = toks.some(function (ws) { return ws.some(function (w) { return pa.indexOf(w) >= 0; }); }) || (p.company.code && f.name.indexOf(String(p.company.code).replace(/[A-Z]+$/i, '')) === 0);
-        var txt = (f.summary || '') + ' ' + (f.viaCover || '') + ' ', codes = [], m, re = /Code\s*:?\s*([A-Z0-9][A-Za-z0-9\-\/ ]{1,18}?)(?=\s+(?:Calibration|Range|Cal\.|Model|Serial|Description|Manufacturer|$))/g;
-        while ((m = re.exec(txt))) codes.push(m[1].trim());
-        var cn = (txt.match(/CERTI\s*FICATE\s*NO\.?\s*:?\s*([0-9A-Z][0-9A-Z \/\-]{2,24}?\d{4})/i) || [])[1], ds = (txt.match(/Description\s+(.+?)\s+(?:Calibration|Code)/i) || [])[1], mf = (txt.match(/Manufacturer\s+(.+?)\s+(?:Calibration|Description)/i) || [])[1];
-        if (!codes.length && /integrity|filter\s*line|test\s*program|bubble\s*point|diffusion/i.test(txt + ' ' + f.name)) { /* a test certificate (one file, no cover, no Code line): one row per file */
-          var fl = (txt.match(/Filter\s*Line\s+([A-Z0-9][A-Za-z0-9\-\/]{2,24})/i) || [])[1], ptn = (txt.match(/Point\s*Name\s+(.+?)\s+(?:Filter\s*Line|Product\s*batch|Filter\s*Part|Housing|Test\s*pressure|$)/i) || [])[1], ar = (txt.match(/Production\s*Area\s+(.+?)\s+(?:Filter\s*Location|Production|Test\s*program|$)/i) || [])[1], cno = cn ? cn.replace(/\s+/g, '') : '';
-          if (norm(txt + ' ' + f.name + ' ' + pathOf(f)).indexOf(norm(q)) < 0 && !/integ|filter/i.test(q)) return; var key2 = 'f:' + (cno || f.id); if (seen[key2]) return;
-          var row2 = { code: fl || cno || certBase(f.name), certNo: cno || certBase(f.name), desc: 'Filter integrity test' + (ptn ? ' · ' + ptn.trim() : ar ? ' · ' + ar.trim() : ''), man: '', file: f.name, ff: { id: f.id, driveId: f.driveId, name: f.name, webUrl: f.webUrl, summary: f.summary, mod: f.mod }, folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / '), mine: mine ? 1 : 0, exact: 1, yr: yearOf(f), base: certBase(f.name) };
-          seen[key2] = row2; out.push(row2); return; }
-        var nq = norm(q), hit = codes.filter(function (c) { return norm(c).indexOf(nq) >= 0; });
-        (hit.length ? hit : [q.toUpperCase()]).forEach(function (c) { var k = norm(c); if (seen[k]) { if (seen[k].yr >= yearOf(f)) return; }  var row = { code: c, certNo: cn ? cn.replace(/\s+/g, '') : '', desc: ds || '', man: mf || '', file: f.name, folder: pathOf(f).replace(/^.*\/Certificates\//i, '').split('/').slice(0, 2).join(' / '), mine: mine ? 1 : 0, exact: hit.length || norm(txt).indexOf(nq) >= 0 ? 1 : 0, yr: yearOf(f), base: certBase(f.name) };
-          if (seen[k]) out.splice(out.indexOf(seen[k]), 1); seen[k] = row; out.push(row); }); });
-      out.sort(function (a, b) { return (b.mine - a.mine) || (b.exact - a.exact) || (b.yr - a.yr); }); st.res = out.slice(0, 30); st.busy = false; st.err = ''; renderSheet(); })
-      .catch(function (e) { st.busy = false; st.err = e.message; renderSheet(); }); };
-  openSheet(function () { return { title: 'Find a code', body:
-    '<textarea class="inp" id="fq" rows="2" style="height:auto;min-height:52px" placeholder="Type a code or part of it (e.g. QIII). Several codes: separate them with commas or new lines">' + esc(st.q) + '</textarea>' +
-    (st.multi ? (st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Searching ' + (st.done || 0) + ' of ' + many().length + '…</b></div>' : '') +
-      '<div class="list" style="margin-top:10px">' + st.multi.map(function (r, i) { return '<button class="row' + (r.on ? ' sel' : '') + '" data-mm="' + i + '"' + (r.found ? '' : ' disabled') + '><span class="check">' + (r.on ? '✓' : '') + '</span><span class="t"><b>' + esc(r.code) + '</b><small>' + esc(r.found ? [r.certNo || r.base, r.folder].filter(Boolean).join(' · ') : 'No old certificate found') + '</small></span></button>'; }).join('') + '</div>' +
-      (!st.busy && st.multi.some(function (r) { return r.on; }) ? '<div class="cf"><button class="btn" id="mmAdd">Add ' + st.multi.filter(function (r) { return r.on; }).length + ' codes</button></div>' : '') : '') +
-    (st.multi ? '' :
-    (!spOn() ? '<div class="note warnbox">SharePoint is not connected.</div>' : st.err ? '<div class="note warnbox">' + esc(st.err) + '</div>' : st.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Searching the old certificates…</b></div>'
-      : st.q.trim().length < 2 ? '<div class="small">Searches all old certificates on SharePoint. This company\'s come first.</div>'
-      : st.res.length ? '<div class="list">' + st.res.map(function (r, i) { var have = p.items.some(function (x) { return norm(x.code) === norm(r.code); });
-          return '<button class="row" data-fr="' + i + '"' + (have ? ' disabled style="opacity:.5"' : '') + '><span class="t"><b>' + esc(r.code) + (r.desc ? ' · ' + esc(r.desc) : '') + '</b><small>' + esc([r.certNo || r.base, r.folder].filter(Boolean).join(' · ')) + '</small></span>' + (have ? '<span class="pill">Added</span>' : r.mine ? '<span class="pill" style="--s-fg:var(--office);--s-bg:var(--office-soft)">This company</span>' : '<span class="pill" style="--s-fg:var(--muted);--s-bg:var(--oos-soft)">Other company</span>') + '</button>'; }).join('') + '</div>'
-      : '<div class="empty"><b>Not found</b>Try fewer letters, or add it with “Add an item”.</div>')),
-    foot: '<button class="btn ghost" id="fGo">Search</button><button class="btn" id="fDone">Done</button>',
-    mount: function () { $('#fGo').onclick = function () { st.q = $('#fq').value; run(); }; var i = $('#fq'); if (!st.busy) i.focus(); var pos = st.q.length; try { i.setSelectionRange(pos, pos); } catch (e) {}
-      i.oninput = function () { st.q = i.value; clearTimeout(timer); if (/[\n,;]/.test(st.q)) return; timer = setTimeout(run, 450); };
-      i.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey && /[\n,;]/.test(st.q + '\n') && st.q.indexOf(',') + st.q.indexOf(';') + st.q.indexOf('\n') > -3) { } };
-      i.onblur = function () { if (/[\n,;]/.test(st.q) && !st.busy && !(st.multi && st.multi.length)) run(); };
-      $$('[data-mm]').forEach(function (b) { b.onclick = function () { var r = st.multi[+b.dataset.mm]; r.on = !r.on; renderSheet(); }; });
-      var ma = $('#mmAdd'); if (ma) ma.onclick = function () { var have = {}, n = 0; p.items.forEach(function (x) { have[norm(x.code)] = 1; });
-        st.multi.forEach(function (r) { if (!r.on || have[norm(r.code)]) return; have[norm(r.code)] = 1; p.items.push(newItem({ code: r.code, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' })); n++; });
-        saveProjects(); closeSheet(); toast(n + ' codes added – loading their certificates'); queueOld(p); };
-      $$('[data-fr]').forEach(function (b) { b.onclick = function () { var r = st.res[+b.dataset.fr];
-        var ni0 = newItem({ code: r.code, description: r.desc, manufacturer: r.man, prevCert: r.certNo, src: 'find', dept: p.depts[0] || '' }); if (r.ff) ni0.oldFile = r.ff; p.items.push(ni0); saveProjects(); toast(r.code + ' added'); renderSheet(); queueOld(p); }; });
-      $('#fDone').onclick = closeSheet; } }; }); }
 
 /* ================= references: a suggestion for every item ================= */
 function itemSpan(it) { var f = (it.old && it.old.fields) || {}, n = oldNums(f);
@@ -6259,80 +5920,15 @@ FLOW = [['company', 'Company'], ['date', 'Cal. date'], ['dept', 'Department'], [
 FIDX = {}; FLOW.forEach(function (f, i) { FIDX[f[0]] = i; });
 var PHASES = [{ t: 'Company', s: ['company', 'date', 'dept', 'type', 'order'] }, { t: 'Codes', s: ['items', 'certs', 'refs'] }, { t: 'Certificates', s: ['det', 'cert', 'gen'] }];
 function curStep(p) { var t = p.stage !== 'done' ? p.stage : (p.tab || 'certs'); if (t === 'read' || t === 'over') t = 'cert'; return t; }
-function phaseOf(s) { for (var i = 0; i < PHASES.length; i++) if (PHASES[i].s.indexOf(s) >= 0) return i; return 0; }
-function readyItems(p) { return (p.items || []).filter(function (it) { return it.old && (it.old.points || []).length; }); }
 function certDone(it) { if (sqOn(it)) return !sqMissing(it).length; if (tpOn(it)) { var ti = tpIssues(it); return !ti.empty && !ti.bad; } if (genOn(it)) return !genPh(it).length; var x = itemProg(it); return x.tot > 0 && x.fil === x.tot; }
-function phaseSum(p, i) {
-  if (i === 0) return p.company ? p.company.name + (p.info && p.info.cal ? ' · ' + fmtD(p.info.cal) : '') : 'Choose the company';
-  if (i === 1) return (p.items || []).length ? p.items.length + (p.items.length === 1 ? ' code' : ' codes') : 'No codes yet';
-  var L = readyItems(p); return L.length ? L.filter(certDone).length + ' of ' + L.length + ' done' : 'After the codes'; }
-function stepBar(p) { var cur = curStep(p), ci = phaseOf(cur), r = reach(p);
-  return '<div class="rail">' + PHASES.map(function (ph, i) { var first = i === 0 && (p.items || []).length ? 'det' : ph.s[0], can = FIDX[first] <= r || first === 'det', done = i < ci;
-      done = done && (i !== 1 || (p.items || []).length > 0); return (i ? '<em></em>' : '') + '<button class="ph' + (i === ci ? ' on' : done ? ' ok' : '') + '" data-step="' + first + '"' + (can ? '' : ' disabled') + '><i>' + (done ? '✓' : i + 1) + '</i><span><b>' + ph.t + '</b><small>' + esc(phaseSum(p, i)) + '</small></span></button>'; }).join('') + '</div>' +
-    '<div class="substeps">' + PHASES[ci].s.map(function (s) { var i = FIDX[s]; return '<button class="' + (s === cur ? 'on' : i <= r ? 'ok' : '') + '" data-step="' + s + '"' + (i > r ? ' disabled' : '') + '>' + (i < FIDX[cur] ? '✓ ' : '') + FLOW[i][1] + '</button>'; }).join('') + '</div>'; }
 function bindStepBar(p) { $$('[data-step]').forEach(function (b) { b.onclick = function () { gotoStep(p, b.dataset.step); }; }); }
-function renderOverview(p) {
-  ensureInfo(p); if (!p.tab || p.tab === 'over' || p.tab === 'read' || ['certs', 'refs', 'det', 'cert', 'gen'].indexOf(p.tab) < 0) p.tab = 'cert'; PT.tab = p.tab;
-  var titles = { certs: ['Old certificates', 'Last year\'s certificate of every code'], refs: ['References', 'A reference for every code'], det: ['Details', 'Technician, dates and conditions'], cert: ['Certificates', 'One certificate at a time – type the new readings'], gen: ['Files', 'Covers, certificates and the receipt letter'] }[p.tab];
-  $('#app').innerHTML = '<div class="shell" style="padding-bottom:110px">' + top(esc(titles[0]), esc(p.company.name + ' · ' + titles[1]), stepBar(p)) + '<main id="pm"></main></div>' + (p.tab === 'cert' ? '<div class="wiz-foot"><div id="cf"></div></div>' : projFoot(p));
-  bindStepBar(p); bindHome(); if (p.tab !== 'cert') bindProjFoot(p);
-  ({ certs: tCerts, refs: tRefs, det: tDet, cert: tCertEd, gen: tGen })[p.tab](p);
-}
 
 /* ---------- home: three boxes ---------- */
 var SUG = LS.get('sug', null), HOME = { tab: '' };
-function sugMonths() { var n = new Date(); return [0, 1].map(function (k) { var d = new Date(n.getFullYear() - 1, n.getMonth() + k, 1); return { y: d.getFullYear(), m: d.getMonth() }; }); }
-function monthQ(y, m) { return '"Calibration Date" (' + [M3[m] + '.' + y, M3[m] + ' ' + y, MFULL[m] + ' ' + y].filter(function (v, i, a) { return a.indexOf(v) === i; }).map(function (v) { return '"' + v + '"'; }).join(' OR ') + ')'; }
-function coByPrefix(pre) { var n = norm(pre); return ((S.data && S.data.companies) || []).filter(function (c) { return c.code && norm(String(c.code).replace(/[^A-Za-z0-9]/g, '')) === n; })[0] || null; }
-function sugScan() { var ms = sugMonths(), key = ms[0].y + '-' + ms[0].m; SUG = { busy: true, at: Date.now(), key: key, months: [], d: 0 }; render();
-  return ms.reduce(function (pr, mo) { return pr.then(function () { var q = monthQ(mo.y, mo.m), got = [];
-      var page = function (off, k) { return spSearch(q, 50, off).catch(function () { return []; }).then(function (r) { got = got.concat(r); SUG.d = got.length; if (!sheetFn && !S.cur) render(); return r.length && k < 7 ? page(off + r.length, k + 1) : got; }); };
-      return page(0, 0).then(function (fs) { var by = {}, seen = {}, rx = new RegExp('Calibration Date\\s*(?:\\d{1,2}\\s*)?' + M3[mo.m] + '[a-z]*\\.?\\s*' + mo.y, 'i');
-        fs.forEach(function (f) { if (!isCalCert(f.name, f)) return; var t = (f.summary || '').replace(/\s+/g, ' '); if (!rx.test(t)) return; var b = certBase(f.name).toLowerCase(); if (seen[b]) return; seen[b] = 1;
-          var pre = (f.name.match(/^\s*(\d+\s*[A-Za-z]*)\s*-/) || [])[1]; if (!pre) return; pre = pre.replace(/\s+/g, '').toUpperCase(); var fo = (pathOf(f).match(/\/Cert\s*20\d\d\/([^\/]+)\//i) || [])[1] || '';
-          var x = by[pre] = by[pre] || { pre: pre, folder: fo.replace(/\s*20\d\d\s*$/, '').trim(), n: 0 }; x.n++; });
-        var list = Object.keys(by).map(function (k) { var x = by[k], c = coByPrefix(x.pre); x.coId = c ? c.id : ''; x.name = c ? c.name : (x.folder || x.pre); return x; }).sort(function (a, b) { return b.n - a.n; });
-        SUG.months.push({ y: mo.y, m: mo.m, list: list }); }); }); }, Promise.resolve())
-    .then(function () { SUG.busy = false; LS.set('sug', SUG); if (!S.cur) render(); }).catch(function (e) { SUG = { err: e.message }; if (!S.cur) render(); }); }
 function newProject(co, mo) { var p = { id: uid(), created: new Date().toISOString(), by: S.session.userId, stage: 'company', company: null, deptSug: null, depts: [], orderType: '', order: null, orderFiles: null, items: [], machines: [] };
   if (co) { p.company = { id: co.id, name: co.name, official: co.official || '', code: co.code || '', group: co.group || '' }; p.stage = 'date'; p.reached = FIDX.date; }
   if (mo) p.sugMonth = mo;
   S.projects.push(p); saveProjects(); S.cur = p.id; try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }
-function projCard(p) { var cs = curStep(p), ci = phaseOf(cs);
-  return '<div class="card pcard"><button class="projcard" data-p="' + p.id + '"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h3>' + esc(projTitle(p)) + '</h3><span class="pill" style="--s-fg:' + (ci === 2 ? 'var(--office)' : 'var(--blue)') + ';--s-bg:' + (ci === 2 ? 'var(--office-soft)' : 'var(--blue-soft)') + '">' + PHASES[ci].t + '</span></div>' +
-    '<div class="minirail">' + PHASES.map(function (ph, i) { return '<span class="' + (i < ci ? 'ok' : i === ci ? 'on' : '') + '"><i></i>' + esc(phaseSum(p, i)) + '</span>'; }).join('') + '</div>' +
-    '<div class="meta" style="margin-top:6px">Started ' + fmtDate(p.created) + (p.depts && p.depts.length ? ' · ' + esc(p.depts.join(', ')) : '') + '</div></button>' +
-    '<div class="cf"><button class="btn sm" data-p="' + p.id + '">Continue</button>' + (can('deljob') ? '<button class="btn ghost sm" data-pd="' + p.id + '" style="flex:none;color:var(--danger)">Delete</button>' : '') + '</div></div>'; }
-function renderHomeOld415473() {
-  var mine = S.projects.slice().sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
-  var ms = sugMonths(), fresh = SUG && !SUG.err && SUG.key === ms[0].y + '-' + ms[0].m && (SUG.busy || Date.now() - SUG.at < 12 * 3600e3);
-  if (!HOME.tab) HOME.tab = mine.length ? 'pending' : 'sug';
-  if (HOME.tab === 'sug' && spOn() && !fresh && !(SUG && SUG.err)) setTimeout(sugScan, 0);
-  var nSug = SUG && SUG.months && !SUG.busy ? SUG.months.reduce(function (a, x) { return a + x.list.length; }, 0) : null;
-  var body = '';
-  if (HOME.tab === 'pending') body = mine.length ? mine.map(projCard).join('') : '<div class="empty"><b>No pending jobs</b>Start one with “New job”.</div>';
-  if (HOME.tab === 'sug') body = !spOn() ? '<div class="note warnbox">SharePoint is not connected – suggestions come from last year\'s certificates.</div>'
-    : SUG && SUG.err ? '<div class="note warnbox">' + esc(SUG.err) + '</div><div class="cf"><button class="btn ghost" id="sugGo">Try again</button></div>'
-    : !SUG || SUG.busy ? '<div class="empty"><span class="spin dark"></span><b style="margin-top:10px">Checking last year\'s certificates…</b>' + (SUG && SUG.d ? SUG.d + ' files read' : '') + '</div>'
-    : SUG.months.map(function (mo, k) { var lbl = (k ? 'Next month' : 'This month') + ' · as ' + MON[mo.m] + ' ' + mo.y;
-        return '<div class="sec"><h2>' + esc(lbl) + '</h2><small>' + mo.list.length + '</small></div>' + (mo.list.length ? '<div class="list">' + mo.list.map(function (x, i) { var open = mine.filter(function (p) { return p.company && p.company.id === x.coId && p.sugMonth && p.sugMonth.y === mo.y && p.sugMonth.m === mo.m; })[0];
-          return '<div class="row"><span class="t"><b>' + esc(x.name) + '</b><small>' + x.n + (x.n === 1 ? ' batch' : ' batches') + ' last year · ID ' + esc(x.pre) + '</small></span>' + (open ? '<button class="btn ghost sm" data-p="' + open.id + '" style="flex:none">Open</button>' : '<button class="btn sm" data-sg="' + k + '|' + i + '" style="flex:none">Start</button>') + '</div>'; }).join('') + '</div>' : '<div class="small">Nothing last year in this month.</div>'); }).join('') +
-      '<div class="cf"><button class="btn ghost sm" id="sugGo">Check again</button></div>';
-  $('#app').innerHTML = '<div class="shell">' + top('', '<span>Hello</span><strong>' + esc(S.me ? S.me.name : (S.session && S.session.userId)) + '</strong>') + '<main>' + (spOn() ? dsRemind() : msCard()) +
-    '<div class="hometiles"><button class="ht' + (HOME.tab === 'pending' ? ' on' : '') + '" data-ht="pending"><b>' + mine.length + '</b><span>Pending jobs</span></button>' +
-    '<button class="ht sug' + (HOME.tab === 'sug' ? ' on' : '') + '" data-ht="sug"><b>' + (nSug == null ? '…' : nSug) + '</b><span>Suggested this month</span></button>' +
-    '<button class="ht new" id="newP"><b>+</b><span>New job</span></button></div>' + body +
-    '<div class="cf" style="margin-top:26px"><button class="btn ghost" id="binB">🗑 Recycle bin' + (binGet().length ? ' (' + binGet().length + ')' : '') + '</button><button class="btn ghost" id="out">Sign out</button></div></main></div>';
-  $('#newP').onclick = function () { newProject(); }; $('#binB').onclick = binSheet; undoFab();
-  $$('[data-ht]').forEach(function (b) { b.onclick = function () { HOME.tab = b.dataset.ht; render(); }; });
-  $$('[data-p]').forEach(function (b) { b.onclick = function () { S.cur = b.dataset.p; var pp = S.projects.filter(function (x) { return x.id === S.cur; })[0]; if (pp) openProjectPage(pp); try { if (!CL.on) history.pushState({ p: 1 }, ''); } catch (e) {} render(); window.scrollTo(0, 0); }; });
-  $$('[data-pd]').forEach(function (b) { b.onclick = function () { var p = S.projects.filter(function (x) { return x.id === b.dataset.pd; })[0];
-    dialog('Delete this job?', '<b>' + esc(projTitle(p)) + '</b> – ' + (p.items || []).length + ' codes. You can bring it back from the Recycle bin.', 'Delete').then(function (y) { if (!y) return; try { if (SYNC.on() && p.company) jcall('del', { id: p.id }).catch(function () {}); } catch (e) {} S.projects = S.projects.filter(function (x) { return x.id !== p.id; }); saveProjects(); render(); toast('Job deleted'); }); }; });
-  $$('[data-sg]').forEach(function (b) { b.onclick = function () { var a = b.dataset.sg.split('|').map(Number), mo = SUG.months[a[0]], x = mo.list[a[1]], co = ((S.data && S.data.companies) || []).filter(function (c) { return c.id === x.coId; })[0];
-    if (!co) return toast('This company is not in the list – add it in Akhnaton Devices', true); newProject(co, { y: mo.y, m: mo.m }); }; });
-  var sg = $('#sugGo'); if (sg) sg.onclick = sugScan;
-  $('#out').onclick = signOut; var mi = $('#msIn'); if (mi) mi.onclick = msSignIn; locBind(); var ho = $('#hdOpen'); if (ho) ho.onclick = dsLibSheet; var rg = $('#dsRemGo'); if (rg) rg.onclick = dsRemSteps; var rl = $('#dsRemL'); if (rl) rl.onclick = function () { LS.set('dsRemLater', Date.now() + 864e5); render(); };
-}
 
 /* ---------- codes: search last year by month / code / certificate number ---------- */
 /* ---------- search the customer's delivery letters (Reports YYYY/<customer>.docx) – every item ever sent, by machine, item, code or cert. no. ---------- */
@@ -6847,10 +6443,6 @@ function oldBind(p, it, rr) { var o = it.old;
 function railSeq(p, L) { var seq = []; coverGroups(p).forEach(function (gr, gi) { gr.items.forEach(function (x) { var i = L.indexOf(x); if (i >= 0) seq.push({ t: 'i', ci: i, gi: gi }); }); }); return seq; }
 function railHtml(p, L, sel) { return ''; /* the side / top list of all certificates was removed on request – ‹ › on the certificate bar and Back to the job are enough */
 }
-function railHtml0(p, L, sel) { var gs = coverGroups(p), gen = {}; genGroups(p).forEach(function (g2) { g2.items.forEach(function (x) { gen[x.id] = g2; }); });
-  return '<nav class="prail"><div class="rlhead"><button id="rlAll" class="rlbk">‹ Whole job</button><span>' + savedN(p) + ' / ' + L.length + ' saved</span></div><div class="rllist">' + gs.map(function (gr, gi) { var m = gr.machine, g0 = gen[gr.items[0].id], dn = gr.items.filter(function (x) { return x.saved; }).length, title = m ? m.name : (gr.items[0].description || 'Units');
-      return '<div class="rlgrp"><div class="rlgh"><b>' + esc(title) + '</b><span>' + dn + '/' + gr.items.length + '</span></div>' +
-        gr.items.map(function (x, k) { var i = L.indexOf(x); if (i < 0) return ''; var stt = x.saved ? 'ok' : cState(x) === 'none' ? 'bad' : cState(x) === 'progress' ? 'mid' : ''; return '<button class="rl crt ' + stt + (sel.ci === i ? ' on' : '') + '" data-ri="' + i + '"><span class="rn">' + (gi + 1) + '.' + (k + 1) + '</span><span class="rlt"><b>' + esc(x.code || '—') + '</b><small>' + esc(x.certNo || x.description || '') + '</small></span><i class="dot"></i></button>'; }).join('') + '</div>'; }).join('') + '</div><button class="rladd" id="rlAdd">+ Add item</button></nav>'; }
 function certNoBar(p, it) { var L = certList(p); return '<div class="cvno"><button class="cvnav" id="cp"' + (p.ci ? '' : ' disabled') + ' title="Previous">‹</button><span>CERTIFICATE NO.</span><b>' + esc(it.certNo || '—') + '</b><small>' + esc((it.code || '') + (it.description ? ' · ' + it.description : '')) + '</small><button class="cvnav" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + ' title="Next">›</button></div>'; }
 function railGo(p, x) { if (!x) return; if (x.t === 'c') { p.cv = x.gi; } else { p.cv = null; p.ci = x.ci; } saveProjects(); tCertEd(p); window.scrollTo(0, 0); }
 function railBind(p, L) { var ra = $('#rlAdd'); if (ra) ra.onclick = function () { var it = L[p.ci], gs = coverGroups(p), gi = 0; gs.forEach(function (g2, k) { if (it && g2.items.indexOf(it) >= 0) gi = k; }); itemSheet(p, gi, null); }; try { var on0 = document.querySelector('.prail .rl.on'), ls0 = document.querySelector('.prail .rllist'); if (on0 && ls0) { if (innerWidth < 1000) ls0.scrollLeft += on0.getBoundingClientRect().left - ls0.getBoundingClientRect().left - 10; else on0.scrollIntoView({ block: 'nearest' }); } } catch (e) {} var a = $('#rlAll'); if (a) a.onclick = function () { p.cv = null; p.hubFocus = null; toHub(p); };
@@ -6860,17 +6452,6 @@ function railBind(p, L) { var ra = $('#rlAdd'); if (ra) ra.onclick = function ()
   if (p.cv == null) { var seq = railSeq(p, L), k = -1; seq.forEach(function (x, j) { if (x.t === 'i' && x.ci === p.ci) k = j; });
     var cn = $('#cn'); if (cn && seq[k + 1] && seq[k + 1].t === 'c') { cn.disabled = false; cn.onclick = function () { railGo(p, seq[k + 1]); }; }
     var cp = $('#cp'); if (cp && seq[k - 1] && seq[k - 1].t === 'c') { cp.disabled = false; cp.onclick = function () { railGo(p, seq[k - 1]); }; } } }
-function tCover(p, L) { var gs = coverGroups(p), gi = Math.min(p.cv, gs.length - 1), gr = gs[gi]; if (!gr) { p.cv = null; return tCertEd(p); }
-  var ready = gr.items.filter(function (x) { return x.old && ((x.old.points || []).length || genOn(x) || x.old.steam || x.old.tp); }), g0 = genGroups(p).filter(function (g2) { return g2.items.indexOf(gr.items[0]) >= 0; })[0];
-  var seq = railSeq(p, L), k = -1; seq.forEach(function (x, j) { if (x.t === 'c' && x.gi === gi) k = j; });
-  $('#pm').innerHTML = railHtml(p, L, { gi: gi }) + '<div class="cvno"><span>COVER ' + (gi + 1) + ' · CERTIFICATE NO.</span><b>' + esc(g0 ? (g0.from + (g0.to !== g0.from ? '  →  ' + g0.to : '')) : '—') + '</b><small>' + gr.items.length + ' certificate' + (gr.items.length === 1 ? '' : 's') + '</small></div>' +
-    '<div class="wlhint">Cover ' + (gi + 1) + ' · click the unit to edit it, click an item to open its certificate, or add an item</div>' + coverPaper(p, gr, g0);
-  $('#cf').innerHTML = '<button class="btn ghost" id="cvP"' + (k > 0 ? '' : ' disabled') + '>‹ Previous</button><button class="btn blue" id="cvN"' + (seq[k + 1] ? '' : ' disabled') + '>' + (seq[k + 1] && seq[k + 1].t === 'i' ? 'Next: ' + esc(L[seq[k + 1].ci].code || 'certificate') + ' ›' : 'Next ›') + '</button>';
-  $('#cvP').onclick = function () { railGo(p, seq[k - 1]); }; $('#cvN').onclick = function () { railGo(p, seq[k + 1]); };
-  var ce = $('#cvEd'); if (ce) ce.onclick = function (e) { e.preventDefault(); coverSheet(p, gi); }; railBind(p, L);
-  $$('[data-cvu]').forEach(function (b) { b.onclick = function () { coverTable(p, gi); }; });
-  $$('[data-cvi]').forEach(function (b) { b.onclick = function () { itemSheet(p, gi, certList(p)[+b.dataset.cvi]); }; });
-  var ca = $('#cvAdd'); if (ca) ca.onclick = function () { itemSheet(p, gi, null); }; }
 var STD_OPEN = false;
 function stdTable(p, it) { var ds = refsUsed(p, [it]).filter(function (d) { return (it.refs || []).indexOf(d.id) >= 0; });
   return '<table class="wlg wstd"><tr><th>No.</th><th>Manufacturer</th><th>Description</th><th>Model</th><th>Serial No.</th><th>Range</th><th>Cal. Due Date</th></tr>' + (ds.length ? ds.map(function (d, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(d.manufacturer || '') + '</td><td>' + esc(d.description || '') + '</td><td>' + esc(d.model || '') + '</td><td>' + esc(d.serial || '') + '</td><td>' + esc(d.range || '') + '</td><td>' + esc(dueText(d)) + '</td></tr>'; }).join('') : '<tr><td colspan="7" class="wnone">No standard chosen yet – choose it below</td></tr>') + '</table>'; }
@@ -7089,20 +6670,6 @@ function readingsSheet(p, it) { var o = it.old, d = resDec(it); it.nv = it.nv ||
         $$('[data-updn]').forEach(function (b) { b.onclick = function () { if (b.dataset.updn) it.updn = 'uut'; else delete it.updn; it.saved = 0; saveProjects(); re(); }; });
         if ($('#rgDir')) $('#rgDir').onchange = function () { o.dirs = $('#rgDir').checked ? 2 : 1; it.saved = 0; saveProjects(); re(); };
         $('#rgOk').onclick = function () { $$('[data-rp]').forEach(function (e) { o.points[+e.dataset.rp].point = e.value.trim(); }); syncCalRange(it); saveProjects(); closeSheet(); rangeAsk(p, it, function () { window.__keepY = window.scrollY; window.__noFocus = 1; render(); }); }; } }; }); }
-function pointsSheet(p, it) { var o = it.old, d = resDec(it);
-  openSheet(function () { return { title: 'Calibration points – ' + esc(it.code || ''), body: '<div class="small" style="margin-bottom:10px">Change a point, remove it, or add a new one. Readings are typed on the certificate.</div><div class="mpl">' +
-      o.points.map(function (q, i) { return '<div class="mpr"><span class="mpn">' + (i + 1) + '</span><div class="mpt"><input class="inp ptsi" data-pq="' + i + '" value="' + esc(q.point == null ? '' : q.point) + '" placeholder="point" inputmode="decimal"><small>' + esc(uOf(it) || '') + (ptLimit(it, q) ? ' · limit ' + esc(ptLimit(it, q)) : '') + (q.reading != null && q.reading !== '' ? ' · last year ' + esc(fmtRes(q.reading, d)) : '') + '</small></div><div class="mpa"><button class="mpb" data-pm="' + i + '|-1"' + (i ? '' : ' disabled') + '>↑</button><button class="mpb" data-pm="' + i + '|1"' + (i < o.points.length - 1 ? '' : ' disabled') + '>↓</button><button class="mpb del" data-pd="' + i + '" title="Remove">✕</button></div></div>'; }).join('') +
-      '</div><button class="mpadd" id="ptAdd">+ Add a point</button><div class="cf" style="margin-top:12px"><button class="btn ghost sm" id="ptRef">Reference = the points</button><label class="ckl"><input type="checkbox" id="ptDir"' + (o.dirs === 2 ? ' checked' : '') + '> Up and down readings (↑ ↓)</label></div>',
-    foot: '<button class="btn" id="ptOk">Done</button>',
-    mount: function () {
-      $$('[data-pq]').forEach(function (e) { e.onchange = function () { o.points[+e.dataset.pq].point = e.value.trim(); delete o.crPts; it.saved = 0; saveProjects(); }; e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); e.onchange(); var nx = $$('[data-pq]')[+e.dataset.pq + 1]; if (nx) nx.focus(); else $('#ptAdd').click(); } }; });
-      var swap = function (a, b) { var t = o.points[a]; o.points[a] = o.points[b]; o.points[b] = t; ['', 'd'].forEach(function (s) { var x = it.nv[a + s], y = it.nv[b + s]; delete it.nv[a + s]; delete it.nv[b + s]; if (y) it.nv[a + s] = y; if (x) it.nv[b + s] = x; }); };
-      $$('[data-pm]').forEach(function (b) { b.onclick = function () { var a = b.dataset.pm.split('|').map(Number); swap(a[0], a[0] + a[1]); it.saved = 0; saveProjects(); renderSheet(); }; });
-      $$('[data-pd]').forEach(function (b) { b.onclick = function () { var i = +b.dataset.pd; var nv = {}; o.points.forEach(function (q, k) { if (k === i) return; var nk = k > i ? k - 1 : k; if (it.nv[k]) nv[nk] = it.nv[k]; if (it.nv[k + 'd']) nv[nk + 'd'] = it.nv[k + 'd']; }); o.points.splice(i, 1); it.nv = nv; it.saved = 0; saveProjects(); renderSheet(); toast('Point removed – ↶ Undo brings it back'); }; });
-      $('#ptAdd').onclick = function () { o.points.push({ point: '', ref: '', reading: '', limit: '' }); it.saved = 0; saveProjects(); renderSheet(); setTimeout(function () { var x = $$('[data-pq]'); if (x.length) x[x.length - 1].focus(); }, 40); };
-      $('#ptRef').onclick = function () { it.nv = it.nv || {}; o.points.forEach(function (q, i) { [i, i + 'd'].slice(0, o.dirs === 2 ? 2 : 1).forEach(function (k) { var v = it.nv[k] = it.nv[k] || {}; if (!String(v.ref || '').trim() && isNum(q.point)) v.ref = String(q.point); }); }); saveProjects(); toast('Reference = the points'); };
-      $('#ptDir').onchange = function () { o.dirs = $('#ptDir').checked ? 2 : 1; it.saved = 0; saveProjects(); };
-      $('#ptOk').onclick = function () { $$('[data-pq]').forEach(function (e) { o.points[+e.dataset.pq].point = e.value.trim(); }); saveProjects(); closeSheet(); window.__keepY = window.scrollY; window.__noFocus = 1; render(); }; } }; }); }
 function xtSheet(p, it) { openSheet(function () { return { wide: 1, title: (genOn(it) ? 'Readings' : 'Repeatability & eccentricity') + ' – ' + esc(it.code || ''), body: '<div class="paper wl xtw">' + balHtml(p, it) + genEdHtml(p, it) + '</div>', foot: '<button class="btn" id="xtOk">Done</button>',
     mount: function () { var rr = function () { renderSheet(); }; try { balBind(p, it, rr); } catch (e) {} try { genBind(p, it, rr); } catch (e) {} try { oldBind(p, it, rr); } catch (e) {} $('#xtOk').onclick = function () { closeSheet(); window.__keepY = window.scrollY; window.__noFocus = 1; render(); }; } }; }); }
 function remarksSheet(p, it) { var inf = ensureInfo(p), g = genDefaults(p); genDefaults0 = g;
@@ -7160,22 +6727,6 @@ function codeJoin(pre, v) { pre = String(pre || '').trim(); v = String(v || '').
 function sugBind(el, sg) { if (!el) return; var get = typeof sg === 'function' ? sg : function () { return sg; }; el.sugRefresh = function () { var x = get(); if (x) el.setAttribute('placeholder', x + '…   (Tab)'); }; el.sugRefresh(); el.setAttribute('autocomplete', 'off');
   el.addEventListener('keydown', function (e) { var sug = get(); if (!sug || e.key !== 'Tab' || e.shiftKey) return; var v = el.value.trim(); if (v && (v.length >= sug.length || sug.indexOf(v) !== 0)) { var j = codeJoin(sug, v); if (j === v) return; e.preventDefault(); el.value = j; try { el.setSelectionRange(j.length, j.length); } catch (x) {} el.dispatchEvent(new Event('input', { bubbles: true })); return; }
     e.preventDefault(); el.value = sug; try { el.setSelectionRange(sug.length, sug.length); } catch (x) {} el.dispatchEvent(new Event('input', { bubbles: true })); }); }
-function itemsSheet(p, gi) { var gr = coverGroups(p)[gi]; if (!gr) return closeSheet(); var L = certList(p);
-  var F = function (it, k, l, v, ph) { return '<label class="uf"><span>' + l + '</span><input class="inp" data-if="' + it.id + '|' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></label>'; };
-  openSheet(function () { gr = coverGroups(p)[gi] || { items: [] }; var ff = function (it) { return ((it.old || {}).fields) || {}; };
-    return { title: 'Items to be calibrated', body: (gr.items.length ? gr.items.map(function (it, k) { var f = ff(it); return '<div class="ucard icard"><div class="uhd">Item ' + (k + 1) + '</div>' +
-        '<div class="umv"><button data-imv="' + it.id + '|-1" title="Up"' + (k ? '' : ' disabled') + '>↑</button><button data-imv="' + it.id + '|1" title="Down"' + (k < gr.items.length - 1 ? '' : ' disabled') + '>↓</button></div><button class="udel" data-idel="' + it.id + '">Remove</button>' +
-        '<div class="ugrid">' + F(it, 'description', 'Description', it.description || f.description) + F(it, 'code', 'Code', it.code) + F(it, 'manufacturer', 'Manufacturer', it.manufacturer || f.manufacturer, 'N/A') + F(it, 'model', 'Model', it.model || f.model, 'N/A') + F(it, 'serial', 'S/N', it.serial || f.serial, 'N/A') + '</div>' +
-        '<div class="small" style="margin-top:6px"><a href="#" data-iop="' + it.id + '">Open its certificate ›</a></div></div>'; }).join('') : '<div class="empty"><b>No items left in this cover</b></div>') +
-        '<div class="small" style="margin-top:6px">Removed items go to the Recycle bin (Home) – or press ↶ Undo.</div>',
-      foot: '<button class="btn ghost" id="iAdd">+ Add an item</button><button class="btn" id="iOk">Done</button>',
-      mount: function () { $$('[data-if]').forEach(function (e) { var a = e.dataset.if.split('|'), it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (!it) return;
-          if (a[1] === 'code') sugBind(e, codeSug(p, it));
-          e.oninput = function () { var v = e.value.trim(); it[a[1]] = v; if (it.old && it.old.fields && a[1] !== 'code') it.old.fields[a[1]] = v; it.saved = 0; saveProjects(); }; });
-        $$('[data-idel]').forEach(function (b) { b.onclick = function () { var it = p.items.filter(function (x) { return x.id === b.dataset.idel; })[0]; if (!it) return; p.items = p.items.filter(function (x) { return x !== it; }); var g2 = coverGroups(p)[gi], L2 = certList(p); p.ci = g2 && g2.items[0] ? Math.max(L2.indexOf(g2.items[0]), 0) : 0; saveProjects(); toast((it.code || it.description || 'Item') + ' removed – ↶ Undo to bring it back'); if (!(coverGroups(p)[gi] || {}).items) { closeSheet(); return; } renderSheet(); }; });
-        $$('[data-imv]').forEach(function (b) { b.onclick = function () { var a = b.dataset.imv.split('|'), it = p.items.filter(function (x) { return x.id === a[0]; })[0], k = gr.items.indexOf(it), o = gr.items[k + (+a[1])]; if (!it || !o) return; var i1 = p.items.indexOf(it), i2 = p.items.indexOf(o); p.items[i1] = o; p.items[i2] = it; saveProjects(); renderSheet(); }; });
-        $$('[data-iop]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); var it = p.items.filter(function (x) { return x.id === b.dataset.iop; })[0]; sheetFn = null; renderSheet(); p.cv = null; p.ci = certList(p).indexOf(it); saveProjects(); tCertEd(p); window.scrollTo(0, 0); }; });
-        $('#iOk').onclick = closeSheet; $('#iAdd').onclick = function () { if (gr.items[0]) subItemSheet(p, gr.items[gr.items.length - 1]); }; } }; }); }
 function grpOf(p, it) { return coverGroups(p).filter(function (g2) { return g2.items.indexOf(it) >= 0; })[0]; }
 function coverView(p, gi, it) { var html = printView(p, { item: it.id, coverOnly: true }), grC = coverGroups(p)[gi] || { items: [it] };
   openSheet(function () { return { wide: 1, title: 'Cover ' + (gi + 1) + ' – as it prints', body: '<div class="pvtop"><span class="pvhint2">One cover for all the certificates of this machine · <b>✎ Edit</b> next to each part changes it</span><div class="shg"><button class="btn ghost sm" id="cvStd">✎ Standard for all</button><button class="btn ghost sm" id="cvM">Edit the machine and its items</button></div></div><div class="pvwrap big" id="pvw"><iframe class="pv" id="pvf"></iframe></div>', foot: '<button class="btn" id="cvOk">OK</button>',
@@ -7340,44 +6891,11 @@ function itemSheet2(p, gi, it0, pick) { if (it0 && mqSetup(it0)) saveProjects();
 /* after the item data is changed: is the calibration range or any point outside the device range? (all certificates, and each quantity of a temperature & humidity item) */
 function rangeProblem(it) { try { var e = rngErr(it); if (e) return e; var bp = []; ((it.old && it.old.points) || []).forEach(function (q, i) { var r = evalPt(it, i, 1); if (r && r.oor && bp.indexOf(q.point) < 0) bp.push(q.point); }); if (!bp.length && !(it.qs || []).length && isNum(it.rMin) && isNum(it.rMax)) ((it.old && it.old.points) || []).forEach(function (q) { var tq = rngTol(it); if (isNum(q.point) && (numv(q.point) < numv(it.rMin) - tq || numv(q.point) > numv(it.rMax) + tq) && bp.indexOf(q.point) < 0) bp.push(q.point); }); if (bp.length) return 'Point ' + bp.join(', ') + ' is outside the Range ' + rangeText(it);
     var out = []; (it.qs || []).forEach(function (q) { if (!isNum(q.rMin) || !isNum(q.rMax)) return; var lo = numv(q.rMin), hi = numv(q.rMax); if (isNum(q.cMin) && isNum(q.cMax) && (numv(q.cMin) < lo || numv(q.cMax) > hi)) out.push(qShort(q) + ': Cal. Range (' + q.cMin + ' : ' + q.cMax + ') ' + q.unit + ' is bigger than the Range (' + q.rMin + ' : ' + q.rMax + ') ' + q.unit); var b = q.old.points.filter(function (pt) { return isNum(pt.point) && (numv(pt.point) < lo || numv(pt.point) > hi); }).map(function (pt) { return pt.point; }); if (b.length) out.push(qShort(q) + ': point ' + b.join(', ') + ' is outside the Range (' + q.rMin + ' : ' + q.rMax + ') ' + q.unit); }); return out.join(' · '); } catch (x) { return ''; } }
-function unitSheet(p, gi) { var gr = coverGroups(p)[gi]; if (!gr) return; var m = gr.machine, g = genDefaults(p);
-  var F = function (k, l, v, ph) { return '<label class="uf"><span>' + l + '</span><input class="inp" data-uf="' + k + '" value="' + esc(v == null ? '' : v) + '" placeholder="' + esc(ph || '') + '"></label>'; };
-  var ff = function (it) { return ((it.old || {}).fields) || {}; };
-  openSheet(function () { return { title: 'Unit under Test', body: (m ? '<div class="ucard"><div class="uhd">The machine on this cover</div><div class="ugrid">' + F('m|name', 'Description', m.name) + F('m|code', 'Code', m.code) + F('m|manufacturer', 'Manufacturer', m.manufacturer, gr.items[0].manufacturer || ff(gr.items[0]).manufacturer || 'N/A') + F('m|model', 'Model', m.model, 'N/A') + F('m|serial', 'S/N', m.serial, 'N/A') + F('m|loc', 'Location', m.loc, g.loc || 'N/A') + '</div></div>'
-      : (!sqOn(gr.items[0]) && gr.items[0].uut && gr.items[0].uut.name) ? (function () { var u = gr.items[0].uut; return '<div class="ucard"><div class="uhd">The unit on this cover (from last year)</div><div class="ugrid">' + F('uu|name', 'Description', u.name) + F('uu|code', 'Code', u.code) + F('uu|manufacturer', 'Manufacturer', u.manufacturer, 'N/A') + F('uu|model', 'Model', u.model, 'N/A') + F('uu|serial', 'S/N', u.serial, 'N/A') + F('uu|location', 'Location', u.location, g.loc || 'N/A') + '</div></div>'; })() : gr.items.map(function (it, k) { var f = ff(it); if (sqOn(it)) { var sm = sqM(it); return '<div class="ucard"><div class="uhd">Unit ' + (k + 1) + ' · steam tested on</div><div class="ugrid">' + F('sq|' + it.id + '|name', 'Description', sm.name) + F('sq|' + it.id + '|code', 'Code', sm.code) + F('sq|' + it.id + '|manufacturer', 'Manufacturer', sm.manufacturer, 'N/A') + F('sq|' + it.id + '|model', 'Model', sm.model, 'N/A') + F('sq|' + it.id + '|serial', 'S/N', sm.serial, 'N/A') + F('sq|' + it.id + '|location', 'Location', sm.location, 'N/A') + '</div></div>'; } return '<div class="ucard"><div class="uhd">Unit ' + (k + 1) + '</div><div class="ugrid">' + F(it.id + '|description', 'Description', it.description || f.description) + F(it.id + '|code', 'Code', it.code) + F(it.id + '|manufacturer', 'Manufacturer', it.manufacturer || f.manufacturer, 'N/A') + F(it.id + '|model', 'Model', it.model || f.model, 'N/A') + F(it.id + '|serial', 'S/N', it.serial || f.serial, 'N/A') + '</div></div>'; }).join('') + '<div class="ucard"><div class="ugrid">' + F('g|loc', 'Location', g.loc, 'e.g. QC Lab.') + '</div></div>') +
-      '<div class="small" style="margin-top:6px">Changes show on the cover right away. <a href="#" id="uMore">More cover options (merge, bring last year\'s items)</a></div>',
-    foot: '<button class="btn" id="uOk">Done</button>',
-    mount: function () { $$('[data-uf]').forEach(function (e) { e.oninput = function () { var a = e.dataset.uf.split('|'), v = e.value.trim(); if (a[0] === 'uu') { gr.items.forEach(function (x) { if (x.uut) { x.uut[a[1]] = v; x.saved = 0; } }); } else if (a[0] === 'sq') { var it9 = p.items.filter(function (x) { return x.id === a[1]; })[0]; if (it9) sqMSet(it9, a[2], v); } else if (a[0] === 'm') m[a[1]] = v; else if (a[0] === 'g') g[a[1]] = v; else { var it = p.items.filter(function (x) { return x.id === a[0]; })[0]; if (it) it[a[1]] = v; } saveProjects(); }; });
-      $('#uOk').onclick = closeSheet; $('#uMore').onclick = function (e) { e.preventDefault(); coverSheet(p, gi); }; } }; }); }
 function sideTabs() { return '<button class="machtab cov" id="cTab" title="The cover of this machine"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg><span>Cover</span></button><button class="machtab" id="mTab" title="The machine and its items"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/></svg><span>Machine</span></button>'; }
-function covTop(p, it) { var gs = coverGroups(p), gr = gs.filter(function (g2) { return g2.items.indexOf(it) >= 0; })[0]; if (!gr) return ''; var g0 = genGroups(p).filter(function (g2) { return g2.items.indexOf(gr.items[0]) >= 0; })[0];
-  return '<div class="pgsep first">Cover' + (gr.items.length > 1 ? ' – shared by ' + gr.items.length + ' certificates' : '') + '</div>' + coverPaper(p, gr, g0, it); }
 function covTopBind(p, it) { var gs = coverGroups(p), gi = -1; gs.forEach(function (g2, k) { if (g2.items.indexOf(it) >= 0) gi = k; }); if (gi < 0) return; var ct = $('#cTab'), mt = $('#mTab'); if (ct) ct.onclick = function () { if ((it.old || {}).points) coverView(p, gi, it); else machinePanel(p, gi); }; if (mt) mt.onclick = function () { machinePanel(p, gi); };
   $$('[data-cvu]').forEach(function (b) { b.onclick = function () { coverTable(p, gi); }; });
   $$('[data-cvi]').forEach(function (b) { b.onclick = function () { itemSheet(p, gi, certList(p)[+b.dataset.cvi]); }; });
   var ca = $('#cvAdd'); if (ca) ca.onclick = function () { itemSheet(p, gi, null); }; }
-function coverPaper(p, gr, g0, cur) { var g = genDefaults(p), its = gr.items, L = certList(p), F = function (it) { return ((it.old || {}).fields) || {}; };
-  var T = function (head, rows, cls) { return '<table class="wlg' + (cls ? ' ' + cls : '') + '"><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' + rows.join('') + '</table>'; };
-  var td = function (v) { return '<td>' + esc(v == null || v === '' ? 'N/A' : v) + '</td>'; };
-  var info = coverInfo(p).map(function (r) { return r.length === 2 ? '<tr><th>' + esc(r[0]) + '</th><td colspan="3">' + esc(r[1]) + '</td></tr>' : '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td><th>' + esc(r[2]) + '</th><td>' + esc(r[3]) + '</td></tr>'; }).join('');
-  var no = g0 ? (its.length > 1 ? 'From ' + g0.from + ' to ' + g0.to : g0.from) : '—';
-  var unit = gr.machine ? ['<tr class="clk" data-cvu="1" title="Edit the cover">' + td(1) + td(gr.machine.manufacturer || its[0].manufacturer || F(its[0]).manufacturer) + td(gr.machine.name) + td(gr.machine.model) + td(gr.machine.serial) + td(gr.machine.code) + td(gr.machine.loc || g.loc) + '</tr>']
-    : its.map(function (it, i) { var f = F(it); return '<tr class="clk" data-cvu="1" title="Edit the cover">' + td(i + 1) + td(it.manufacturer || f.manufacturer) + td(it.description || f.description) + td(it.model || f.model) + td(it.serial || f.serial) + td(it.code) + td(g.loc) + '</tr>'; });
-  var items = its.map(function (it, i) { var f = F(it), pt = ((it.old || {}).points || [])[0] || {}; return '<tr class="clk' + (cur === it ? ' cur' : '') + '" data-cvi="' + L.indexOf(it) + '" title="Edit the items">' + td(i + 1) + td(it.manufacturer || f.manufacturer) + td(it.description || f.description) + td(it.code) + td(calRangeText(it) || f.calRange || f.range) + td(limitsText(it) || pt.limit) + '</tr>'; });
-  items.push('<tr class="addrow"><td colspan="6"><div style="display:flex;gap:6px;justify-content:center"><button class="wladd" id="cvAdd" style="width:auto">+ Add an item</button></div></td></tr>');
-  var refs = (function () { var u = {}; its.forEach(function (x) { (x.refs || []).forEach(function (id) { u[id] = 1; }); }); var ds = labDevices(); return Object.keys(u).map(function (id) { return ds.filter(function (d) { return d.id === id; })[0]; }).filter(Boolean); })().map(function (d, i) { return '<tr>' + td(i + 1) + td(d.manufacturer) + td(d.description) + td(d.model) + td(d.serial) + td(d.range) + td(dueText(d)) + '</tr>'; });
-  return '<div class="paper wl">' + '<div class="wlt">Calibration Certificate</div><div class="wlno">CERTIFICATE NO.: ' + esc(no) + '</div><table class="wlinfo">' + info + '</table>' +
-    '<h5>Unit under Test</h5>' + T(['No.', 'Manufacturer', 'Description', 'Model', 'S/N', 'Code', 'Location'], unit) +
-    '<h5>Item to be calibrated</h5>' + T(['No.', 'Manufacturer', 'Description', 'Code', 'Cal. Range', 'Accepted Limit'], items) +
-    '<h5>Calibration Standard(s) Utilized</h5>' + T(['No.', 'Manufacturer', 'Description', 'Model', 'Serial No.', 'Range', 'Cal. Due Date'], refs.length ? refs : ['<tr><td colspan="7" style="color:#8A96A6">Chosen in each certificate</td></tr>']) + '</div>'; }
-function coverBar(p, L, it) { var gs = coverGroups(p), gi = -1, gr = null; gs.forEach(function (g2, k) { if (gr) return; if (g2.items.indexOf(it) >= 0) { gr = g2; gi = k; } }); if (!gr) gr = { items: [it] };
-  var gg = genGroups(p).filter(function (g2) { return g2.items.indexOf(it) >= 0; })[0], m = gr.machine, title = m ? m.name + (m.code ? ' · ' + m.code : '') : (gr.items[0].description || 'Units'), done = gr.items.filter(function (x) { return x.saved; }).length, pos = gr.items.indexOf(it);
-  return '<div class="cvbar"><div class="cvtabs"><button id="cvAll">▦ Whole job <small>' + savedN(p) + '/' + L.length + '</small></button><button id="cvCov"' + (gi < 0 ? ' disabled' : '') + ' data-gi="' + gi + '">📄 Cover page</button><button class="on">✎ ' + (pos + 1) + ' of ' + gr.items.length + ' in this cover</button></div>' +
-    '<div class="cvno"><span>CERTIFICATE NO.</span><b>' + esc(it.certNo || '—') + '</b><small>' + esc(it.code || it.description || '') + '</small></div>' +
-    '<div class="cvhead"><span class="tcnt">' + gr.items.length + '</span><b>' + esc(title) + '</b><small>' + (gg ? esc(gg.from + (gg.to !== gg.from ? ' → ' + gg.to : '')) + ' · ' : '') + done + ' of ' + gr.items.length + ' saved' + (gs.length > 1 ? ' · cover ' + (gi + 1) + ' of ' + gs.length : '') + '</small></div>' +
-    '<div class="cvstrip"><button class="icon-btn" id="cp"' + (p.ci ? '' : ' disabled') + ' title="Previous">‹</button><div class="cvchips">' + gr.items.map(function (x) { var i = L.indexOf(x); return '<button class="cvc' + (x === it ? ' on' : '') + (x.saved ? ' ok' : cState(x) === 'none' ? ' bad' : '') + '" data-cj2="' + i + '">' + esc(x.code || x.description || '—') + (x.saved ? ' ✓' : '') + '</button>'; }).join('') + '</div><button class="icon-btn" id="cn"' + (p.ci < L.length - 1 ? '' : ' disabled') + ' title="Next">›</button></div></div>'; }
-function coverBarBind(p) { var a = $('#cvAll'); if (a) a.onclick = function () { p.hubFocus = null; toHub(p); }; var c = $('#cvCov'); if (c) c.onclick = function () { coverSheet(p, +c.dataset.gi); };
-  $$('[data-cj2]').forEach(function (b) { b.onclick = function () { p.ci = +b.dataset.cj2; saveProjects(); tCertEd(p); window.scrollTo(0, 0); }; }); var on = $('.cvc.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' }); }
 function balBind(p, it, rr) { var nb = function () { return (it.nbal = it.nbal || {}); }, d = resDec(it);
   var keep = function (e, set) { e.onchange = function () { var v = e.value.trim().replace(',', '.'); if (d != null && isNum(v) && !e.dataset.bl && !e.dataset.bel) v = padTo(v, d); e.value = v; set(v); it.saved = 0; saveProjects(); /* redrawn after the focus has moved on (Tab / click), then the focus goes back to the box you were going to – redrawing inside the change event broke the page */ setTimeout(function () { var all0 = $$('.bt input'), ix = all0.indexOf(document.activeElement); rr(); if (ix >= 0) { var n0 = $$('.bt input')[ix]; if (n0) { n0.focus(); try { n0.select(); } catch (e2) {} } } }, 0); }; e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); var all = $$('.bt input'), i = all.indexOf(e); if (all[i + 1]) all[i + 1].focus(); else e.blur(); } }; };
   $$('[data-br]').forEach(function (e) { var a = e.dataset.br.split('|').map(Number); keep(e, function (v) { var r = (nb().rep = nb().rep || []); r[a[0]] = r[a[0]] || []; r[a[0]][a[1]] = v; }); });
@@ -7537,7 +7055,6 @@ function phaseOf(s) { if (['certs', 'refs', 'det', 'cert', 'gen'].indexOf(s) >= 
 function certList(p) { var out = []; coverGroups(p).forEach(function (g) { out = out.concat(g.items); }); return out; }
 function cState(it) { var o = it.old || {}; if (it.saved) return 'saved'; if (o.status === 'searching' || (!it.old && (it.code || it.prevCert) && spOn())) return 'loading'; if (o.tp) { var ti = tpIssues(it); return ti.empty ? 'progress' : 'ready'; } if (o.status === 'found' && !(o.points || []).length && !genOn(it) && !o.steam && !o.bal && !tpType(it)) return 'noread'; if (!o.tp && tpType(it) && o.status !== 'searching') return 'progress'; if (o.steam) return sqMissing(it).length < 9 ? (sqMissing(it).length ? 'progress' : 'ready') : 'ready'; if (!(o.points || []).length && !genOn(it)) return 'none'; if (genOn(it)) return genPh(it).length ? 'progress' : 'ready'; var x = itemProg(it); return x.fil ? 'progress' : 'ready'; }
 var CST = { saved: ['Saved ✓', 'var(--office)', 'var(--office-soft)'], progress: ['In progress', 'var(--blue)', 'var(--blue-soft)'], ready: ['To do', 'var(--muted)', 'var(--oos-soft)'], loading: ['Loading…', 'var(--blue)', 'var(--blue-soft)'], none: ['No old cert', 'var(--danger)', 'var(--danger-soft)'], noread: ['Readings not read', 'var(--danger)', 'var(--danger-soft)'] };
-function cPill(it) { var s = CST[cState(it)]; return '<span class="pill" style="--s-fg:' + s[1] + ';--s-bg:' + s[2] + '">' + s[0] + '</span>'; }
 function savedN(p) { return certList(p).filter(function (i) { return i.saved; }).length; }
 function phaseSum(p, i) {
   if (i === 0) return p.company ? p.company.name + (p.info && p.info.cal ? ' · ' + fmtD(p.info.cal) : '') : 'Choose the company';
@@ -7569,44 +7086,8 @@ function groupHints(p) { /* loose items whose codes share a machine code, e.g. P
   return Object.keys(by).filter(function (k) { return by[k].length > 1; }).map(function (k) { return { code: k, items: by[k] }; }); }
 function grpKey(gr) { return gr.machine ? 'm' + gr.machine.id : 'u' + gr.items[0].id; }
 function grpOpen(p, gr) { var o = (p.hubOpen || {})[grpKey(gr)]; if (o != null) return !!o; var nx = certList(p).filter(function (x) { return !x.saved; })[0]; return !!nx && gr.items.indexOf(nx) >= 0; }
-function hubDetails(p, L, only) { var idx = 0, sel = p.hubSel || (p.hubSel = {}), ed = p.hubEdit, nSel = L.filter(function (x) { return sel[x.id]; }).length, gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
-  var hints = ed || only ? [] : groupHints(p), miss = [];
-  return miss.map(function (g2) { return '<div class="ghint"><span class="t"><b>' + esc(g2.machine ? g2.machine.name : (g2.items[0].code || g2.items[0].description)) + ': ' + missingHint(p, g2) + ' more items were in this cover last year</b><small>you have ' + g2.items.length + ' of ' + (g2.items.length + missingHint(p, g2)) + '</small></span><button class="btn sm" data-miss="' + esc(grpKey(g2)) + '">See &amp; bring</button></div>'; }).join('') + hints.map(function (h, k) { return '<div class="ghint"><span class="t"><b>' + h.items.length + ' items share the code ' + esc(h.code) + '</b><small>' + esc(h.items.map(function (x) { return x.code; }).join(', ')) + ' – one machine, one cover?</small></span><button class="btn sm" data-gh="' + k + '">One cover</button></div>'; }).join('') +
-    (ed ? '<div class="selbar2"><span><b>' + nSel + '</b> selected</span><button class="btn sm" id="hGroup"' + (nSel ? '' : ' disabled') + '>Put under one cover</button></div>' : '') +
-    ''+
-    coverGroups(p).map(function (gr, gi) { if (only && grpKey(gr) !== only) { idx += gr.items.length; return ''; } var m = gr.machine, done = gr.items.filter(function (x) { return x.saved; }).length, g0 = gen[gr.items[0].id], nums = gr.items.map(function (x) { return x.certNo; }).filter(Boolean);
-      var q = norm(p.hubQ || ''), hit = function (it) { return !q || norm((it.code || '') + ' ' + (it.description || '') + ' ' + (it.certNo || '') + ' ' + (it.prevCert || '') + ' ' + ((it.old && it.old.fields && it.old.fields.certNo) || '') + ' ' + (m ? m.name + ' ' + (m.code || '') : '')).indexOf(q) >= 0; }, nHit = gr.items.filter(hit).length;
-      if (q && !nHit) { idx += gr.items.length; return ''; } var open = q || only ? true : grpOpen(p, gr);
-      var title = m ? m.name + (m.code ? ' · ' + m.code : '') : (gr.items[0].description || (gr.items[0].old && gr.items[0].old.fields && gr.items[0].old.fields.description) || 'Units');
-      return '<div class="cgrp' + (open ? ' open' : '') + (done === gr.items.length ? ' alldone' : '') + '"><div class="cgh" data-tg="' + esc(grpKey(gr)) + '"><span class="chev">' + (open ? '▾' : '▸') + '</span><span class="cball' + (done === gr.items.length ? ' ok' : '') + '">' + gr.items.length + '</span><span class="t"><b>' + esc(title) + '</b><small>' + gr.items.length + (gr.items.length === 1 ? ' certificate' : ' certificates') + ' · ' + done + ' done' + (nums.length ? ' · <span class="nw">' + esc(nums[0]) + '</span>' + (nums.length > 1 ? ' → <span class="nw">' + esc(nums[nums.length - 1]) + '</span>' : '') : '') + '</small></span>' +
-        '<span class="cgbar"><i style="width:' + Math.round(done / gr.items.length * 100) + '%"></i></span>' +
-        (ed && m ? '<span class="iacts"><button class="ia" data-hme="' + m.id + '">Edit</button><button class="ia del" data-hmx="' + m.id + '">×</button></span>' : '<button class="ia" data-cov="' + gi + '">Cover</button>') + '</div>' +
-        gr.items.map(function (it) { var i = idx++; if (!open || !hit(it)) return ''; var f = (it.old || {}).fields || {}, st = cState(it), pr = it.old && it.old.points && it.old.points.length ? itemProg(it) : null;
-          var stx = it.saved ? '<span class="st lt-ok">Done ✓</span>' : st === 'none' ? '<span class="st bad">No old cert</span>' : st === 'loading' ? '<span class="st">Loading…</span>' : '<span class="st pend">' + (pr && pr.fil ? pr.fil + ' / ' + pr.tot : 'Pending') + '</span>';
-          return '<div class="crow' + (it.saved ? ' done' : '') + (sel[it.id] && ed ? ' on' : '') + '" data-ci="' + i + '">' + (ed ? '<span class="ck">' + (sel[it.id] ? '✓' : '') + '</span>' : '<span class="cn">' + (i + 1) + '</span>') +
-            '<span class="t"><b>' + esc(it.code || '—') + '</b><small>' + esc(it.description || f.description || '') + '</small>' + (it.certNo ? '<em>' + esc(it.certNo) + '</em>' : '') + (it.letterId && letterIds(p).length > 1 ? '<span class="lt-tag">' + esc(letterName(p, it.letterId)) + '</span>' : '') + '</span>' +
-            (ed ? '<span class="iacts"><button class="ia" data-hie="' + it.id + '">Edit</button><button class="ia del" data-hix="' + it.id + '">×</button></span>' : stx) + '</div>'; }).join('') + '</div>'; }).join(''); }
 /* the certificates page: Tiles / Grid / Details – like the devices app */
-function gState(p, gr) { var n = gr.items.length, done = gr.items.filter(function (x) { return x.saved; }).length, none = gr.items.filter(function (x) { return cState(x) === 'none'; }).length, load = gr.items.filter(function (x) { return cState(x) === 'loading'; }).length;
-  return { n: n, done: done, none: none, load: load, cls: done === n ? 'ok' : none ? 'bad' : load ? 'load' : done ? 'mid' : 'new', txt: done === n ? 'All saved ✓' : load ? 'Getting last year…' : none ? none + ' without last year\'s certificate' : done ? done + ' of ' + n + ' saved' : 'Not started' }; }
 function hubList(p, L) { return ''; }
-function hubListOld(p, L) { var hv = LS.get('hubView', 'tiles'), q = norm(p.hubQ || ''), gen = {}; genGroups(p).forEach(function (g) { g.items.forEach(function (it) { gen[it.id] = g; }); });
-  var gs = coverGroups(p), foc = p.hubFocus && gs.some(function (g2) { return grpKey(g2) === p.hubFocus; }) ? p.hubFocus : null;
-  var bar = '<div class="viewbar" role="radiogroup">' + [['tiles', '▦', 'Tiles'], ['grid', '⊞', 'Grid'], ['list', '☰', 'Details']].map(function (v) { return '<button data-hv="' + v[0] + '" class="' + (hv === v[0] ? 'on' : '') + '"><i>' + v[1] + '</i>' + v[2] + '</button>'; }).join('') + '</div>';
-  var tools = '<div class="hubtools"><div class="search sm">' + I.search + '<input id="hq" placeholder="Search a code, description, cover or certificate no." value="' + esc(p.hubQ || '') + '" autocomplete="off"></div><button class="ia" id="hLy" title="Put every certificate under the same cover as last year">Covers as last year</button>' + (hv === 'list' && !foc ? '<button class="ia" id="hExp">' + (gs.every(function (g2) { return grpOpen(p, g2); }) ? 'Collapse all' : 'Expand all') + '</button>' : '') + '</div>';
-  if (p.hubEdit) return tools + hubDetails(p, L);
-  if (foc) { var gr = gs.filter(function (g2) { return grpKey(g2) === foc; })[0], gi = gs.indexOf(gr), st = gState(p, gr), mh = missingHint(p, gr), g0 = gen[gr.items[0].id];
-    var title = gr.machine ? gr.machine.name + (gr.machine.code ? ' · ' + gr.machine.code : '') : (gr.items[0].description || 'Units');
-    return '<button class="backcat" id="hBack">‹ All covers</button><div class="covhead st-' + st.cls + '"><span class="tcnt">' + st.n + '</span><b>' + esc(title) + '</b><small>' + (g0 ? esc(g0.from + (g0.to !== g0.from ? ' → ' + g0.to : '')) + ' · ' : '') + esc(st.txt) + '</small>' +
-      '<div class="cf" style="margin:8px 0 0"><button class="btn ghost sm" data-cov="' + gi + '">Cover page</button>' + (mh ? '<button class="btn sm" data-miss="' + esc(grpKey(gr)) + '">+ ' + mh + ' from last year\'s cover</button>' : '') + '</div></div>' + hubDetails(p, L, foc); }
-  if (hv === 'list') return bar + tools + hubDetails(p, L);
-  var hitG = function (gr) { if (!q) return true; var m = gr.machine; return gr.items.some(function (it) { return norm([it.code, it.description, it.certNo, it.prevCert, it.old && it.old.fields && it.old.fields.certNo, m && m.name, m && m.code].join(' ')).indexOf(q) >= 0; }); };
-  var tiles = gs.map(function (gr, gi) { if (!hitG(gr)) return ''; var st = gState(p, gr), m = gr.machine, g0 = gen[gr.items[0].id], mh = missingHint(p, gr), title = m ? m.name : (gr.items[0].description || 'Units'), code = m ? m.code : (gr.items.length === 1 ? gr.items[0].code : '');
-      return '<button class="htile ctile st-' + st.cls + (hv === 'grid' ? ' wide' : '') + '" data-ft="' + esc(grpKey(gr)) + '"><span class="tcnt">' + st.n + '</span><b>' + esc(title) + '</b>' + (code ? '<small class="cd">' + esc(code) + '</small>' : '') +
-        (g0 ? '<small>' + esc(g0.from + (g0.to !== g0.from ? ' → ' + g0.to.replace(/^.*?-(\d+)-\d{4}$/, '$1') : '')) + '</small>' : '') + '<small class="stx">' + esc(st.txt) + '</small>' +
-        (hv === 'grid' ? '<span class="cmini">' + gr.items.slice(0, 8).map(function (it) { return '<i class="' + (it.saved ? 'ok' : cState(it) === 'none' ? 'bad' : '') + '">' + esc(it.code || it.description || '—') + '</i>'; }).join('') + (gr.items.length > 8 ? '<i>+' + (gr.items.length - 8) + '</i>' : '') + '</span>' : '') +
-        (mh ? '<small class="mh">+ ' + mh + ' more on last year\'s cover</small>' : '') + '<span class="tbar"><em style="width:' + Math.round(st.done / st.n * 100) + '%"></em></span></button>'; }).join('');
-  return bar + tools + (tiles ? '<div class="' + (hv === 'tiles' ? 'htiles' : 'hgrid') + '">' + tiles + '</div>' : '<div class="empty"><b>Nothing matches</b>Try another code or certificate number.</div>'); }
 /* "Working…" ball for anything that takes time */
 var BUSY_N = 0;
 function busy(on, txt) { BUSY_N = Math.max(0, BUSY_N + (on ? 1 : -1)); var el = $('#loadov'); if (!el) { el = document.createElement('div'); el.id = 'loadov'; el.setAttribute('role', 'status'); el.innerHTML = '<div class="lbox"><div class="lball"></div><span id="loadtx">Working…</span></div>'; document.body.appendChild(el); }
@@ -7670,17 +7151,6 @@ function bringSheet(p, gr) { var bases = {}; gr.items.forEach(function (it) { va
           if (!m) { m = { id: uid(), name: st.mach || gr.items[0].description || 'Machine', code: st.mcode || codePre(gr.items[0].code) || '', dept: gr.items[0].dept || (p.depts || [])[0] || '' }; p.machines.push(m); gr.items.forEach(function (it) { it.machineId = m.id; }); }
           st.rows.forEach(function (x, i) { if (!st.on[i] || h2[norm(x.code)]) return; h2[norm(x.code)] = 1; var ni = newItem({ machineId: m.id, code: cleanCode(x.code), description: x.description, manufacturer: x.manufacturer || '', prevCert: x.certNo, prevBase: x.base, src: 'last year', dept: last.dept || '' }); p.items.splice(p.items.indexOf(last) + 1 + added, 0, ni); added++; });
           saveProjects(); toast(added + (added === 1 ? ' item' : ' items') + ' added to ' + m.name); queueOld(p); closeSheet(); }; } }; }); }
-function completeMachine(p, gr, done) { var bases = {}; gr.items.forEach(function (it) { var x = itBase(it); if (x) bases[x] = 1; }); var list = Object.keys(bases);
-  if (!list.length) { toast('No last-year certificate is linked to these items yet', true); return done && done(); }
-  toast('Reading last year\'s cover…'); var have = {}; p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; }), added = 0, m = gr.machine;
-  list.reduce(function (pr, base) { return pr.then(function () { return Promise.all([withTime(batchItems({ base: base, name: base + ' cal. cert.doc' }), 60000).catch(function () { return { items: [] }; }), withTime(certPagesItems(base), 60000).catch(function () { return []; })]).then(function (two) {
-      var r = two[0] || { items: [] }, seen = {}, all = []; (r.items || []).concat(two[1] || []).forEach(function (x) { var k = norm(x.code); if (!k || seen[k]) return; seen[k] = 1; all.push(x); }); r.items = all;
-      if (!m) { m = { id: uid(), name: r.machine || (gr.items[0].description || 'Machine'), code: r.machineCode || codePre(gr.items[0].code) || '', dept: gr.items[0].dept || (p.depts || [])[0] || '' }; p.machines.push(m); gr.items.forEach(function (it) { it.machineId = m.id; }); }
-      else { if (!m.name && r.machine) m.name = r.machine; if (!m.code && r.machineCode) m.code = r.machineCode; }
-      var last = gr.items[gr.items.length - 1];
-      (r.items || []).forEach(function (x) { if (!x.code || have[norm(x.code)]) return; have[norm(x.code)] = 1; var ni = newItem({ machineId: m.id, code: cleanCode(x.code), description: x.description, manufacturer: x.manufacturer || '', prevCert: x.certNo, prevBase: base, src: 'last year', dept: last.dept || '' });
-        p.items.splice(p.items.indexOf(last) + 1 + added, 0, ni); added++; }); }); }); }, Promise.resolve())
-    .catch(function (e) { toast(e.message || 'Could not read the cover', true); }).then(function () { saveProjects(); if (added) { toast(added + (added === 1 ? ' item' : ' items') + ' added to ' + (m ? m.name : 'this cover')); queueOld(p); } else toast('Nothing missing – all items of last year\'s cover are here'); done && done(); }); }
 function coverSheet(p, gi, st0) { var g0 = coverGroups(p)[gi]; if (!g0) return; var mid = g0.machine ? g0.machine.id : '', key = g0.items.map(function (x) { return x.id; }), st = st0 || { add: false, desc: '', code: '' };
   var grp = function () { var gs = coverGroups(p); if (mid) return gs.filter(function (x) { return x.machine && x.machine.id === mid; })[0]; return gs.filter(function (x) { return x.items.some(function (i) { return key.indexOf(i.id) >= 0; }); })[0]; };
   var reopen = function () { var gs = coverGroups(p), k = -1; gs.forEach(function (x, q) { if (k < 0 && (mid ? x.machine && x.machine.id === mid : x.items.some(function (i) { return key.indexOf(i.id) >= 0; }))) k = q; }); if (k < 0) return closeSheet(); coverSheet(p, k, st); };
@@ -8212,8 +7682,6 @@ function pricesFromLetters(t, items) { var rows = letterRows(t), out = {};
     rows.forEach(function (r) { var rk = pToks(r.text.replace(/\b[A-Z]{3}[-.]\d{2}\b/g, '')), sc = 0; w.forEach(function (x) { if (rk.indexOf(x) >= 0) sc++; }); if (sc >= Math.min(2, w.length) && sc >= top) { if (sc > top) { tally = {}; top = sc; } tally[r.price] = (tally[r.price] || 0) + 1; } });
     var pr = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; })[0]; if (pr) out[it.id] = pr; });
   return { code: code, desc: out }; }
-function pricesFromContract(t, items) { var rows = priceListRows(t), out = {};
-  items.forEach(function (it) { var r = rowFor(it, rows); if (r) out[it.id] = r.price; }); return { map: out, rows: rows }; }
 /* EVA Group Price List 2026 (Appendix no. 1 of the 2026 contracts) – built in, so prices work even without SharePoint */
 var PL_BUILTIN = { 'EVA Group|2026': { name: 'EVA Group Price List 2026', rows: [{"id": 1, "sec": 0, "text": "Calibration of Temperature Sensors", "price": "240"}, {"id": 2, "sec": 0, "text": "Calibration of Pressure Sensors", "price": "200"}, {"id": 3, "sec": 0, "text": "Calibration for Safety Valve", "price": "440"}, {"id": 4, "sec": 0, "text": "Calibration of Differential Pressure", "price": "200"}, {"id": 5, "sec": 0, "text": "Calibration of Relative Humidity Meter", "price": "185"}, {"id": 6, "sec": 0, "text": "Calibration of Air Velocity / Air Flow", "price": "255"}, {"id": 7, "sec": 0, "text": "Calibration of Rotational Speed Indicator", "price": "215"}, {"id": 8, "sec": 0, "text": "Calibration for Flowmeter", "price": "880"}, {"id": 9, "sec": 0, "text": "Calibration of Timer", "price": "130"}, {"id": 10, "sec": 0, "text": "Calibration of pH / Conductivity / Redox / Chlorine Meter / Viscometer", "price": "285"}, {"id": 11, "sec": 0, "text": "Calibration for Micropipette", "price": "305"}, {"id": 12, "sec": 0, "text": "Calibration for Lengths including (Micrometer, Vernier)", "price": "250"}, {"id": 13, "sec": 0, "text": "Calibration for Level Sensor", "price": "245"}, {"id": 14, "sec": 0, "text": "Calibration for Single Weights", "price": "110"}, {"id": 15, "sec": 0, "text": "Calibration of Weight balance ≤ 30 Kg", "price": "315"}, {"id": 16, "sec": 0, "text": "Calibration of Weight balance ˃ 30 Kg", "price": "495"}, {"id": 17, "sec": 0, "text": "Calibration for Electrical Signal", "price": "250"}, {"id": 18, "sec": 0, "text": "Calibration for Hardness", "price": "415"}, {"id": 19, "sec": 0, "text": "Calibration for Torque Meter", "price": "420"}, {"id": 20, "sec": 0, "text": "Calibration for Sound Meter", "price": "445"}, {"id": 21, "sec": 0, "text": "Calibration for Lux Meter", "price": "475"}, {"id": 22, "sec": 0, "text": "Calibration for Integrity Filters", "price": "885"}, {"id": 23, "sec": 0, "text": "Steam Quality Test", "price": "3300"}, {"id": 24, "sec": 0, "text": "Calibration for Pall Device FFSXC", "price": "19060"}, {"id": 25, "sec": 0, "text": "Calibration for Pall Device FFS04", "price": "20875"}, {"id": 26, "sec": 0, "text": "Compressed Air (Dew test. Oil test, Particle count)", "price": "7865"}, {"id": 27, "sec": 0, "text": "Temperature and Humidity Data loggers", "price": "430"}, {"id": 28, "sec": 0, "text": "Temperature Data loggers", "price": "240"}, {"id": 1, "sec": 1, "text": "Particle Count Test (Class A, B) – per point", "price": "330"}, {"id": 2, "sec": 1, "text": "Particle Count Test (Class C, D) – per point", "price": "145"}, {"id": 3, "sec": 1, "text": "D.O.P Test – per Filter", "price": "285"}, {"id": 4, "sec": 1, "text": "Air Pattern Test/Air Visualization – per room", "price": "255"}, {"id": 5, "sec": 1, "text": "Recovery Test – per room", "price": "330"}, {"id": 6, "sec": 1, "text": "Air Change Test – per filter", "price": "120"}, {"id": 7, "sec": 1, "text": "Differential Pressure measurement per point", "price": "155"}, {"id": 8, "sec": 1, "text": "Temperature and Humidity measurement per point", "price": "200"}] } };
 function coGroup(p) { var c = p.company || {}, g = c.group; if (!g && S.data && S.data.companies) { var x = S.data.companies.filter(function (y) { return y.id === c.id; })[0]; g = x && x.group; } if (!g && /\beva\b|evapharma|horus|mars\b|gypto/i.test(c.name + ' ' + (c.official || ''))) g = 'EVA Group'; return g || ''; }
@@ -8321,8 +7789,6 @@ function itPeek(p, it, list) { list = list || [it]; var i = Math.max(0, list.ind
       '<div class="pkpb"><table class="pkfact">' + facts.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') + '</table>' + (/<section class="pg"/.test(html) ? '<div class="pkpf"><iframe id="pkIf"></iframe></div>' : '<div class="pkpf pkpn"><div><b>No certificate page yet</b><span>There is no certificate from last year and no points written, so the page is drawn once the points are set in the job.</span><button class="btn sm" id="pkGo">Open it in the job ›</button></div></div>') + '</div></div></div>';
     var f0 = $('#pkIf'); if (f0) f0.srcdoc = html; var go = $('#pkGo'); if (go) go.onclick = function () { dr.innerHTML = ''; ctGo(p, x.id); }; $('#pkCl').onclick = function () { dr.innerHTML = ''; }; var pv = $('#pkPv'), nx = $('#pkNx'); if (pv) pv.onclick = function () { i--; draw(); }; if (nx) nx.onclick = function () { i++; draw(); }; };
   draw(); }
-function fxUndoBar(msg, snap, after) { var o = document.getElementById('fxUndo'); if (o) o.remove(); o = document.createElement('div'); o.id = 'fxUndo'; o.innerHTML = '<span>✓ ' + esc(msg) + '</span><button class="btn ghost sm" id="fxUb">↶ Undo</button>'; document.body.appendChild(o);
-  var t = setTimeout(function () { if (o.parentNode) o.remove(); }, 15000); o.querySelector('#fxUb').onclick = function () { clearTimeout(t); o.remove(); snap(); after && after(); toast('Undone'); }; }
 function fxSnap(p, its) { var g = genDefaults(p), keep = its.map(function (it) { return { it: it, l: it.letterId, r: it.ctRow, ps: it.poSet, pr: g.prices[it.id], src: (g.prSrc || {})[it.id] }; });
   return function () { keep.forEach(function (k) { k.it.letterId = k.l || ''; if (k.r == null) delete k.it.ctRow; else k.it.ctRow = k.r; if (k.ps == null) delete k.it.poSet; else k.it.poSet = k.ps; g.prices[k.it.id] = k.pr || ''; g.prSrc = g.prSrc || {}; if (k.src == null) delete g.prSrc[k.it.id]; else g.prSrc[k.it.id] = k.src; }); xqOn(p, [], false); }; }
 function kindKey(it) { var d = String(it.description || ((it.old || {}).fields || {}).description || '').replace(/\s+/g, ' ').trim(); return d && d.length <= 60 ? d : fwKindOf(it); }
@@ -9480,8 +8946,6 @@ function libPop() { var old = document.getElementById('libPop'); if (old) { old.
   setTimeout(function () { document.addEventListener('click', function cl() { var x = document.getElementById('libPop'); if (x) x.remove(); document.removeEventListener('click', cl); }); }, 0); }
 /* keep it updated without asking: once the library is a month old, the update runs by itself in the background */
 setTimeout(function libAuto() { try { if (S.session && !DEMO && libCan() && !UPD.run && Date.now() - (LS.get('dataUpdated', 0) || 0) > 30 * 864e5 && Date.now() - (LS.get('libAutoAt', 0) || 0) > 864e5) { LS.set('libAutoAt', Date.now()); dataUpdateAll(); } } catch (e) {} setTimeout(libAuto, 6e5); }, 20000);
-function dataCard() { var lu = LS.get('dataUpdated', 0), nm = DS_LIB.length + (LS.get('dsLibLocal', []) || []).length + (LS.get('dsRemote', []) || []).length, nc = Object.keys(Object.assign({}, CO_LIB, LS.get('coRemote', {}) || {})).length, old = !lu || Date.now() - lu > 30 * 864e5;
-  return '<section class="hblk hdata"><div class="hdl"><b>📚 Data library</b><small>' + nm + ' instrument datasheets · ' + nc + ' companies with official name, address and phone · ' + (lu ? 'updated ' + new Date(lu).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'not updated online yet') + '</small></div><div class="hdb">' + (old ? '<span class="hdold">' + (lu ? 'over a month old' : 'needs a first update') + '</span>' : '<span class="hdok">✓ up to date</span>') + '<button class="btn ghost sm" id="hdOpen">Open ›</button></div></section>'; }
 
 /* ===== typing help: word and phrase suggestions from our own certificates, no autocorrect ===== */
 var AC = { v: null, at: 0, box: null, el: null, list: [], sel: -1 };
