@@ -2157,3 +2157,9 @@ body.hasTb #tbar{z-index:95}
 
 /* the home page's "Continue …" button: a long job name ends with … instead of being cut at the left */
 .hcont{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;text-align:left}
+/* Model / Serial chooser under the item data */
+.idseg{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:5px;font-size:11px}
+.idseg span{color:#6B7280;margin-right:2px}
+.idseg button{border:1px solid #CBD5E1;background:#fff;border-radius:999px;padding:2px 9px;font-size:11px;color:#13294B;cursor:pointer}
+.idseg button.on{background:#13294B;color:#fff;border-color:#13294B}
+table.kv5 td{text-align:left}
