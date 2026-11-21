@@ -1225,6 +1225,7 @@ body.hasTb #mtools button:hover{border-color:#13294B}
  #tbMenu .tbmo{display:block}
  #tbar .tbcr,#tbar .rfbtn,#tbar .tbchip:not([data-tb]),#tbar .tbtools [data-tb="bin"],#tbar .tbtools [data-tb="users"],#tbar .tbtools [data-tb="act"]{display:none!important}
  .tbhome{padding:0 4px}.tbhome img{height:18px}
+ #tbar [data-tb="onl"]:not(.tbmo){display:none!important}
  .tbchip{margin:0 2px}
  #tbMenu,#tbUpd{right:6px;left:6px;min-width:0;width:auto}
 }
@@ -2153,3 +2154,6 @@ body.hasTb #tbar{z-index:95}
 .hjt2,.hjr{border-color:#EAEFF5}
 .hchart .hcol span{background:#CFE0F5}.hchart .hcol.on span{background:#7FAEE6}
 .htop2 .hpbar{background:#EEF2F7}.htop2 .hpbar i{background:#9CC3EE}
+
+/* the home page's "Continue …" button: a long job name ends with … instead of being cut at the left */
+.hcont{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;text-align:left}
