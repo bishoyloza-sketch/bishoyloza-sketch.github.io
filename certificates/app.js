@@ -736,7 +736,7 @@ function tbarPaint() { var bar = document.getElementById('tbar');
     '<button class="tbb ic lab" data-tb="redo" title="' + (UNDO.rd.length ? 'Redo – ' + UNDO.rd.length + ' (Ctrl+Y)' : 'Nothing to redo') + '"' + (UNDO.rd.length ? '' : ' data-off') + '>' + tbIco('redo') + '<span>Redo</span></button>' +
     
     '<span class="tbchip' + (sp ? '' : ' off') + '" title="SharePoint"><i></i><span>' + (sp ? 'SharePoint' : 'Offline') + '</span></span>' +
-    '<button class="tbb ic rfbtn" title="Refresh – load the newest version">' + tbIco('ref') + '</button>' +
+    '<button class="tbb ic lab rfbtn" title="Refresh – load the newest version">' + tbIco('ref') + '<span>Refresh</span></button>' +
     '<button class="tbb tbme" data-tb="me" title="' + esc(S.me ? S.me.name : '') + '"><b>' + esc((me || '?').charAt(0)) + '</b><span>' + esc(me) + '</span>' + tbIco('down') + '</button>' +
     B('out', 'out', '', 'Sign out', 'ic') + '</div>' +
     (TB.menu ? '<div id="tbMenu"><div class="tbmh"><b>' + esc(S.me ? S.me.name : '') + '</b><small>' + esc(CROLE[certRoleOf(S.me)] || '') + '</small></div><button class="tbmo" data-tb="bin">Recycle bin' + (nb ? ' (' + nb + ')' : '') + '</button>' + '' + (certAdmin() ? '<button class="tbmo" data-tb="users">Users</button>' : '') + (SYNC.on() && actAllowed() ? '<button class="tbmo" data-tb="act">Team activity</button>' : '') + '<button data-tb="scrst">Clear defaults</button><button data-tb="pin">Change my PIN</button><button data-tb="paper">Paper used</button><button data-tb="inst">Install the app / share the link</button><button data-tb="out">Sign out</button></div>' : '') +
@@ -794,7 +794,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v489';
+var APP_V = 'v490';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1523,7 +1523,14 @@ function nameplates(p, files) {
 }
 
 /* Excel: fixed template (proposal – we can change the columns together) */
-var XL_COLS = ['Type (Unit / Machine item)', 'Machine', 'Machine code', 'Code', 'Description', 'Manufacturer', 'Model', 'Serial no.', 'Range from', 'Range to', 'Unit', 'Cal. range from', 'Cal. range to', 'Resolution', 'Resolution unit', 'Department'];
+var XL_COLS = ['Type (Unit / Machine item)', 'Machine', 'Machine code', 'Machine manufacturer', 'Machine model', 'Machine serial no.', 'Code', 'Description (unit under test)', 'Manufacturer', 'Model', 'Serial no.', 'Range from', 'Range to', 'Unit', 'Cal. range from', 'Cal. range to', 'Resolution', 'Resolution unit', 'Department', 'Location'];
+var XL_EX = [['Unit', '', '', '', '', '', 'TH-05', 'Digital thermometer', 'Testo', '110', '45012', -50, 150, '°C', 0, 100, 0.1, '°C', 'QC', 'QC Lab'],
+  ['Machine item', 'Autoclave', 'AC-01', 'Fedegari', 'FOB3', '12345', 'AC-01-PG1', 'Pressure gauge', 'Wika', '232.50', 'W-778', 0, 4, 'bar', '', '', 0.05, 'bar', 'Production', 'Sterile area'],
+  ['Machine item', 'Autoclave', 'AC-01', 'Fedegari', 'FOB3', '12345', 'AC-01-T1', 'Chamber temperature sensor', 'Fedegari', 'PT100', '', 0, 150, '°C', 100, 135, 0.1, '°C', 'Production', 'Sterile area']];
+/* the template's columns, by header text (machine columns first, so "Model" never takes "Machine model"); works with the older 16-column template too */
+function xlCols(hd) { var used = {}, col = function (re) { for (var i = 0; i < hd.length; i++) if (!used[i] && re.test(String(hd[i] || '').trim().toLowerCase())) { used[i] = 1; return i; } return -1; };
+  var c = { type: col(/^type/), mach: col(/^machine$/), mcode: col(/^machine code/), mman: col(/^machine manuf/), mmodel: col(/^machine model/), msn: col(/^machine serial/), code: col(/^code/), desc: col(/^desc/), man: col(/^manuf/), model: col(/^model/), ser: col(/^serial/), rMin: col(/^range from/), rMax: col(/^range to/), resUnit: col(/^resolution unit/), unit: col(/^unit$/), cMin: col(/^cal.*from/), cMax: col(/^cal.*to/), res: col(/^resolution$/), dept: col(/^dep/), loc: col(/^location/) };
+  return c; }
 /* ---- many codes or certificate numbers at once: paste them (or any Excel) → every one gets last year's certificate in the background ---- */
 var CERTNO_RX = /^\d{1,4}\s*\/?\s*[A-Z]{0,5}\s*-\s*\d{1,5}[A-Z]?\s*-\s*20\d\d$/i;
 function pasteTokens(t) { var seen = {}, out = []; String(t || '').split(/[\n\r\t,;]+|\s{2,}/).forEach(function (x) { x = x.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\s*-\s*/g, '-').replace(/\s*\/\s*/g, '/'); if (!x || x.length > 40 || /^(code|codes|cert|certificate|no\.?|كود)$/i.test(x)) return; var k = x.toUpperCase(); if (seen[k]) return; seen[k] = 1; out.push({ v: x, cert: CERTNO_RX.test(x) }); }); return out; }
@@ -1554,23 +1561,22 @@ function excelSheet(p) {
 function needExcel() { return window.ExcelJS ? Promise.resolve() : loadScript('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'); }
 function xlTemplate(p) { needExcel().then(function () { var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Items', { views: [{ state: 'frozen', ySplit: 1 }] });
   ws.addRow(XL_COLS).eachCell(function (c) { c.font = { bold: true, color: { argb: 'FFFFFFFF' }, name: 'Arial', size: 10 }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF13294B' } }; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
-  var d0 = p.depts[0] || '';
-  [['Unit', '', '', 'TH-05', 'Digital thermometer', 'Testo', '110', '45012', -50, 150, '°C', 0, 100, 0.1, '°C', d0],
-   ['Machine item', 'Autoclave Fedegari', 'AC-01', 'AC-01-PG1', 'Pressure gauge', 'Wika', '', '', 0, 4, 'bar', '', '', 0.05, 'bar', d0],
-   ['Machine item', 'Autoclave Fedegari', 'AC-01', 'AC-01-T1', 'Chamber temperature sensor', 'Fedegari', '', '', 0, 150, '°C', 100, 135, 0.1, '°C', d0]]
+  var d0 = p.depts[0] || '', L = function (i) { return String.fromCharCode(65 + i); };
+  XL_EX.map(function (r) { r = r.slice(); if (d0) r[18] = d0; return r; })
     .forEach(function (r) { ws.addRow(r).eachCell(function (c) { c.font = { name: 'Arial', size: 10, italic: true, color: { argb: 'FF7D8796' } }; }); });
   var list = function (col, vals) { for (var r = 2; r <= 400; r++) ws.getCell(col + r).dataValidation = { type: 'list', allowBlank: true, formulae: ['"' + vals.join(',').replace(/"/g, '') + '"'] }; };
   var nums = function (col) { for (var r = 2; r <= 400; r++) ws.getCell(col + r).dataValidation = { type: 'decimal', operator: 'between', allowBlank: true, formulae: [-1e9, 1e9], showErrorMessage: true, errorTitle: 'Number only', error: 'Type a number (the unit goes in its own column)' }; };
-  list('A', ['Unit', 'Machine item']); list('K', UNITS); list('O', UNITS); if (p.depts.length) list('P', p.depts); ['I', 'J', 'L', 'M', 'N'].forEach(nums);
-  [16, 22, 12, 14, 26, 14, 12, 12, 10, 10, 9, 12, 12, 11, 11, 14].forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
+  list('A', ['Unit', 'Machine item']); list(L(13), UNITS); list(L(17), UNITS); if (p.depts.length) list(L(18), p.depts); [11, 12, 14, 15, 16].forEach(function (i) { nums(L(i)); });
+  /* machine columns in a light blue, so the machine's data and the item's data are easy to tell apart */
+  [1, 2, 3, 4, 5].forEach(function (i) { ws.getRow(1).getCell(i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F5D9A' } }; });
+  [16, 20, 12, 14, 12, 14, 14, 26, 14, 12, 12, 10, 10, 9, 12, 12, 11, 11, 14, 16].forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
   ws.addRow([]); ws.addRow(['(Grey rows are examples – delete them)']).getCell(1).font = { italic: true, color: { argb: 'FFB26F12' } };
   return wb.xlsx.writeBuffer(); }).then(function (buf) { dlBlob(buf, 'Items template - ' + (p.company ? p.company.name : 'project') + '.xlsx'); })
   .catch(function (e) { toast(e.message, true); }); }
 function cellStr(v) { if (v == null) return ''; if (typeof v === 'object') { if (v.richText) return v.richText.map(function (t) { return t.text; }).join(''); if ('result' in v) return String(v.result == null ? '' : v.result); if (v.text) return v.text; } return String(v); }
 function xlImport(p, file) { needExcel().then(function () { return file.arrayBuffer(); }).then(function (buf) { var wb = new ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) {
   var ws = wb.getWorksheet('Items') || wb.worksheets[0], hd = ws.getRow(1).values.map(function (v) { return cellStr(v).trim().toLowerCase(); });
-  var col = function (re) { for (var i = 1; i < hd.length; i++) if (re.test(hd[i] || '')) return i; return -1; };
-  var c = { mach: col(/^machine$/), mcode: col(/machine code/), code: col(/^code/), desc: col(/desc/), man: col(/manuf/), model: col(/model/), ser: col(/serial/), rMin: col(/^range from/), rMax: col(/^range to/), unit: col(/^unit$/), cMin: col(/cal.*from/), cMax: col(/cal.*to/), res: col(/^resolution$/), resUnit: col(/resolution unit/), dept: col(/dep/) };
+  var c = xlCols(hd);
   if (c.code < 0 && c.desc < 0) throw new Error('This is not the items template (no Code / Description column)');
   var get = function (row, k) { return c[k] > 0 ? cellStr(row.getCell(c[k]).value).trim() : ''; }, n = 0, skipped = 0, incomplete = 0, have = {};
   p.items.forEach(function (i) { if (i.code) have[norm(i.code)] = 1; });
@@ -1578,9 +1584,9 @@ function xlImport(p, file) { needExcel().then(function () { return file.arrayBuf
     if (/^(TH-05|AC-01-PG1|AC-01-T1)$/.test(code) && row.getCell(c.code).font && row.getCell(c.code).font.italic) return; /* template examples */
     if (code && have[norm(code)]) { skipped++; return; } if (code) have[norm(code)] = 1;
     var mname = get(row, 'mach'), mid = '';
-    if (mname) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(mname); })[0]; if (!m) { m = { id: uid(), name: mname, code: get(row, 'mcode'), dept: get(row, 'dept') }; p.machines.push(m); } mid = m.id; }
+    if (mname) { var m = p.machines.filter(function (x) { return norm(x.name) === norm(mname); })[0]; if (!m) { m = { id: uid(), name: mname, code: get(row, 'mcode'), dept: get(row, 'dept'), manufacturer: get(row, 'mman'), model: get(row, 'mmodel'), serial: get(row, 'msn') }; p.machines.push(m); } else ['manufacturer:mman', 'model:mmodel', 'serial:msn'].forEach(function (kv) { kv = kv.split(':'); if (!m[kv[0]]) m[kv[0]] = get(row, kv[1]); }); mid = m.id; }
     var it = newItem({ machineId: mid, kind: mid ? 'machine-item' : 'unit', code: code, description: desc, manufacturer: get(row, 'man'), model: get(row, 'model'), serial: get(row, 'ser'),
-      rMin: get(row, 'rMin'), rMax: get(row, 'rMax'), unit: get(row, 'unit'), cMin: get(row, 'cMin'), cMax: get(row, 'cMax'), res: get(row, 'res'), resUnit: get(row, 'resUnit') || get(row, 'unit'), dept: get(row, 'dept') || p.depts[0] || '', src: 'excel' });
+      rMin: get(row, 'rMin'), rMax: get(row, 'rMax'), unit: get(row, 'unit'), cMin: get(row, 'cMin'), cMax: get(row, 'cMax'), res: get(row, 'res'), resUnit: get(row, 'resUnit') || get(row, 'unit'), dept: get(row, 'dept') || p.depts[0] || '', src: 'excel' }); var lc = get(row, 'loc'); if (lc) { it.loc = lc; it.note = lc; }
     if (itemIssues(it).length) incomplete++; p.items.push(it); n++; });
   saveProjects(); queueOld(p); $('#xMsg').innerHTML = '<div class="note okbox">' + n + ' items added' + (skipped ? ' · ' + skipped + ' duplicate codes skipped' : '') + '.</div>' + (incomplete ? '<div class="note amber">' + incomplete + ' of them have missing or wrong data (range, unit or resolution) – they are marked “Missing data”.</div>' : '');
 }).catch(function (e) { var x = $('#xMsg'); if (x) x.innerHTML = '<div class="note warnbox">' + esc(e.message || e) + '</div>'; }); }
@@ -1597,14 +1603,14 @@ function impTable(rows) { var out = [], H = null;
   return out; }
 /* Akhnaton's own Excel template (the same columns as XL_COLS), when it comes with other files */
 function impAkh(rows) { var hi = rows.findIndex(function (r) { var h = r.map(function (c) { return String(c || '').toLowerCase(); }).join('|'); return /range from/.test(h) && /machine code/.test(h); }); if (hi < 0) return null;
-  var h = rows[hi].map(function (c) { return String(c || '').trim().toLowerCase(); }), col = function (re) { return h.findIndex(function (x) { return re.test(x); }); };
-  var c = { mach: col(/^machine$/), mc: col(/machine code/), code: col(/^code/), desc: col(/desc/), man: col(/manuf/), model: col(/model/), sn: col(/serial/), a: col(/^range from/), b: col(/^range to/), un: col(/^unit$/), loc: col(/dep/) }, recs = [], seen = {};
+  var x = xlCols(rows[hi]), c = { mach: x.mach, mc: x.mcode, mman: x.mman, mmodel: x.mmodel, msn: x.msn, code: x.code, desc: x.desc, man: x.man, model: x.model, sn: x.ser, a: x.rMin, b: x.rMax, un: x.unit, ca: x.cMin, cb: x.cMax, res: x.res, ru: x.resUnit, dep: x.dept, loc: x.loc }, recs = [], seen = {};
   var g = function (r, k) { return c[k] >= 0 ? String(r[c[k]] == null ? '' : r[c[k]]).replace(/\s+/g, ' ').trim() : ''; };
   rows.slice(hi + 1).forEach(function (r) { var code = g(r, 'code'), desc = g(r, 'desc'); if (!code && !desc) return;
-    if ({ 'TH-05': 'Digital thermometer', 'AC-01-PG1': 'Pressure gauge', 'AC-01-T1': 'Chamber temperature sensor' }[code] === desc) return; /* the template's own examples */
+    if ({ 'TH-05': 'Digital thermometer', 'AC-01-PG1': 'Pressure gauge', 'AC-01-T1': 'Chamber temperature sensor' }[code] === desc && (g(r, 'mach') === 'Autoclave' || !g(r, 'mach'))) return; /* the template's own examples */
     var a = g(r, 'a'), b = g(r, 'b'), un = g(r, 'un'), mn = g(r, 'mach'), mc = g(r, 'mc').replace(/\s+/g, '');
-    var rec = { name: desc, code: code.replace(/\s+/g, ''), man: g(r, 'man'), model: g(r, 'model'), sn: g(r, 'sn'), range: a !== '' && b !== '' ? '(' + a + ' : ' + b + ') ' + un : '', pts: '', crit: '', loc: g(r, 'loc'), unitHint: un };
-    if (mn || mc) { var key = 'K:' + impKey(mc || mn); if (!seen[key]) { seen[key] = 1; recs.push({ name: mn || mc, code: mc, isMachine: 1, mkey: key, man: '', model: '', sn: '', range: '', loc: '' }); } rec.mkey = key; rec.parent = mc || mn; }
+    var ca = g(r, 'ca'), cb = g(r, 'cb'), lc = g(r, 'loc') || g(r, 'dep');
+    var rec = { name: desc, code: code.replace(/\s+/g, ''), man: g(r, 'man'), model: g(r, 'model'), sn: g(r, 'sn'), range: a !== '' && b !== '' ? '(' + a + ' : ' + b + ') ' + un : '', pts: '', crit: '', loc: lc, unitHint: un, res: g(r, 'res'), resUnit: g(r, 'ru'), crange: ca !== '' && cb !== '' ? '(' + ca + ' : ' + cb + ') ' + un : '' };
+    if (mn || mc) { var key = 'K:' + impKey(mc || mn); if (!seen[key]) { seen[key] = 1; recs.push({ name: mn || mc, code: mc, isMachine: 1, mkey: key, man: g(r, 'mman'), model: g(r, 'mmodel'), sn: g(r, 'msn'), range: '', loc: lc }); } rec.mkey = key; rec.parent = mc || mn; }
     recs.push(rec); });
   return recs.length ? recs : null; }
 /* PDF: text with positions → rows by line, cells by the header's columns */
@@ -1754,6 +1760,10 @@ function impSfxName(code) { var m = String(code || '').match(/\/([A-Z]{1,4})[.\-
 function impRowTable(rows) { var H = null, recs = [], seenM = {}, any = false, g = function (r, k) { return k >= 0 ? String(r[k] == null ? '' : r[k]).replace(/\s*\n\s*/g, ' ').replace(/\s+/g, ' ').trim() : ''; };
   rows.forEach(function (r) { var h = impRowHead(r); if (h) { H = h; any = true; return; } if (!H) return;
     var filled = r.filter(function (c) { return String(c == null ? '' : c).trim(); }).length; if (filled <= 1) return; /* a section title such as "Manufacturing" */
+    /* old receipt letters: a row whose machine / item cells were merged has one cell less – the code column then holds the date ("Mar-25"): put the cells back in their columns */
+    if (H.code > 0 && /^[A-Za-z]{3,9}[-.\s]?\d{2,4}$/.test(g(r, H.code)) && /\d/.test(g(r, H.code - 1)) && !/\s{1}\S+\s\S+\s/.test(g(r, H.code - 1))) { var fc = [H.mc, H.ds, H.it].filter(function (x) { return x >= 0 && x < H.code; }); if (fc.length) { r = r.slice(); r.splice(Math.min.apply(null, fc), 0, ''); } }
+    /* the total line of a letter ("Total Price · Only One Hundred and Ten EGP") is not an item */
+    if (r.some(function (c) { return /^\s*(total\s*price|total|only\b)|\b(EGP|L\.?E\.?|piast(?:er|re)s?)\s*\.?\s*$/i.test(String(c == null ? '' : c)) && !/\d{2,}-\d/.test(String(c)); }) && !r.some(function (c) { return /\d{1,3}\s*\/?\s*[A-Z]{1,5}-\d{2,6}-20\d\d|\d{1,3}-\d{2,5}-20\d\d/.test(String(c == null ? '' : c)); })) return;
     if (H.months && !g(r, H.code)) { var cells = r.map(function (c) { return String(c == null ? '' : c).trim(); }), ri = cells.findIndex(function (c) { return /^ranges?$/i.test(c); }); if (ri >= 0 && H.rg < 0) H.rg = ri; var tt = cells.filter(function (c) { return c && !/^[A-Z][-.)]?\s*$/.test(c) && !/^ranges?$/i.test(c); })[0]; if (tt && tt.length < 60) H.sec = tt.replace(/^[A-Z]\s*[-.)]\s*/, ''); return; }
     var code0 = g(r, H.code), nm = g(r, H.it), ikv = g(r, H.ik), code = code0.replace(/^installed unit s\/?n\s*:?\s*/i, '').replace(/\s*\/\s*/g, '/'), mc = g(r, H.mc), ds = g(r, H.ds), mcc = g(r, H.mcode); if (!nm && !code) return;
     /* rows under a machine leave its cells empty: they belong to the machine above */
@@ -1904,7 +1914,7 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
     var nm = String(r.name || '').replace(/\s+/g, ' ').trim(), rg = impRange(r.range) || impRange((nm.match(/\(([^)]*\d[^)]*)\)/) || [])[0]) || (impPts(r.pts) ? null : impRange(r.pts)), pt = impPts(r.pts), sn = /^n\.?\s?a\.?$|^-+$/i.test(String(r.sn).trim()) ? '' : String(r.sn || '').trim();
     var uh = String(r.unitHint || '').trim(), u = (uh && !/,/.test(uh) ? (uh === '%' ? (/\brh\b|humid/i.test(nm) ? '%RH' : '%') : impUnit(' ' + uh) || (/^[a-zµ°%\/³²]{1,8}$/i.test(uh) && uh.length > 1 ? uh : '')) : '') || (pt && pt.u) || (rg && rg.u) || impUnit((nm.match(/\(([^)]*)\)/) || [''])[0]) || '';
     var it = { ocr: r.ocr ? 1 : 0, noCode: r.noCode ? 1 : 0, code: c, description: nm.replace(/\s*\([^)]*\d[^)]*\)\s*$/, '').trim() || nm, manufacturer: r.man || '', model: r.model || '', serial: sn, unit: u, rMin: rg ? rg.a : '', rMax: rg ? rg.b : '', pts: pt ? pt.pts : null, lim: impLim(r.crit, u), crit: r.crit || '', loc: r.loc || '' };
-    it.prevCert = r.prevCert || ''; if (r.loc) it.loc = r.loc; var crg = r.crange ? impRange(r.crange) : null; if (crg && rg && (+crg.a !== +rg.a || +crg.b !== +rg.b)) { it.cMin = crg.a; it.cMax = crg.b; }
+    it.prevCert = r.prevCert || ''; if (r.loc) it.loc = r.loc; if (r.res && /\d/.test(r.res)) { it.res = String(r.res).trim(); it.resUnit = String(r.resUnit || '').trim(); } var crg = r.crange ? impRange(r.crange) : null; if (crg && rg && (+crg.a !== +rg.a || +crg.b !== +rg.b)) { it.cMin = crg.a; it.cMax = crg.b; }
     if (r.isMachine) { var xk = r.mkey || impKey(c); if (!M[xk]) { M[xk] = { name: nm || c, code: c, man: r.man || '', model: r.model || '', sn: sn, loc: r.loc || '', items: [] }; order.push(xk); } lastM = xk; curM = null; return; }
     if (r.parent) { var rk = r.mkey || impKey(r.parent); if (!M[rk]) { M[rk] = { name: r.parent, code: r.parent, items: [] }; order.push(rk); } if (r.noCode) it.noCode = 1; addIt(M[rk].items, it, rk); return; }
     if (r.noCode && (curM || lastM)) { it.noCode = 1; return addIt(M[curM || lastM].items, it, curM || lastM); }
@@ -2035,7 +2045,7 @@ function oldCertSheet(p, files0) { var st = { busy: 0, files: [], rows: [], off:
 var IMP_KIND = '';
 var SHAPES = [
   { id: 'akh', t: 'Akhnaton Excel template', s: 'The easiest one: one row per item, the machine in its own columns. Read 100%.', f: 'xlsx', best: 1,
-    head: XL_COLS, ex: [['Unit', '', '', 'TH-05', 'Digital thermometer', 'Testo', '110', '45012', -50, 150, '°C', 0, 100, 0.1, '°C', 'QC'], ['Machine item', 'Autoclave', 'AC-01', 'AC-01-PG1', 'Pressure gauge', 'Wika', '', '', 0, 4, 'bar', '', '', 0.05, 'bar', 'Production'], ['Machine item', 'Autoclave', 'AC-01', 'AC-01-T1', 'Chamber temperature sensor', 'Fedegari', '', '', 0, 150, '°C', 100, 135, 0.1, '°C', 'Production']] },
+    head: XL_COLS, ex: XL_EX },
   { id: 'list', t: 'Machines and their items in one list', s: 'PDF, Word or Excel. A machine on its own row, its items under it with codes like AC-01/T1.', f: 'xlsx',
     head: ['Code', 'Description', 'Manufacturer', 'Model', 'Serial No.', 'Range', 'Unit', 'Acceptance criteria', 'Location'],
     ex: [['AC-01', 'Autoclave', 'Fedegari', 'FOB3', '12345', '', '', '', 'Production'], ['AC-01/T1', 'Chamber temperature sensor', '', '', '', '0 - 150', '°C', '± 1 °C', 'Production'], ['AC-01/PG1', 'Jacket pressure gauge', 'Wika', '', '', '0 - 4', 'bar', '± 2% F.S.', 'Production'], ['TH-05', 'Digital thermometer', 'Testo', '110', '45012', '-50 - 150', '°C', '± 0.5 °C', 'QC']] },
@@ -2108,7 +2118,7 @@ function attachSheet(p, files0) { var st = { busy: 0, res: null, err: '', file: 
         $$('[data-imall]').forEach(function (b) { b.onclick = function () { var mi = b.dataset.imall, ks = $$('[data-imk^="' + mi + ':"]').filter(function (c) { return !c.disabled; }), on = ks.some(function (c) { return !c.checked; }); ks.forEach(function (c) { c.checked = on; if (on) delete st.off[c.dataset.imk]; else st.off[c.dataset.imk] = 1; }); var k = count(), g = $('#imGo'); if (g) { g.textContent = 'Add ' + k + ' item' + (k === 1 ? '' : 's'); g.disabled = !k; } }; });
         var g = $('#imGo'); if (g) g.onclick = function () { g.disabled = true; g.innerHTML = '<span class="spin"></span> Adding…'; var fn0 = st.file.name; closeSheet(); toast('Adding the items…'); setTimeout(function () { var n2 = impAdd(p, st.res, st.off, have); toast(n2 + ' items added from ' + fn0 + ' – last year\'s certificates are looked up in the background'); render(); }, 40); }; } }; }); };
   renderSheet(); if (files0 && files0.length) setTimeout(function () { goMany(files0); }, 50); }
-function impAdd(p, R, off, have) { var n = 0, mk = function (it, mid) { var x = newItem({ machineId: mid || '', kind: mid ? 'machine-item' : 'unit', code: it.code, description: it.description, manufacturer: it.manufacturer, model: it.model, serial: it.serial, unit: it.unit, rMin: it.rMin, rMax: it.rMax, resUnit: it.unit, dept: (p.depts || [])[0] || '', src: 'list' }); if (it.prevCert) x.prevCert = it.prevCert; if (it.loc) { x.note = it.loc; x.loc = it.loc; } if (it.cMin !== undefined && it.cMin !== '' && it.cMax !== undefined && it.cMax !== '') { x.cMin = it.cMin; x.cMax = it.cMax; }
+function impAdd(p, R, off, have) { var n = 0, mk = function (it, mid) { var x = newItem({ machineId: mid || '', kind: mid ? 'machine-item' : 'unit', code: it.code, description: it.description, manufacturer: it.manufacturer, model: it.model, serial: it.serial, unit: it.unit, rMin: it.rMin, rMax: it.rMax, resUnit: it.unit, dept: (p.depts || [])[0] || '', src: 'list' }); if (it.res) { x.res = it.res; x.resUnit = impUnit(' ' + it.resUnit) || it.resUnit || it.unit; } if (it.prevCert) x.prevCert = it.prevCert; if (it.loc) { x.note = it.loc; x.loc = it.loc; } if (it.cMin !== undefined && it.cMin !== '' && it.cMax !== undefined && it.cMax !== '') { x.cMin = it.cMin; x.cMax = it.cMax; }
     if (it.lim) { x.lim = it.lim; x.limFrom = 'customer'; } if (it.pts && it.pts.length) x.reqPts = it.pts.slice(); if (it.crit) x.reqCrit = it.crit;
     if (!x.code && !x.prevCert) { startManual(x); if (x.lim) x.old.fields.limits = limText(x); } p.items.push(x); n++; return x; };
   p.machines = p.machines || [];
@@ -2543,8 +2553,14 @@ function poGen(text) { var t = String(text || '').normalize('NFKC').replace(/\s*
     s = s.replace(/^((amount|value|price|total|description|status|qty|uom|unit|tax|n)\b\.?\)?:?\s*)+/i, '').replace(/^(?:[\d.,]+\s+)+/, '').replace(/^[A-Z]{2,}(?:-[A-Z0-9]+){2,}\s+|^[A-Z][a-z]+-[A-Z]{2,4}\s+|^[A-Z]{1,3}\d[\w.]*\s+/, '').replace(/(\s+[\d.,]+)+$/, '');
     var w = s.split(' '); while (w.length && PO_UOM.test(w[w.length - 1])) w.pop(); return w.join(' ').trim(); };
   var out = []; pick.forEach(function (k, i) { var from = i ? tk[N[pick[i - 1].c].i].b : 0, to = tk[N[k.a].i].a, d = clean(t.slice(Math.max(from, to - 400), to));
-    if (k.rev || d.replace(/[^A-Za-z؀-ۿ]/g, '').length < 3) { var nx = i + 1 < pick.length ? tk[N[pick[i + 1].a].i].a : t.length, aft = t.slice(tk[N[k.c].i].b, Math.min(nx, tk[N[k.c].i].b + 160)).split(/Ship\s*To|Deliver|Total|Item\s+\d|Line\s+\d/i)[0]; d = clean(aft); }
-    out.push({ no: String(i + 1), desc: d, qty: k.q, uom: '', price: k.pr, cur: (t.match(/\b(EGP|USD|EUR)\b/) || [])[1] || 'EGP', total: k.tot, vat: /\bvat\b|\btax\b|ضريبة/i.test(d) }); });
+    var wk = 0; if (k.rev || d.replace(/[^A-Za-z؀-ۿ]/g, '').length < 3) { wk = 1; var nx = i + 1 < pick.length ? tk[N[pick[i + 1].a].i].a : t.length, aft = t.slice(tk[N[k.c].i].b, Math.min(nx, tk[N[k.c].i].b + 160)).split(/Ship\s*To|Deliver|Total|Item\s+\d|Line\s+\d/i)[0]; d = clean(aft); }
+    if (/^\[\d+\]|\bSUB(TOTAL)?\b/i.test(d)) { d = d.replace(/^\[\d+\]\s*|\bSUB(TOTAL)?\b.*$/gi, '').trim(); wk = 1; }
+    out.push({ no: String(i + 1), desc: d, qty: k.q, uom: '', price: k.pr, cur: (t.match(/\b(EGP|USD|EUR)\b/) || [])[1] || 'EGP', total: k.tot, vat: /\bvat\b|\btax\b|ضريبة/i.test(d), _w: wk }); });
+  /* a PO whose descriptions are printed apart, under a "DESCRIPTION" heading after the table (DSM 03/2024): the rows that had no text of their own take them in order – instead of borrowing the next row's text */
+  try { var blk = String(text).match(/\bDESCRIPTION\b[ \t]{2,}([\s\S]+)$/); if (blk) { var dl = blk[1].split(/\s{2,}/).map(function (x) { return x.replace(/\s*DocuSign[\s\S]*$/i, '').trim(); }).filter(function (x) { return /[A-Za-z]{3}/.test(x) && !/^(envelope\s*id|approved\s*by|payment|terms)/i.test(x); });
+      out.forEach(function (l, i) { if (!l._w && i + 1 < out.length && out[i + 1].desc && l.desc === out[i + 1].desc) l._w = 1; }); var W = out.filter(function (l) { return l._w && !l.vat; });
+      if (dl.length && W.length && dl.length >= W.length && dl.length <= W.length + 1) W.forEach(function (l, i) { l.desc = dl[i]; }); } } catch (e) {}
+  out.forEach(function (l) { delete l._w; });
   return out; }
 var PO_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 function poDateNorm(s, us) { var m, p2 = function (n) { return ('0' + n).slice(-2); }, y4 = function (y) { y = +y; return y < 100 ? 2000 + y : y; };
