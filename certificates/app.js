@@ -794,7 +794,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v490';
+var APP_V = 'v491';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -7812,14 +7812,33 @@ var PSYN = [[/\bgauges?\b|manometer|transmitter|vacuum/g, ' pressure '], [/\bclo
 var PSTOP = /^(calibration|calibrated|of|for|the|and|with|unit|item|items|including|per|test|sensor|sensors|meter|indicator|device|m\/c|machine)$/;
 function pToks(x) { x = ' ' + String(x || '').toLowerCase() + ' '; PSYN.forEach(function (r) { x = x.replace(r[0], r[1]); }); return x.split(/[^a-z0-9]+/).filter(function (w) { return w.length > 1 && !PSTOP.test(w) && !/^\d+$/.test(w); }); }
 /* price list / contract appendix: "1 Calibration of Temperature Sensors 240 2 Calibration of Pressure Sensors 200 …" (ids restart in every Part) */
-function priceListRows(t) { t = ' ' + String(t || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').replace(/Page\s+\d+\s+of\s+\d+/gi, ' ') + ' '; var rows = [], pos = 0, k = 1, sec = 0;
+function priceListRows(t) { var t0 = String(t || ''); t = ' ' + String(t || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').replace(/Page\s+\d+\s+of\s+\d+/gi, ' ') + ' '; var rows = [], pos = 0, k = 1, sec = 0;
   var at = function (n, from) { var rx = new RegExp('\\s' + n + '\\s+(?=[A-Za-z(])', 'g'); rx.lastIndex = from; var m = rx.exec(t); return m ? { i: m.index, e: m.index + m[0].length } : null; };
   var cur = at(1, 0); while (cur) { var nx = at(k + 1, cur.e), rs = at(1, cur.e); if (rs && (!nx || rs.i < nx.i) && k > 1) { nx = null; } var end = nx ? nx.i : (rs ? rs.i : Math.min(t.length, cur.e + 260));
+      /* the "1" of a title ("Annex 1", "ملحق رقم 1") caught before the table's header: start again at the "1" that comes after the header */
+      if (k === 1) { var hs = t.slice(cur.e, end), hm = hs.match(/(unit\s*price|price\s*(in\s*)?egp|items?\s*to\s*be\s*calibrated|s\/n\b|\bqty\b|description)/i); if (hm) { var rx1 = /\s1\s+(?=[A-Za-z(])/g, m1, lastI = -1; rx1.lastIndex = hm.index; while ((m1 = rx1.exec(hs))) lastI = m1.index; if (lastI >= 0) { var ni = cur.e + lastI; cur = { i: ni, e: ni + hs.slice(lastI).match(/^\s1\s+/)[0].length }; nx = at(2, cur.e); rs = at(1, cur.e); if (rs && nx && rs.i < nx.i) nx = null; end = nx ? nx.i : (rs ? rs.i : Math.min(t.length, cur.e + 260)); } } }
       var seg = t.slice(cur.e, end).split(/(?:^|\s)(?=Part\s+[IVX]+\b|All\s+prices|Total\b|المركز|التليفون|ملاحظات|مالحظات)/i)[0].replace(/^\s*Part\s+[IVX]+\b.*$/i, ''), pm = seg.match(/(\d{1,3}(?:,\d{3})+|\d{2,6})(?!.*\d{2,})/), txt = seg.replace(/[؀-ۿ].*$/, '').replace(/(\d{1,3}(?:,\d{3})+|\d{2,6})\s*$/, '').trim();
       if (pm && txt.length > 3) rows.push({ id: k, sec: sec, text: txt.replace(/\s*(Part\s+[IVX]+\.?.*)$/i, ''), price: pm[1].replace(/,/g, '') });
       if (k === 1 && txt.length <= 3) { cur = at(1, cur.e); continue; }
       if (nx) { cur = nx; k++; } else if (rs) { cur = rs; k = 1; sec++; } else cur = null; if (rows.length > 300) break; }
-  return rows.filter(function (r) { return +r.price >= 20 && !/^page\b/i.test(r.text); }); }
+  rows = rows.filter(function (r) { return +r.price >= 20 && !/^page\b/i.test(r.text); });
+  if (rows.length < 3 && /[؀-ۿ]/.test(t0)) { var ar = plArabic(t0); if (ar.length > rows.length) rows = ar; }
+  return rows; }
+/* an Arabic price list ("ملحق رقم 1 · توصيف البند · السعر"): the table reads right to left – price | item | number – and the item is put in English too, so the certificates find their line */
+var PL_AR = [[/بروتوكول/, 'Protocol per room –', ''], [/دراس[ةا]ت?\s*حرارية/, 'Thermal mapping data logger per day', ''], [/\bLAF\b/i, 'LAF test (air velocity, DOP, particle count, differential pressure)', ''],
+  [/حرار[ةه]\s*و\s*رطوب/, 'Temperature and humidity sensor', 'Humidity'], [/فرق\s*ال?ضغط/, 'Differential pressure gauge', 'Pressure gauge'], [/ضغو?ط/, 'Pressure gauge', 'Pressure gauge'], [/سرع[ةه]\s*(ال)?دوران/, 'Rotational speed RPM', 'Speed (RPM)'],
+  [/سرع[ةه]\s*الهواء/, 'Air velocity', 'Air velocity'], [/[إا]تجاه\s*الهواء|air\s*pattern/i, 'Air flow pattern per room', ''], [/تسريب|\bDOP\b/i, 'DOP filter leak test per filter', ''], [/نظاف[ةه]\s*الجز|particle/i, 'Particle count per room', ''], [/recovery/i, 'Recovery test per room', ''], [/air\s*change/i, 'Air change per room', ''],
+  [/صنج|single\s*weight/i, 'Single weight', 'Weights'], [/مواز[يى]ن|موزاين|ميزان/, 'Weight balance', 'Balance'], [/تايمر|توقيت/, 'Timer', 'Timer'], [/الأس\s*الهيدروجيني|الاس\s*الهيدروجيني|\bpH\b/i, 'pH sensor' , 'pH meter'], [/conductivity|توصيل/i, 'Conductivity sensor', 'Conductivity'],
+  [/المقاوم[ةه]\s*(ال)?كهرب|كهرب/, 'Electrical resistance', 'Electrical'], [/الأحجام|احجام|سحب\s*العينات/, 'Volume of air sampler', ''], [/حرار[ةه]|الحرار/, 'Temperature sensor', 'Temperature']];
+function plArabic(t) { var cells = String(t || '').split(/\s*\|\s*|\n/).map(function (c) { return c.replace(/[\u200e\u200f\u202a-\u202e]/g, '').trim(); }).filter(Boolean), rows = [], sec = 0, last = 0;
+  for (var i = 0; i + 2 < cells.length; i++) { var pr = cells[i], ds = cells[i + 1], no = cells[i + 2];
+    if (!/^\d{1,3}(,\d{3})*$|^\d{2,6}$/.test(pr) || !/^\d{1,3}$/.test(no) || !/[؀-ۿA-Za-z]/.test(ds) || /^\d/.test(ds)) continue;
+    var n = +no; if (n !== last + 1) { if (n === 1 && last) sec++; else if (n !== 1) continue; }
+    var en = '', kind = '', pre = ''; PL_AR.some(function (m) { if (!m[0].test(ds)) return false; if (/^Protocol/.test(m[1])) { pre = m[1] + ' '; return false; } en = m[1]; kind = pre ? '' : m[2]; return true; });
+    if (/^Thermal mapping/.test(en)) { var dd = ds.match(/(\d+)\s*(أيام|ايام|يوم)/), hh = /24\s*ساع|يوم\s*واحد/.test(ds); en = en.replace(' per day', '') + (dd ? ' – ' + dd[1] + ' days' : hh ? ' – 1 day' : /سيار/.test(ds) ? ' – refrigerated truck' : ''); }
+    if (/ميزان|مواز|موزاين/.test(ds)) { if (/أقل\s*من\s*30|حت[يى]\s*30/.test(ds)) en += ' < 30 kg'; else if (/أكثر|يساوي/.test(ds)) en += ' > 30 kg'; }
+    var r = { id: n, sec: sec, text: ((pre + (en || '')).trim() || ds) + (en || pre ? ' – ' + ds : ''), price: pr.replace(/,/g, '') }; if (kind) r.kind = kind; rows.push(r); last = n; i += 2; }
+  return rows.filter(function (r) { return +r.price >= 20; }); }
 function rowFor(it, rows) { var kd = itKind(it), d = (it.description || '') + ' ' + ((it.old && it.old.fields && it.old.fields.description) || ''), ld = d.toLowerCase(), want = pToks(d + ' ' + kd), best = null;
   var rg = rngNums((it.old && it.old.fields && it.old.fields.range) || it.range || '') || {}; if (rg.hi == null && it.rMax != null && it.rMax !== '' && !isNaN(+it.rMax)) rg = { hi: +it.rMax, u: it.unit || '' }; var cap = rg.hi == null ? null : +rg.hi, cu = String(rg.u || '').toLowerCase(); if (cap != null) cap = /^kg/.test(cu) ? cap : /^mg/.test(cu) ? cap / 1e6 : /^g/.test(cu) ? cap / 1000 : null;
   rows.forEach(function (r) { var rt = r.text.toLowerCase(), rk = pToks(r.text), sc = 0, hits = 0, km = kd && (r.kind ? KIND2PO[kd] === r.kind : kindOf(r.text, '') === kd); if (r.kind && kd && KIND2PO[kd] && KIND2PO[kd] !== r.kind) return;
