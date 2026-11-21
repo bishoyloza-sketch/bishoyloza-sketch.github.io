@@ -816,7 +816,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v500';
+var APP_V = 'v501';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -2028,8 +2028,12 @@ function photosOr(p, files, fn) { Promise.all(files.map(function (f) { return fi
   if (oth.length) { attachSheet(p, oth.concat(pic)); return; } if (pic.length) fn(pic); }); }
 function asPhotos(files) { return Promise.all(files.map(function (f) { return fileKind(f).then(function (k) { return k === 'pdf' ? pdfAsImages(f, 12) : k === 'image' ? [f] : []; }); })).then(function (a) { return [].concat.apply([], a); }); }
 /* the text of any file: pages → lines, table cells joined with " | " */
+/* how much of a text is real words and numbers (0–1): a broken font map gives "e[J(66333N5 +/B+1B1C10" */
+function txtQuality(t) { var toks = String(t || '').match(/\S+/g) || [], tot = 0, good = 0; toks.forEach(function (x) { tot += x.length; if (/^(?:[A-Za-z][a-z]{2,}|[A-Z]{2,}|[\u0600-\u06FF\uFB50-\uFEFF]{3,}|[\d.,\/:%-]+)[.,:;)]?$/.test(x)) good += x.length; }); return tot ? good / tot : 0; }
 function anyPages(file) { return fileKind(file).then(function (k) { return file.arrayBuffer().then(function (buf) {
-  if (k === 'pdf') return LOC.pdf(buf).then(function (pg) { var n = pg.reduce(function (a, x) { return a + (x || []).join('').replace(/\s/g, '').length; }, 0); if (n > 40) return pg; return pdfAsImages(file, 15).then(function (ims) { return ims.reduce(function (pr, im) { return pr.then(function (acc) { return imageLines(im).then(function (ls) { acc.push(ls); return acc; }); }); }, Promise.resolve([])); }); });
+  if (k === 'pdf') return LOC.pdf(buf).then(function (pg) { var n = pg.reduce(function (a, x) { return a + (x || []).join('').replace(/\s/g, '').length; }, 0), q = txtQuality(pg.map(function (x) { return (x || []).join(' '); }).join(' ')); if (n > 40 && q >= 0.2) return pg;
+    /* no text, or a text layer that is only garbage (a scan with a bad font map – Migentra, Minapharm): read the pages as pictures */
+    return pdfAsImages(file, 15).then(function (ims) { return ims.reduce(function (pr, im) { return pr.then(function (acc) { return imageLines(im).then(function (ls) { acc.push(ls); return acc; }); }); }, Promise.resolve([])); }).then(function (oc) { var m = oc.reduce(function (a, x) { return a + (x || []).join('').replace(/\s/g, '').length; }, 0); return n > 40 && m < n * 0.3 ? pg : oc; }, function (e) { if (n > 40) return pg; throw e; }); });
   if (k === 'docx') return LOC.docx(buf); if (k === 'doc') return LOC.doc(buf).catch(function () { return LOC.xls(buf); }); if (k === 'ole') return LOC.doc(buf).catch(function () { return LOC.xls(buf); });
   var tbl = function (rows) { return rows.map(function (r) { var c = (r || []).map(function (c) { return c == null ? '' : String(c).replace(/\s+/g, ' ').trim(); }); while (c.length && !c[c.length - 1]) c.pop(); return c.join(' | '); }).filter(function (l) { return /[^|\s]/.test(l); }); };
   if (k === 'xls' || k === 'ole' && !/WordDocument/.test(String(LOC.cfb(buf).names))) { try { return LOC.xlsRows(buf).map(tbl); } catch (e) { return LOC.xls(buf); } }
@@ -2508,6 +2512,8 @@ function parseResults(lines) { /* rows of numbers after the results header → p
   var start = lines.findIndex(function (l) { return /^\s*calibration\s*results?\s*$/i.test(l); }); if (start < 0) start = lines.findIndex(function (l) { return /^\s*(\d+\s*-\s*)?calibration\s*results?\b/i.test(l); }); if (start < 0) start = lines.findIndex(function (l) { return /result|reading|deviation|standard|nominal|set ?point|load/i.test(l) && !/data of item|accepted\s*limit|acceptance\s*limit/i.test(l); }); if (start < 0) return { points: [], dirs: 1 };
   var head = lines.slice(start, start + 4).join(' '), dirs = /ascend|descend|\bup\b.*\bdown\b|increas.*decreas|↑.*↓/i.test(head) ? 2 : 1, pts = [];
   /* "Reference | U.U.T. | Deviation" with no point column (pipettes, dispensers…): the point is the U.U.T. value */
+  var prsU = /\(\s*(m?bar|k?pa|psi|[”"]?\s*h2o|inh2o|in\.?\s*h2o|kg\s*\/\s*cm|mm\s*hg|torr)\b/i.test(head), prsHead = /reference/i.test(head) && !/\bpoint\b|nominal|set\s*point|setting/i.test(head) && /\(\s*(m?bar|k?pa|psi|[”"]?\s*h2o|inh2o|in\.?\s*h2o|kg\s*\/\s*cm|mm\s*hg|torr)\b/i.test(head) && head.search(/reference/i) < head.search(/gauge|indicat|u\.?\s*u\.?\s*t|instrument|meter\s*reading/i);
+  var pairSeen = 0, pairL = dirs === 2 && !/\bpoint\b|nominal|set\s*point/i.test(head) && /reference/i.test(head) && head.search(/reference/i) < head.search(/gauge|indicat|u\.?\s*u\.?\s*t|instrument|sensor|transmit|reading\s*\(.*reading/i);
   var refFirst = dirs === 1 && /\(\s*[µu]l\s*\)|\(\s*ml\s*\)/i.test(head) && /reference|standard|average/i.test(head) && /u\.?\s*u\.?\s*t|indicat|nominal\s*volume|gauge\s*reading/i.test(head) && !/\bpoint\b|set\s*point|nominal\s*value|\bload\b/i.test(head) && head.search(/reference|standard|average/i) < head.search(/u\.?\s*u\.?\s*t|indicat|nominal\s*volume|gauge\s*reading/i);
   for (var i = start + 1; i < lines.length; i++) { var l = lines[i]; if (/not be duplicated|remarks|calibrated by|repeatab|eccentric|uncertainty|page \d|standard\(?s?\)?\s*utili[sz]ed|^\s*item\s*no/i.test(l)) break;
     /* timers / stopwatches: times written h:m:s ("0:10:00.25", "00:00:05.20", even "0:0:5.00.10" or "0.05.00.00") become numbers in the unit of the
@@ -2539,12 +2545,20 @@ function parseResults(lines) { /* rows of numbers after the results header → p
     /* a "No." column first (1, 2, 3 …) is the row number, not the point */
     if (v.length >= 3 && /(^|[\s|])no\.?([\s|]|$)/i.test(head) && +v[0] === pts.length + 1 && String(v[0]).indexOf('.') < 0) v.shift();
     var pt = { point: v[0], ref: v[0], reading: v[1] || '', deviation: v[2] || '', reading2: dirs === 2 ? (v[3] || '') : '', deviation2: dirs === 2 ? (v[4] || '') : '', limit: lim };
-    if (dirs === 1 && v.length >= 4) { pt.ref = v[1]; pt.reading = v[2]; pt.deviation = v[3]; } /* point | standard | UUT | deviation */
+    /* the same table with its Up / Down header row merged away (Jamjoom 65-084: "-0.900 | -0.900 | -0.9 | -0.9 | 0 | ±0.4") – two references, the gauge twice, then the deviation(s) */
+    var near = function (a, b) { var e = Math.pow(10, -Math.max(decOf(String(b)), 1)) / 2 + 1e-9; return Math.abs(a - +b) <= Math.max(e, Math.abs(+b) * 0.02); };
+    if (dirs === 1 && v.length >= 5 && prsU && !/\bpoint\b|nominal|set\s*point/i.test(head) && +v[2] === +v[3] && near(+v[2] - +v[0], v[4]) && (v.length < 6 || near(+v[3] - +v[1], v[5]) || !NUM.test(v[5]))) { pt.point = v[2]; pt.ref = v[0]; pt.ref2 = v[1]; pt.reading = v[2]; pt.reading2 = v[3]; pt.deviation = v[4]; pt.deviation2 = v.length >= 6 && near(+v[3] - +v[1], v[5]) ? v[5] : (+v[1] === +v[0] ? v[4] : String(+(+v[3] - +v[1]).toFixed(Math.max(decOf(String(v[1])), decOf(String(v[4])))))); pt.fxL = 1; pairSeen = 1; }
+    else if (dirs === 1 && v.length >= 4) { pt.ref = v[1]; pt.reading = v[2]; pt.deviation = v[3]; } /* point | standard | UUT | deviation */
+    /* pressure "Reference Reading | Gauge / Indicator Reading | Deviation": the gauge is set on the point (3), the reference is what was read (3.011) */
+    else if (dirs === 1 && v.length === 3 && prsHead && near(+v[1] - +v[0], v[2])) { /* the point is the round one: a gauge set on 3 read 3.011 on the reference; a sensor read 20.2 with the calibrator set on 20.0 */ var rnd = function (x) { var d0 = String(x).split('.')[1] || ''; return d0.replace(/0+$/, '').length; }; pt.point = rnd(v[0]) < rnd(v[1]) ? v[0] : v[1]; pt.ref = v[0]; pt.reading = v[1]; pt.deviation = v[2]; }
+    /* our pressure certificates: Reference Reading (Up | Down) · Gauge / Indicator Reading (Up | Down) · Deviation (Up | Down) – the gauge is set on the point, the reference is read twice */
+    else if (dirs === 2 && v.length >= 6 && (pairL || (prsU && Math.abs((+v[2] - +v[0]) - +v[4]) <= Math.max(1e-9, Math.abs(+v[4]) * 0.02 + 1e-6) && Math.abs((+v[3] - +v[1]) - +v[5]) <= Math.max(1e-9, Math.abs(+v[5]) * 0.02 + 1e-6) && !/\bpoint\b|nominal|set\s*point/i.test(head)))) { pt.point = v[2]; pt.ref = v[0]; pt.ref2 = v[1]; pt.reading = v[2]; pt.reading2 = v[3]; pt.deviation = v[4]; pt.deviation2 = v[5]; pt.fxL = 1; }
     else if (refFirst && v.length >= 2) { var rf = parseFloat(v[0]), uu = parseFloat(v[1]); pt.point = v[1]; pt.ref = v[0]; pt.reading = v[1]; pt.deviation = v[2] || '';
       /* a typing slip on last year's certificate (10.3 | 100): the point is set from the reference and the row is flagged */
       if (rf > 0 && uu > 0 && (uu / rf > 3 || rf / uu > 3)) { var k = Math.round(Math.log10(rf / uu)), fixd = +(uu * Math.pow(10, k)).toPrecision(6); pt.point = String(fixd); pt.reading = String(fixd); pt.typo = v[1]; } }
     if (hadT && dirs === 1 && pt.reading !== '' && isFinite(+pt.reading)) pt.point = pt.reading; /* a timer row: the point is the timer's own value (5 min), the reference keeps its seconds */
     pts.push(pt); }
+  if (pairSeen && dirs === 1 && pts.filter(function (q) { return q.fxL; }).length * 2 >= pts.length) dirs = 2;
   return { points: pts, dirs: dirs }; }
 /* ---- weight balances: repeatability + eccentricity tables (page 2 of the certificate) ---- */
 function parseBal(text) { var t = String(text || '').replace(/\|/g, ' ').replace(/\s+/g, ' ').replace(/(\d)\.\s+(\d)/g, '$1.$2'), out = null, num = function (x) { return parseFloat(x); };
@@ -2688,7 +2702,7 @@ function poNum(s) { var v = parseFloat(String(s == null ? '' : s).replace(/,/g, 
 function poFmt(v) { return v == null ? '' : Number(v).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
 /* the item table of a PO PDF: "1  Description …  2.0  each  5,000.00  EGP  10,000.00" */
 function poParse(text) { var t = String(text || '').replace(/\s*\|\s*/g, ' ').replace(/[ \s]+/g, ' '), a = t.search(/\bLine\b.{0,80}Description.{0,200}?(Measure|Total)/i);
-  if (a >= 0) t = t.slice(a); var z = t.search(/\bARTICLE\s+1\b|Updated\s*date|Terms\s*and\s*Conditions/i); if (z > 0) t = t.slice(0, z);
+  if (a >= 0) t = t.slice(a); var zr = /\bARTICLE\s+1\b|Updated\s*date|Terms\s*and\s*Conditions/gi, zm, z = -1; while ((zm = zr.exec(t))) { if (/below\s*$|the\s*$/i.test(t.slice(Math.max(0, zm.index - 12), zm.index))) continue; z = zm.index; break; } if (z > 0) t = t.slice(0, z); /* "* THE BELOW TERMS AND CONDITIONS APPLY" sits above Hikma's items – it does not end them */
   t = t.replace(/-?\s*Need\s*By\s*Date\s*:?\s*\d{1,2}\/\d{1,2}\/\d{2,4}/gi, ' ').replace(/^.*?Total\s+(?=\d{1,3}\s+\S)/i, ' ');
   var rx = /(?:^|\s)(\d{1,3})\s+(\S.*?)\s+(\d+(?:\.\d+)?)\s+(each|ea|pcs?|pc|units?|lot|ls|job|set|nos?\.?|visit|days?|hours?|service)\s+([\d,]+(?:\.\d+)?)\s+([A-Z]{3})\s+([\d,]+(?:\.\d+)?)/gi, m, out = [];
   var ends = [], starts = []; while ((m = rx.exec(t))) { var d = m[2].trim(); starts.push(m.index); ends.push(rx.lastIndex); out.push({ no: m[1], desc: d, qty: poNum(m[3]), uom: m[4], price: poNum(m[5]), cur: m[6], total: poNum(m[7]), vat: /\bvat\b|\btax\b|ضريبة/i.test(d) }); }
@@ -2741,8 +2755,8 @@ function poVals(s, eu) { s = String(s).replace(/^[^\d.,]+|[^\d]+$/g, ''); if (!s
   return o.filter(function (v) { return v != null; }); }
 function poDec(s) { var m = String(s).match(/[.,](\d+)$/); return m && (m[1].length === 2 || m[1].length >= 4) && !/[.,]\d{3}$/.test(s) ? 1 : 0; }
 function poDateIn(s) { return /^\d{1,4}[./-]\d{1,2}[./-]\d{1,4},?$|^\d{1,2}[./-][A-Za-z]{3}[./-]\d{2,4}$|^\d{1,2}:\d{2}/.test(s); }
-function poGen(text) { var t = String(text || '').normalize('NFKC').replace(/\s*\|\s*/g, ' ');
-  var z = t.search(/Terms\s*and\s*Conditions|\bARTICLE\s+1\b|Condition\s*of\s*Purchase/i); if (z > 200) t = t.slice(0, z);
+function poGen(text, noCut) { var t = String(text || '').normalize('NFKC').replace(/\s*\|\s*/g, ' ');
+  var zr = /Terms\s*and\s*Conditions|\bARTICLE\s+1\b|Condition\s*of\s*Purchase/gi, zm, z = -1; while ((zm = zr.exec(t))) { if (zm.index <= 200 || /below\s*$|the\s*$/i.test(t.slice(Math.max(0, zm.index - 12), zm.index))) continue; z = zm.index; break; } if (z > 200 && !noCut) t = t.slice(0, z);
   var eu = (t.match(/\d\.\d{3},\d{2}\b|(^|\s)\d+,\d{2}(?=\s|$)/g) || []).length > (t.match(/\d,\d{3}\.\d{2}\b|(^|\s)\d+\.\d{2}(?=\s|$)/g) || []).length;
   var tk = [], rx = /\S+/g, m; while ((m = rx.exec(t))) tk.push({ s: m[0], a: m.index, b: rx.lastIndex });
   var N = []; tk.forEach(function (x, i) { var s = x.s; if (/%/.test(s) || poDateIn(s) || /[A-Za-z؀-ۿ]/.test(s) || /^[+(]/.test(s) || /\d\/\d/.test(s)) return; var v = poVals(s, eu); if (v.length) N.push({ i: i, v: v, s: s }); });
@@ -2766,7 +2780,7 @@ function poGen(text) { var t = String(text || '').normalize('NFKC').replace(/\s*
   var clean = function (s) { s = s.replace(/\(EGP\)|\(USD\)|\(EUR\)/g, ' ').replace(/-?\s*Need\s*By\s*Date\s*:?/gi, ' ').replace(/(\s+(each|ea|pcs?|pc|piece|units?|unt|u|lot|au))+\s*$/i, ''); var last = 0, h; HEAD.lastIndex = 0; while ((h = HEAD.exec(s))) if (s.slice(HEAD.lastIndex).replace(/[^A-Za-z؀-ۿ]/g, '').length >= 3) last = HEAD.lastIndex; var ar = /(الاجمال[ىي]|الضريبة|الكمية)/g; while ((h = ar.exec(s))) if (ar.lastIndex > last) last = ar.lastIndex; if (last) s = s.slice(last);
     s = s.replace(/[_*]{3,}/g, ' ').replace(/\b\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\b|\b\d{1,2}-[A-Za-z]{3}-\d{2,4}\b/g, ' ').replace(/-?\s*Need\s*By\s*Date\s*:?/gi, ' ').replace(/\b(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),?\s+\w+\s+\d{1,2},?\s+\d{4}\s*(EET)?/gi, ' ')
       .replace(/\b(EGP|USD|EUR|N)\b/g, ' ').replace(/\s+/g, ' ').trim();
-    s = s.replace(/^(?:(?:Item|Line|No\.?)\s+)?(?:[\d.,]+\s+)+/i, '').replace(/^[A-Z0-9]{2,}[-\d.]*\d\s+(?=[A-Za-z])/, function (x) { return /^\d{5,}|^[A-Z]{2,}\d|^[A-Z]+-[A-Z]+-/.test(x) ? '' : x; });
+    s = s.replace(/^.{0,45}?\b0{1,3}\d0\s+(?=[A-Za-z])/, '').replace(/^(?:(?:Item|Line|No\.?)\s+)?(?:[\d.,]+%?\s+|-\s+)+/i, '').replace(/^[A-Z0-9]{2,}[-\d.]*\d\s+(?=[A-Za-z])/, function (x) { return /^\d{5,}|^[A-Z]{2,}\d|^[A-Z]+-[A-Z]+-/.test(x) ? '' : x; });
     s = s.replace(/^((amount|value|price|total|description|status|qty|uom|unit|tax|n)\b\.?\)?:?\s*)+/i, '').replace(/^(?:[\d.,]+\s+)+/, '').replace(/^[A-Z]{2,}(?:-[A-Z0-9]+){2,}\s+|^[A-Z][a-z]+-[A-Z]{2,4}\s+|^[A-Z]{1,3}\d[\w.]*\s+/, '').replace(/(\s+[\d.,]+)+$/, '');
     var w = s.split(' '); while (w.length && PO_UOM.test(w[w.length - 1])) w.pop(); return w.join(' ').trim(); };
   var out = []; pick.forEach(function (k, i) { var from = i ? tk[N[pick[i - 1].c].i].b : 0, to = tk[N[k.a].i].a, d = clean(t.slice(Math.max(from, to - 400), to));
@@ -2778,31 +2792,38 @@ function poGen(text) { var t = String(text || '').normalize('NFKC').replace(/\s*
       out.forEach(function (l, i) { if (!l._w && i + 1 < out.length && out[i + 1].desc && l.desc === out[i + 1].desc) l._w = 1; }); var W = out.filter(function (l) { return l._w && !l.vat; });
       if (dl.length && W.length && dl.length >= W.length && dl.length <= W.length + 1) W.forEach(function (l, i) { l.desc = dl[i]; }); } } catch (e) {}
   out.forEach(function (l) { delete l._w; });
+  /* GSK prints "General Terms and Conditions" above its items: nothing found before it → read the whole page */
+  if (!out.length && !noCut && z > 200) return poGen(text, 1);
   return out; }
 var PO_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 function poDateNorm(s, us) { var m, p2 = function (n) { return ('0' + n).slice(-2); }, y4 = function (y) { y = +y; return y < 100 ? 2000 + y : y; }; s = String(s || '').replace(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/, '$1-$2-$3'); /* 2026/07/13 */
   if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return p2(m[3]) + '/' + p2(m[2]) + '/' + m[1];
-  if ((m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/))) return us ? p2(m[2]) + '/' + p2(m[1]) + '/' + y4(m[3]) : p2(m[1]) + '/' + p2(m[2]) + '/' + y4(m[3]);
+  if ((m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/))) { var yy = y4(m[3]); if (yy < 2000 || yy > 2099 || (+m[1] > 12 && +m[2] > 12) || !+m[1] || !+m[2]) return ''; var sw = us ? +m[1] <= 12 : +m[2] > 12; /* 03/31/2024 is March 31st whoever wrote it */ if (us && +m[2] <= 12 && +m[1] > 12) sw = false; return sw ? p2(m[2]) + '/' + p2(m[1]) + '/' + yy : p2(m[1]) + '/' + p2(m[2]) + '/' + yy; }
   if ((m = s.match(/^(\d{1,2})[\s-]([A-Za-z]{3})[A-Za-z]*[\s-],?\s*(\d{2,4})/))) return PO_MON[m[2].toLowerCase()] ? p2(m[1]) + '/' + p2(PO_MON[m[2].toLowerCase()]) + '/' + y4(m[3]) : '';
   if ((m = s.match(/^([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/))) return PO_MON[m[1].toLowerCase()] ? p2(m[2]) + '/' + p2(PO_MON[m[1].toLowerCase()]) + '/' + m[3] : '';
   return ''; }
 var PO_DT = '(\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}|\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{1,2}[\\s-][A-Za-z]{3,9}[\\s-],?\\s*\\d{2,4}|[A-Za-z]{3,9}\\.?\\s+\\d{1,2},?\\s+\\d{4})';
-function poMeta(text) { var t = String(text || '').normalize('NFKC').replace(/\s+/g, ' ').replace(/(\d)\s*([\/.])\s+(\d)/g, '$1$2$3'), num = '', dt = '', m;
+function poMeta(text) { var t0 = String(text || '').normalize('NFKC').replace(/\s*\|\s*(:\s*\|\s*)?/g, ' ').replace(/\s+/g, ' '), t = t0.replace(/(\d)\s*([\/.])\s+(\d)/g, '$1$2$3'), num = '', dt = '', m;
+  /* SAP: "PO number/date 4500067317 / 08.01.2024" – the date after the slash, not the end of the number */
+  if ((m = t0.match(/PO\s*number\s*\/\s*date\s*(\d{6,})\s*\/\s*(\d{1,2}\.\d{1,2}\.\d{4})/i)) || (m = t0.slice(0, 900).match(/\b(4\d{9})\s*\/\s*(\d{1,2}\.\d{1,2}\.\d{4})\b/))) { num = m[1]; dt = poDateNorm(m[2]); } /* SAP "4500020043 / 11.12.2024", the label far before it */
   var NUM = [/Order\s*Number\s*:?\s*([A-Z]?\d{4,})/i, /Bon\s*de\s*Commande\s*:?\s*(\d{5,})/i, /PO\s*number\s*\/\s*date\s*(\d{4,})/i, /PO\s*(?:Number|No\.?|#)\s*:?\s*([A-Z]{0,3}\d{4,})/i, /Order\s*No\.?\s*:?\s*(\d{4,})/i, /Purchase\s*Order\s*(?:No\.?|Number|#)?\s*:?\s*(\d{5,})/i,
-    /\b(?:GPI|GNP|GAP)\s*\/\s*(\d{6,})/, /\bPO\s*#\s*:?\s*(\d{1,4}\/\d{4})\b/, /\bOrder\s+(\d{4,})\s+Revision/i, /(\d{4,})\s*:\s*توريد\s*أمر/, /أمر\s*توريد\s*:?\s*(\d{4,})/, /\bNo\s+(\d{8,})\s+Rev/i, /Serial\s*No\s*:?\s*(\d{6,})/i, /\b(\d{6,})\s+Purchase\s+Order\b/i];
-  for (var i = 0; i < NUM.length && !num; i++) if ((m = t.match(NUM[i]))) num = m[1];
-  var DL = ['Issue\\s*Date', 'Purchase\\s*order\\s*:?\\s*\\d+\\s*Date', 'PO\\s*number\\s*\\/\\s*date\\s*\\d+\\s*\\/', 'Order\\s*Date', 'Document\\s*Date', 'Creation\\s*Date', 'Placed\\s*On', 'Issued\\s*on\\s*\\w+day,?', 'Date', 'Creation', 'التاريخ'], us = /AstraZeneca|DSM\s*Nutritional/i.test(t);
+    /\b(?:GPI|GNP|GAP)\s*\/\s*(\d{6,})/, /\bPO\s*#\s*:?\s*(\d{1,4}\/\d{4})\b/, /\bOrder\s+(\d{4,})\s+Revision/i, /(\d{4,})\s*:\s*توريد\s*أمر/, /أمر\s*توريد\s*:?\s*(\d{4,})/, /\bNo\s+(\d{8,})\s+Rev/i, /Serial\s*No\s*:?\s*(\d{6,})/i, /\b(\d{6,})\s+Purchase\s+Order\b/i,
+    /Purchasing\s*Order\s*No\.?\s*:?\s*(\d{1,4}\s*\/\s*\d{2,4})/i, /PO\s*No\.?\s*:?\s*([A-Za-z]{2,5}-\d{1,4}\/\d{4})/i, /PO\s*Number\s*:?\s*(PO\d{2}-\d{4,})/i, /Purchase\s*Order\s*\/\s*(\d{3,})/i, /OUR\.?\s*REF\.?\s*:?\s*(serv-?\d{4,})/i, /\bPR\s*#\s*:?\s*#?\s*(\d{5,})/, /PO\s*(?:Number|No\.?|#)\s*:?\s*(\d{3,})/i, /\bP\.\s*O\.?\s*(?:No\.?|#)\s*:?\s*(\d{3,})/i, /\bS\s*\.?\s*O\.?\s*NO\.?\s*:?\s*(\d{5,})/i, /\bAPPROVED\s+(\d{5,})\b/];
+  for (var i = 0; i < NUM.length && !num; i++) if ((m = t.match(NUM[i]))) num = m[1].replace(/\s+/g, '');
+  var DL = ['S\\s*\\.?\\s*O\\.?\\s*DATE', 'PO\\s*Date', 'Issue\\s*Date', 'Purchase\\s*order\\s*:?\\s*\\d+\\s*Date', 'PO\\s*number\\s*\\/\\s*date\\s*\\d+\\s*\\/', 'Order\\s*Date', 'Document\\s*Date', 'Creation\\s*Date', 'Placed\\s*On', 'Issued\\s*on\\s*\\w+day,?', 'Date', 'Creation', 'التاريخ'], us = /AstraZeneca|DSM\s*Nutritional/i.test(t);
   for (i = 0; i < DL.length && !dt; i++) { var r = new RegExp(DL[i] + '\\s*:?\\s*' + PO_DT, 'i'); if ((m = t.match(r))) dt = poDateNorm(m[1], us); }
   if (!dt && (m = t.match(new RegExp(PO_DT + '\\s*Creation\\s*Date', 'i')))) dt = poDateNorm(m[1]);
   if (!dt && (m = t.match(/:\s*التاريخ\s*(\d{1,2}-\d{1,2}-\d{4})/))) dt = poDateNorm(m[1]);
   if (!num && (m = t.match(/PO\s*number[\s\S]{0,300}?\b([2-7]\d{7,9})\b/i))) num = m[1];
   if (!dt && (m = t.match(new RegExp(PO_DT)))) dt = poDateNorm(m[1], us);
   return { number: num, date: dt }; }
+/* the PO number written in the file name ("PO 91640.pdf", "26000398-اخناتون….pdf") when the PO itself does not print it */
+function poNameFill(r, name) { if (!r || r.number) return r; var m = String(name || '').replace(/\.[a-z0-9]{2,5}$/i, '').match(/(?:^|[^A-Za-z0-9])(?:PO[\s#.:_-]*)?([A-Z]?\d{5,})(?![0-9])/i); if (m && !/^20\d{6,}$/.test(m[1]) && !/^\d{1,2}[-_.]\d/.test(m[1])) { r.number = m[1]; r.numFromName = 1; } return r; }
 function poRead(file) { /* a File/Blob → { lines, number, date, b64 } */
-  if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|tiff?)$/i.test(file.name || '')) return shrink(file, 2600, 0.92).then(ocrText).then(function (t) { var r = poParse(t || ''); r.b64 = ''; r.fromPhoto = 1; if (!(r.lines || []).length) toast('The photo of the PO was read but no lines were found – take it straight and closer, or attach the PDF', true); return r; }).catch(function () { return { lines: [], b64: '' }; });
+  if (/^image\//.test(file.type || '') || /\.(jpe?g|png|webp|heic|bmp|tiff?)$/i.test(file.name || '')) return shrink(file, 2600, 0.92).then(ocrText).then(function (t) { var r = poParse(t || ''); r.b64 = ''; r.fromPhoto = 1; poNameFill(r, file.name); if (!(r.lines || []).length) toast('The photo of the PO was read but no lines were found – take it straight and closer, or attach the PDF', true); return r; }).catch(function () { return { lines: [], b64: '' }; });
   return file.arrayBuffer().then(function (buf) { var b64 = ''; if (buf.byteLength < 600000) { var u = new Uint8Array(buf), s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); b64 = btoa(s); }
     /* any shape: a PDF (a scanned one by OCR), Word, Excel, a photo… – by what the file really is */
-    return fileKind(file).then(function (k) { if (k !== 'pdf') b64 = ''; return anyPages(fileAs(file, k)); }).then(function (pages) { var r = poParse(pages.slice(0, 2).map(function (pg) { return pg.join('\n'); }).join('\n')); r.b64 = b64; return r; }).catch(function () { return { lines: [], b64: b64 }; }); }); }
+    return fileKind(file).then(function (k) { if (k !== 'pdf') b64 = ''; return anyPages(fileAs(file, k)); }).then(function (pages) { var r = poParse(pages.slice(0, 2).map(function (pg) { return pg.join('\n'); }).join('\n')); r.b64 = b64; poNameFill(r, file.name); return r; }).catch(function () { return { lines: [], b64: b64 }; }); }); }
 /* a PO found on SharePoint or attached earlier, whose lines were never read: read them once by itself */
 var POAR = {}; function poAutoRead(p) { var o = p.order || {}; poHeal(p); if (o.fileName && !o.number) { var fn = String(o.fileName).match(/(?:^|[^A-Za-z0-9])([A-Z]?\d{6,})(?![0-9])/); if (fn) o.number = fn[1]; }
   if ((o.items || []).length || !(o.fileId && o.driveId || o.b64 || o.photo || o.fileName)) return; var K = p.id + '|' + (o.fileId || o.photo || o.fileName); if (POAR[K] && Date.now() - POAR[K] < 60000) return; POAR[K] = Date.now();
@@ -4213,7 +4234,7 @@ function resCols(it) { var c = {}; colOrder(it).forEach(function (k, j) { c[k] =
    it.updn = 'uut' keeps the old layout (one reference, two UUT readings) for a certificate that must look like last year's */
 function fxU(it) { return !!(it && it.old && it.old.dirs === 2 && it.updn !== 'uut' && rMode(it) === 'read' && !isTimer(it) && !corOn(it)); }
 /* last year's reference for one direction in the fixed-UUT layout: UUT (the point) − last year's deviation, so the placeholder keeps last year's error */
-function fxOldRef(it, q, dr) { var pt = String(q.point == null ? '' : q.point).trim(), dv = dr === 2 ? q.deviation2 : q.deviation, rd = dr === 2 ? q.reading2 : q.reading;
+function fxOldRef(it, q, dr) { if (q.fxL || q.ref2 != null) { var rr = dr === 2 ? (q.ref2 != null && String(q.ref2).trim() ? q.ref2 : q.ref) : q.ref; if (rr != null && String(rr).trim()) return String(rr); } var pt = String(q.point == null ? '' : q.point).trim(), dv = dr === 2 ? q.deviation2 : q.deviation, rd = dr === 2 ? q.reading2 : q.reading;
   if (!isNum(pt)) return q.ref || ''; if (!isNum(dv) && isNum(rd) && isNum(q.ref)) dv = String(numv(rd) - numv(q.ref)); if (!isNum(dv)) return q.ref || '';
   var dd = Math.max(decOf(pt), decOf(String(q.ref || '')), Math.min(6, decOf(String(dv)))), r = (numv(pt) - numv(dv)).toFixed(dd); return /^-0(\.0+)?$/.test(r) ? r.slice(1) : r; }
 function evalPt(it, i, dir) { var q = it.old.points[i], v = (it.nv || {})[i + (dir === 2 ? 'd' : '')] || {}, d = resDec(it);
@@ -4703,15 +4724,17 @@ function dataRows(p, it, out) { var f = (it.old && it.old.fields) || {};
     ['Range', rangeText(it) || f.range || '', 'Procedure No.', sopNorm(f.procedure)], ['Cal. Range', calRangeText(it) || f.calRange || f.range || '', 'Data Sheet Ref.', dsRef(p, it)],
     ['Resolution', it.res ? lead0(String(it.res)) + ' ' + (it.resUnit || it.unit || '') : (f.resolution || ''), 'Received status', it.rcvSt || 'In A Good Condition'], ['Accepted Limits', rMode(it) !== 'read' ? (limitsText(it) || 'N/A') : limitsText(it), 'Delivered status', it.dlvSt || (rMode(it) !== 'read' ? 'In A Good Condition' : out ? 'Out of Tolerance' : 'In Tolerance')]]; }
 function uOf(it) { return String(it.unit || it.resUnit || '').trim(); }
+/* the unit as printed in a results header: an absolute pressure item says so – "(bar abs)", as on our certificates */
+function uLab(it) { var u = uOf(it); try { if (u && !/abs|\(a\)|bara/i.test(u) && prsIt(it) && absIt(it)) u += ' abs'; } catch (e) {} return u; }
 /* every results header has the same two lines: name, then the unit */
-function resHead(it, dirs) { var u = uOf(it), TM = isTimer(it), CR = corOn(it), w = function (t) { var uu = TM ? tmUnit(it, /^Ref/.test(t) ? 'ref' : /^Dev|^Lim/.test(t) ? 'sec' : 'uut') : CR && /^Ref/.test(t) ? String(it.cor.u).trim() : u; return t + '\n' + (uu ? '(' + uu + ')' : ''); };
+function resHead(it, dirs) { var u = uLab(it), TM = isTimer(it), CR = corOn(it), w = function (t) { var uu = TM ? tmUnit(it, /^Ref/.test(t) ? 'ref' : /^Dev|^Lim/.test(t) ? 'sec' : 'uut') : CR && /^Ref/.test(t) ? String(it.cor.u).trim() : u; return t + '\n' + (uu ? '(' + uu + ')' : ''); };
   if (dirs && fxU(it)) return ['No.', w('UUT Reading'), w('Reference ↑'), w('Deviation ↑'), w('Reference ↓'), w('Deviation ↓'), w('Limits')];
   return dirs ? ['No.', w('Point'), w('Reference'), w('Reading ↑'), w('Deviation ↑'), w('Reading ↓'), w('Deviation ↓'), w('Limits')] : ['No.', colH(it, 'pt', w(svOn(it) ? 'Set Point' : 'Point'))].concat(colOrder(it).map(function (k) { return colH(it, k, { ref: svOn(it) ? (swIt(it) ? 'Trip Value' : 'Opening Pressure') + '\n(Reference' + (u ? ', ' + u : '') + ')' : w('Reference'), exp: CR && it.cor.xh ? it.cor.xh + '\n(' + u + ')' : w('Expected Value'), rd: w('UUT Reading'), x3: x3Head(it), dev: w('Deviation'), lim: w('Limits'), st: 'Status' }[k]); })); }
-function resLayout(it, dirs) { var RM = rMode(it), sp = ptShown(it), H = resHead(it, dirs), u = uOf(it), w = function (t) { return t + '\n' + (u ? '(' + u + ')' : ''); }, cols, wd, row;
+function resLayout(it, dirs) { var RM = rMode(it), sp = ptShown(it), H = resHead(it, dirs), u = uLab(it), w = function (t) { return t + '\n' + (u ? '(' + u + ')' : ''); }, cols, wd, row;
   if (RM === 'set') { cols = ['No.'].concat(sp ? [w('Set point')] : [], [w('Reference'), 'UUT setting', 'Status']); row = function (r, no) { return [no].concat(sp ? [r.point] : [], [r.ref || '', r.set || '', r.st || '']); }; }
   else if (RM === 'none') { cols = ['No.'].concat(sp ? [w('Set point')] : [], [w('Reference'), 'Status']); row = function (r, no) { return [no].concat(sp ? [r.point] : [], [r.ref || '', r.st || '']); }; }
   else if (dirs && fxU(it)) { /* as on our pressure certificates: Reference Reading (Up | Down) · Gauge Reading (Up | Down) · Deviation (Up | Down) · Accepted Limits · Status */
-    var gl = /gauge/i.test([it.description, ((it.old || {}).fields || {}).description].join(' ')) ? 'Gauge Reading' : 'UUT Reading';
+    var gl = /gauge/i.test([it.description, ((it.old || {}).fields || {}).description].join(' ')) ? 'Gauge Reading' : 'Indicator Reading';
     cols = ['No.', w('Reference Reading ↑'), w('Reference Reading ↓'), w(gl + ' ↑'), w(gl + ' ↓'), w('Deviation ↑'), w('Deviation ↓'), w('Accepted Limits'), 'Status'];
     var hrows = [[{ t: 'No.', rs: 2 }, { t: w('Reference Reading'), span: 2 }, { t: w(gl), span: 2 }, { t: w('Deviation'), span: 2 }, { t: w('Accepted Limits'), rs: 2 }, { t: 'Status', rs: 2 }], [{ t: '', skip: 1 }, 'Up', 'Down', 'Up', 'Down', 'Up', 'Down', { t: '', skip: 1 }, { t: '', skip: 1 }]]; hrows[1].th = 1;
     row = function (r, no) { var dd = resDec(it), P = dd != null && isNum(r.point) ? padTo(String(r.point), dd) : r.point; return [no, r.cells[0], r.cells[2], P, P, r.cells[1], r.cells[3], r.limit, r.st == null ? 'Accepted' : r.st]; };
