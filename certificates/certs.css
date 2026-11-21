@@ -2163,3 +2163,6 @@ body.hasTb #tbar{z-index:95}
 .idseg button{border:1px solid #CBD5E1;background:#fff;border-radius:999px;padding:2px 9px;font-size:11px;color:#13294B;cursor:pointer}
 .idseg button.on{background:#13294B;color:#fff;border-color:#13294B}
 table.kv5 td{text-align:left}
+
+#shDemo{color:#6D28D9;border-color:#C4B5FD}
+#shDemo.on{background:#F3EEFF;border-color:#7C3AED;color:#5B21B6}
