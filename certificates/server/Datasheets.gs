@@ -123,8 +123,8 @@ function listPhoto_(req) {
     '{"rows": [{"no": "", "name": "instrument name with model", "instCode": "instrument / machine code", "itemCode": "item code (e.g. QC11-015/TS.01) – empty if the table has none", "serial": "", "points": "required points with unit", "criteria": "acceptance criteria"}]}\n' +
     'Rules: one entry for every item-code line (an instrument with 2 item codes gives 2 entries with the same instCode and name). Copy codes character by character: 1 is a digit, not the letter I; 0 is a digit, not O. Never invent rows.';
   var parts = [{ text: prompt }].concat(imgs.map(function (b) { return { inline_data: { mime_type: 'image/jpeg', data: b } }; }));
-  var call = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': gk }, payload: JSON.stringify({ contents: [{ parts: parts }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 12000 } }) }); }; /* no temperature 0 – Gemini 3 can loop with it (a list took 5+ minutes) */
-  var res = call(); for (var t = 0; t < 3 && (res.getResponseCode() === 429 || res.getResponseCode() >= 500); t++) { Utilities.sleep(6000 * (t + 1)); res = call(); }
+  var MODELS = [MODEL, 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'], mi = 0; var call = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODELS[mi] + ':generateContent', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': gk }, payload: JSON.stringify({ contents: [{ parts: parts }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 12000 } }) }); }; /* no temperature 0 – Gemini 3 can loop with it (a list took 5+ minutes) */
+  var res = call(); while ((res.getResponseCode() === 429 || res.getResponseCode() === 404 || res.getResponseCode() >= 500) && mi < MODELS.length - 1) { mi++; res = call(); } /* a busy model (503) → the next one, no waiting */
   if (res.getResponseCode() !== 200) throw new Error('Gemini ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 160));
   var j = JSON.parse(res.getContentText()), c = (j.candidates || [])[0] || {}, txt = ((c.content || {}).parts || []).map(function (q) { return q.text || ''; }).join(''), m = txt.match(/\{[\s\S]*\}/);
   var o = {}; try { o = m ? JSON.parse(m[0]) : {}; } catch (x) { o = {}; }
@@ -148,3 +148,6 @@ function photo_(req) {
   var o = {}; try { o = m ? JSON.parse(m[0]) : {}; } catch (x) { o = {}; }
   return { ids: ids, read: o };
 }
+
+function testListPhoto() { var t0 = Date.now(); var b = UrlFetchApp.fetch('https://bishoyloza-sketch.github.io/certificates/tmpt/lp.jpg').getBlob(); var r = listPhoto_({ images: [Utilities.base64Encode(b.getBytes())] }); Logger.log(((Date.now() - t0) / 1000) + ' s, rows ' + r.rows.length + ': ' + r.rows.map(function (x) { return x.itemCode || x.instCode; }).join(' ')); }
+function testModels() { var gk = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'); var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': gk }, muteHttpExceptions: true }); var j = JSON.parse(r.getContentText()); Logger.log((j.models || []).map(function (m) { return m.name.replace('models/', ''); }).filter(function (n) { return /flash|pro/.test(n); }).join(', ')); }
