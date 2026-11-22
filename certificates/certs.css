@@ -2173,3 +2173,4 @@ table.kv5 td{text-align:left}
 body.np-delitem [data-lx],body.np-delitem [data-md],body.np-delitem #hDelSel{display:none!important}
 .tmnav{display:flex;align-items:center;justify-content:center;gap:12px}.tmnav b{min-width:150px;text-align:center}
 table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{background:var(--soft,#F2F4F7);text-align:left;padding:6px 8px;font-weight:600}table.tmday td{padding:6px 8px;border-top:1px solid var(--line,#E4E7EC);vertical-align:top}table.tmday td.tmss{font-size:12px;line-height:1.5}table.tmday td.tmss i{color:var(--muted);font-style:normal}table.tmday tr.tmtot td{border-top:2px solid var(--line,#C9CED6);font-weight:600}
+.refnt{display:flex;flex-direction:column;gap:6px}.refnr{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid rgba(0,0,0,.06);padding-top:6px}.refnb{display:flex;gap:6px}
