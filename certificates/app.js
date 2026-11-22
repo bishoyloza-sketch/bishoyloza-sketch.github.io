@@ -851,7 +851,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v563';
+var APP_V = 'v564';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -1955,10 +1955,23 @@ function impBuild(recs) { var codeOf = function (r) { return String(r.code || ''
     addIt(units, it, 'u'); });
   return { machines: order.map(function (k) { return M[k]; }), units: units }; }
 /* a photo (handwritten or printed codes) or a scanned PDF: read the codes, then every code gets last year's certificate from the company's files */
-function impCodesFromText(t) { var out = [], seen = {}; String(t || '').split(/\n/).forEach(function (line) { line.split(/\s{2,}|\t|,|;|\|/).forEach(function (tok) { tok = tok.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').replace(/\s*([\/\-.])\s*/g, '$1');
-  if (tok.length >= 3 && tok.length <= 24 && /[0-9]/.test(tok) && /[A-Za-z]/.test(tok) && !/^(page|tel|fax|mob)/i.test(tok)) { var k = impKey(tok); if (!seen[k]) { seen[k] = 1; out.push({ code: tok.toUpperCase(), name: '', man: '', model: '', pts: '', crit: '', sn: '', range: '', loc: '', ocr: 1 }); } } }); }); return out; }
+function impCodesFromText(t) { var cand = [], seen = {};
+  /* a photo read on this computer gives every word of the page; keep only what is written like the customer's codes (Bishoy, 22 Nov 2026: a QC list photo gave
+     "ACCORDING(0", "MODEL:MS000…", "45°¢2COFRD" … as codes). Digit look-alikes in the number parts are fixed (O→0, I/l→1), codes are kept when they share the
+     list's own pattern (QC11-…), and a code that has items (QC11-015/TS.01) leaves its plain machine code out. */
+  var fixD = function (x) { return x.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss](?=\d)/g, '5'); };
+  String(t || '').split(/\n/).forEach(function (line) { String(line).replace(/\s*([\/\-.])\s*/g, '$1').split(/\s+|,|;|\|/).forEach(function (tok) { tok = tok.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+    if (tok.length < 3 || tok.length > 24 || !/[0-9]/.test(tok) || !/[A-Za-z]/.test(tok) || /^(page|tel|fax|mob|model|serial|according)/i.test(tok) || /[°%"':()¢$#@!?=+*]/.test(tok)) return;
+    var m = tok.match(/^([A-Za-z]{1,5})([0-9OIl]{0,4})([-_][0-9A-Za-z\-_.]*)?([\/\\][A-Za-z]{1,4}[.\-]?[0-9OIl]{1,3})?$/); if (!m) return;
+    var c = (m[1] + fixD(m[2] || '') + (m[3] ? m[3].replace(/[-_]([0-9OIlS]+)(?=$|[-_.])/g, function (a, d) { return a[0] + fixD(d); }) : '') + (m[4] ? m[4].replace(/([A-Za-z]{1,4})([.\-]?)([0-9OIl]{1,3})$/, function (a, l, s1, d) { return l + s1 + fixD(d); }) : '')).toUpperCase();
+    if (!/\d/.test(c)) return; var k = impKey(c); if (seen[k]) return; seen[k] = 1; cand.push(c); }); });
+  var pre = function (c) { return (c.match(/^[A-Z]{1,5}\d{0,4}/) || [''])[0]; }, cnt = {}; cand.forEach(function (c) { if (/[-\/]/.test(c)) cnt[pre(c)] = (cnt[pre(c)] || 0) + 1; });
+  var best = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; })[0], keep = cand;
+  if (best && cnt[best] >= 3) keep = cand.filter(function (c) { return pre(c) === best; }); else keep = cand.filter(function (c) { return /[-\/]/.test(c); }).concat(cand.filter(function (c) { return !/[-\/]/.test(c) && /^[A-Z]{1,4}\d{2,6}$/.test(c); }));
+  var withKids = {}; keep.forEach(function (c) { var b = c.split(/[\/\\]/); if (b.length > 1) withKids[impKey(b[0])] = 1; }); keep = keep.filter(function (c) { return /[\/\\]/.test(c) || !withKids[impKey(c)]; });
+  return keep.map(function (c) { return { code: c, name: '', man: '', model: '', pts: '', crit: '', sn: '', range: '', loc: '', ocr: 1 }; }); }
 function impOcrRecs(t) { return impCodesFromText(t); }
-function impImage(file) { IMP_KIND = 'photo'; return shrink(file, 2200, 0.9).then(ocrText).then(function (t) { IMP_ALL += '\n' + t; var tb = impOcrRecs(t); return tb; }); }
+function impImage(file) { IMP_KIND = 'photo'; return shrink(file, 2600, 0.92).then(function (d) { return ocrText(d).then(function (t) { if (CL.on) return t; return ocrText(d, 11).then(function (t2) { return t + '\n' + t2; }, function () { return t; }); }); }).then(function (t) { IMP_ALL += '\n' + t; var tb = impOcrRecs(t); return tb; }); } /* on this computer a table photo is read twice (page + scattered words) and the codes of both are kept */
 function impPdfOcr(pdf) { var txt = [], next = function (i) { if (!pdf || i > Math.min(pdf.numPages, 20)) return Promise.resolve(); return pdf.getPage(i).then(function (pg) { var vp = pg.getViewport({ scale: 2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
     return pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise.then(function () { return ocrText(cv.toDataURL('image/jpeg', 0.9)); }).then(function (t) { txt.push(t || ''); return next(i + 1); }); }); };
   return next(1).then(function () { var t = txt.join('\n'), tb = impOcrRecs(t); return tb; }); }
