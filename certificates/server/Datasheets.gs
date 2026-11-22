@@ -43,6 +43,7 @@ function doPost(e) {
     if (req.action === 'save') return json_({ ok: true, data: save_(req.entry || {}, req.by || 'claude') });
     if (req.action === 'datasheet') return json_({ ok: true, data: lookup_(req.maker, req.model, req.description, !!req.fresh) });
     if (req.action === 'photo') return json_({ ok: true, data: photo_(req) });
+    if (req.action === 'listphoto') return json_({ ok: true, data: listPhoto_(req) });
     throw new Error('Unknown action');
   } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
 }
@@ -113,6 +114,22 @@ function company_(id, name, official, fresh) {
 
 /* photos of a customer's instrument (nameplate + display): kept in the Drive folder "Akhnaton – Device photos",
    read by Gemini (the photos themselves are kept by the jobs server), so everybody on the team gets the same photos and the same reading – no Claude needed */
+/* a photo / scan of a customer's calibration list (the table they give us) – every row with its codes, read by Gemini (22 Nov 2026) */
+function listPhoto_(req) {
+  var imgs = (req.images || []).slice(0, 6); if (!imgs.length) throw new Error('No photos');
+  var gk = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'); if (!gk) throw new Error('GEMINI_KEY is missing in Script Properties');
+  var prompt = 'These photo(s) show a list of instruments a customer sends to a calibration laboratory (a table: No., instrument name, instrument code, item code, serial, required points, acceptance criteria…).\n' +
+    'Read EVERY row exactly as written. Answer with ONLY one JSON object, no other text:\n' +
+    '{"rows": [{"no": "", "name": "instrument name with model", "instCode": "instrument / machine code", "itemCode": "item code (e.g. QC11-015/TS.01) – empty if the table has none", "serial": "", "points": "required points with unit", "criteria": "acceptance criteria"}]}\n' +
+    'Rules: one entry for every item-code line (an instrument with 2 item codes gives 2 entries with the same instCode and name). Copy codes character by character: 1 is a digit, not the letter I; 0 is a digit, not O. Never invent rows.';
+  var parts = [{ text: prompt }].concat(imgs.map(function (b) { return { inline_data: { mime_type: 'image/jpeg', data: b } }; }));
+  var call = function () { return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': gk }, payload: JSON.stringify({ contents: [{ parts: parts }], generationConfig: { temperature: 0 } }) }); };
+  var res = call(); for (var t = 0; t < 3 && (res.getResponseCode() === 429 || res.getResponseCode() >= 500); t++) { Utilities.sleep(6000 * (t + 1)); res = call(); }
+  if (res.getResponseCode() !== 200) throw new Error('Gemini ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 160));
+  var j = JSON.parse(res.getContentText()), c = (j.candidates || [])[0] || {}, txt = ((c.content || {}).parts || []).map(function (q) { return q.text || ''; }).join(''), m = txt.match(/\{[\s\S]*\}/);
+  var o = {}; try { o = m ? JSON.parse(m[0]) : {}; } catch (x) { o = {}; }
+  return { rows: o.rows || [] };
+}
 function photo_(req) {
   var imgs = (req.images || []).slice(0, 8); if (!imgs.length) throw new Error('No photos');
   var ids = []; /* the photos themselves are kept by the jobs server (it already has Drive) */
