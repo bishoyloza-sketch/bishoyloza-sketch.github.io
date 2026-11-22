@@ -2169,3 +2169,7 @@ table.kv5 td{text-align:left}
 #hDemo{color:#6D28D9;border-color:#C4B5FD}
 #hDemo.on{background:#F3EEFF;border-color:#7C3AED;color:#5B21B6}
 .lst.demo{color:#6D28D9}.lst.demo i{background:#7C3AED}
+
+body.np-delitem [data-lx],body.np-delitem [data-md],body.np-delitem #hDelSel{display:none!important}
+.tmnav{display:flex;align-items:center;justify-content:center;gap:12px}.tmnav b{min-width:150px;text-align:center}
+table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{background:var(--soft,#F2F4F7);text-align:left;padding:6px 8px;font-weight:600}table.tmday td{padding:6px 8px;border-top:1px solid var(--line,#E4E7EC);vertical-align:top}table.tmday td.tmss{font-size:12px;line-height:1.5}table.tmday td.tmss i{color:var(--muted);font-style:normal}table.tmday tr.tmtot td{border-top:2px solid var(--line,#C9CED6);font-weight:600}
