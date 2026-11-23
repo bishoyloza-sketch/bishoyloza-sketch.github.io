@@ -1051,7 +1051,7 @@ body:has(#sheet-root .sheet-bg) .donebar,body:has(#dlg-root .dlg) .donebar{displ
 .lcont{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:10px}
 .lvr{display:grid;grid-template-columns:minmax(150px,1.1fr) 3fr minmax(90px,.8fr) 60px;gap:12px}
 .lvr span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lvr span:nth-child(3){font-weight:600}
-.srow .t3{display:grid;grid-template-columns:minmax(150px,1.1fr) 3fr minmax(90px,.8fr) auto;gap:4px 14px;align-items:start}
+.srow .t3{display:grid;grid-template-columns:minmax(140px,1fr) 2.4fr minmax(90px,.8fr) minmax(78px,auto) minmax(78px,auto) minmax(0,1.3fr);gap:4px 14px;align-items:start}
 .srow .t3>span{display:flex;flex-direction:column;min-width:0}.srow .t3 small{font-size:11px;color:#7a8597;text-transform:uppercase;letter-spacing:.02em}
 .srow .t3 b{font-weight:600;overflow-wrap:anywhere}
 @media (max-width:700px){.srow .t3,.lvr{grid-template-columns:1fr 1fr}}
