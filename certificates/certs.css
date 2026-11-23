@@ -2304,3 +2304,36 @@ table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{ba
 .gapnote2 .gpt tr.gph td{padding:5px 10px;font-size:11px}
 @media(max-width:600px){.gapnote2 .gps{display:none}.gapnote2 .gacts{flex-wrap:wrap}}
 .gapnote2 .gpt tr.gph td{text-align:left;white-space:normal}
+/* v603: slim bar → "what is missing" in its own big window */
+.gapnote2{border:0;background:none;padding:0}
+.gapnote2 .gpbar{width:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border:1px solid #F0D9A8;background:#FFFAF0;border-radius:10px;font:inherit;font-size:13px;color:#7A4B00;cursor:pointer;text-align:left}
+.gapnote2 .gpbar:hover{border-color:#E8A317;background:#FFF4DD}
+.gapnote2 .gpbar b{color:#5C3A00}
+.gapnote2 .gpo2{margin-left:auto}
+#gapWin{position:fixed;inset:0;z-index:78;background:rgba(10,20,38,.45);display:flex;align-items:stretch;justify-content:center;padding:28px 24px;animation:fade .15s}
+#gapWin .gwbox{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(10,20,38,.35);width:min(1200px,100%);display:flex;flex-direction:column;overflow:hidden}
+#gapWin .gwh{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #E6EBF2;font-size:16px;color:#5C3A00}
+#gapWin .gpi{width:24px;height:24px;border-radius:50%;background:#E8A317;color:#fff;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:none}
+#gapWin .gwn{margin-left:auto;font-size:13px;color:#6B7689;font-weight:600}
+#gapWin .gwx{border:0;background:#F1F4F8;border-radius:10px;width:36px;height:36px;font-size:16px;cursor:pointer;color:#33415C}
+#gapWin .gwm{flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr}
+#gapWin .gwl{overflow:auto;border-right:1px solid #E6EBF2;background:#F8FAFC;padding:6px}
+#gapWin .gwg{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#5B6B80;padding:10px 8px 4px}
+#gapWin .gwi{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;margin-bottom:2px}
+#gapWin .gwi:hover{background:#EEF3FA}#gapWin .gwi.on{background:#fff;border-color:#1F6FB5;box-shadow:0 2px 8px rgba(31,111,181,.12)}
+#gapWin .gwi.nw{box-shadow:inset 3px 0 0 #7048E8}#gapWin .gwi.nw.on{box-shadow:inset 3px 0 0 #7048E8,0 2px 8px rgba(31,111,181,.12)}
+#gapWin .gwk{display:block;font-weight:700;font-size:13.5px;color:#1d2b44}#gapWin .gwi small{display:block;font-size:11.5px;color:#9A3412;margin-top:1px}
+#gapWin .gpk{display:inline-block;font-size:10px;font-weight:700;background:#e8eef7;color:#33507a;border-radius:6px;padding:1px 6px;margin-right:6px;vertical-align:1px}#gapWin .gpk.nw{background:#7048E8;color:#fff}
+#gapWin .gwd{overflow:auto;padding:22px 28px}
+#gapWin .gwt{font-size:22px;color:#0E2A52;margin-bottom:16px}#gapWin .gwt .gpk{font-size:12px;vertical-align:4px}
+#gapWin .gww>div{background:#FFF8F5;border:1px solid #F6DDD3;border-radius:12px;padding:12px 14px;margin-bottom:10px}
+#gapWin .gww b{display:block;color:#9A3412;font-size:15px}#gapWin .gww small{display:block;color:#4B5A6E;font-size:13.5px;margin-top:3px}
+#gapWin .gww .gin{display:flex;flex-wrap:wrap;gap:10px;background:#fff;border:1px solid #E3E9F2;padding:12px 14px}
+#gapWin .gin label{display:flex;flex-direction:column;font-size:12px;color:#5c6577;gap:3px}#gapWin .gin input{width:130px;height:40px;font-size:15px}
+#gapWin .gwa{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}#gapWin .gwa .gacts{display:flex;flex-wrap:wrap;gap:10px}#gapWin .gwa br{display:none}
+#gapWin .gwa .btn.sm{height:42px;padding:0 18px;font-size:14px}
+#gapWin .gwf{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 18px;border-top:1px solid #E6EBF2;font-size:13px;color:#6B7689}
+#gapWin .gwf .btn{min-width:120px}
+@media(max-width:760px){#gapWin{padding:0}#gapWin .gwbox{border-radius:0}#gapWin .gwm{grid-template-columns:1fr}#gapWin .gwl{display:none}}
+#gapWin{z-index:500;padding:24px}
+body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
