@@ -2283,3 +2283,4 @@ table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{ba
 #cside{overflow:hidden}
 #cside.k1 .csec>.btn{height:24px;font-size:12px;padding:0 8px}#cside.k1 .csec{gap:0;margin-top:2px}#cside.k1 .csec+.csec{padding-top:3px;margin-top:3px}#cside.k1 h6{font-size:10px;margin:0}#cside.k1 small{font-size:10.5px;margin-top:1px}#cside.k1 .cseg button{padding:4px 3px;font-size:11.5px}
 #cside.k2 .csn,#cside.k2 small{display:none}#cside.k2 .csec>.btn{height:22px}
+.nearb{display:block;margin-top:3px;border:1px dashed #6D8FBF;background:#F3F7FD;color:#1F4E86;border-radius:6px;font:600 11.5px var(--font);padding:2px 7px;cursor:pointer;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis}.nearb:hover{background:#1F4E86;color:#fff}
