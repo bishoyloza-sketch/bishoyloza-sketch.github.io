@@ -150,7 +150,7 @@ function fieldSheet_(req) {
     '{"form": true, "items": [{"code": "the Code written in ITEM TO BE CALIBRATED (else the UUT Code)", "description": "", "manufacturer": "", "model": "", "serial": "", "location": "", "range": "as written, e.g. 0 -> 28 or (0-10) bar", "resolution": "", "unit": "unit written anywhere on the form (bar, °C, mS/cm, m3/h, mV, %…)", "rows": [{"ref": "number in the Nominal (Reference Value) column", "uut": "number in the U.U.T. Results column"}], "notes": "anything else written (e.g. 6 bar, OK, accepted, New)", "unsure": "the fields or numbers you could not read for sure"}]}\n' +
     'Rules: if the page is not this form, answer {"form": false, "items": []}. Copy numbers digit by digit with their decimal point; never invent a value – leave it empty. A crossed-out value is not taken; the value written next to it is. Keep the rows in the order written.';
   var parts = [{ text: prompt }].concat(imgs.map(function (b) { return { inline_data: { mime_type: 'image/jpeg', data: b } }; }));
-  var t0 = Date.now(), o = gem_(parts, 6000, 'minimal'); /* v10: minimal thinking – a handwritten page took ~50 s with low */ return { form: o.form !== false, items: o.items || [], secs: Math.round((Date.now() - t0) / 1000) };
+  var t0 = Date.now(), o = gem_(parts, 3000, 'minimal'); /* v10: minimal thinking – a handwritten page took ~50 s with low; v11: one page is ~1500 tokens of JSON – a cap of 3000 stops a reading that runs in circles (some pages ran 6 minutes) */ return { form: o.form !== false, items: o.items || [], secs: Math.round((Date.now() - t0) / 1000) };
 }
 function photo_(req) {
   var imgs = (req.images || []).slice(0, 8); if (!imgs.length) throw new Error('No photos');
