@@ -2339,3 +2339,5 @@ table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{ba
 body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 @media (max-width:1420px){body.csideOn #pm{padding-left:232px!important;box-sizing:border-box}}
 .rgcor{display:flex;align-items:center;gap:10px;margin:6px 0 10px}.rgcor small{color:#5B6B80;font-size:12px}
+.rgt th .uin{width:74px;height:26px;padding:0 6px;margin-left:4px;border:1px solid #C9D4E2;border-radius:7px;font:600 12px var(--font,inherit);color:#1F4E86;background:#F4F8FD;text-align:center;vertical-align:middle}
+.rgt th .uin:focus{outline:2px solid #1F6FB5;background:#fff}.rgt th .uin.nm{width:120px;color:#13294B}
