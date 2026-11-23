@@ -879,7 +879,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v596';
+var APP_V = 'v597';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -8763,12 +8763,31 @@ function htmlToPdf(html, prog) { return needJsPdf().then(function () { return ne
         fr.remove(); res({ blob: pdf.output('blob'), pages: imgs }); }).catch(function (e) { fr.remove(); rej(e); });
     } catch (e) { fr.remove(); rej(e); } };
   fr.srcdoc = html; }); }); }
-function pdfMode(go) { var root = $('#dlg-root'); root.innerHTML = '<div class="dlg"><div><h3>Which PDF?</h3><div class="cats one" style="margin:8px 0">' +
-    '<button id="pmP"><b>To print on our paper</b><small>Only the certificate – the logo, address and frame are already on the paper. Right-click › Print.</small></button>' +
-    '<button id="pmC"><b>For the customer</b><small>With the letterhead (logo, address, frame) – to send by e-mail for review.</small></button></div><div class="cf"><button class="btn ghost" id="pmX">Cancel</button></div></div></div>';
-  var done = function (m) { root.innerHTML = ''; if (m) go(m); }; $('#pmP').onclick = function () { done('print'); }; $('#pmC').onclick = function () { done('cust'); }; $('#pmX').onclick = function () { done(null); }; }
-function pdfPreview(title, html, fname, mode) {
-  if (/data-lh="1"/.test(html) && !mode) return pdfMode(function (m) { pdfPreview(title, html, fname, m); });
+/* the PDF: to print on our paper, or for the customer – the certificate only, signed (each person's signature in blue), or signed and stamped (the lab stamp from our price offers),
+   so the customer can print it in colour and use it until the hard copy reaches him (Bishoy, 23 Nov 2026) */
+function pdfMode(go, lh) { var root = $('#dlg-root'); root.innerHTML = '<div class="dlg"><div><h3>Which PDF?</h3><div class="cats one" style="margin:8px 0">' +
+    (lh ? '<button id="pmP"><b>To print on our paper</b><small>Only the certificate – the logo, address and frame are already on the paper.</small></button>' : '') +
+    '<button id="pmC"><b>For the customer</b><small>' + (lh ? 'With the letterhead – ' : '') + 'no signatures – to send for review.</small></button>' +
+    '<button id="pmS"><b>For the customer – signed</b><small>The signatures of who calibrated and who approved, in blue.</small></button>' +
+    '<button id="pmSS"><b>For the customer – signed and stamped</b><small>Signatures and the lab stamp – he can print it in colour and use it until the hard copy reaches him.</small></button></div><div class="cf"><button class="btn ghost" id="pmX">Cancel</button></div></div></div>';
+  var base = lh ? 'cust' : 'plain', done = function (m) { root.innerHTML = ''; if (m) go(m); }; if ($('#pmP')) $('#pmP').onclick = function () { done('print'); }; $('#pmC').onclick = function () { done(base + '+0'); }; $('#pmS').onclick = function () { done(base + '+s'); }; $('#pmSS').onclick = function () { done(base + '+ss'); }; $('#pmX').onclick = function () { done(null); }; }
+var SIG_KEYS = ['mina reda', 'mina samir', 'mina ibrahim', 'ayman', 'romany', 'ahmed', 'bishoy', 'omar', 'mark', 'shenouda'], SIG_URL = 'https://bishoyloza-sketch.github.io/certificates/sig/', SIG_C = {};
+function sigKey(n) { var s = String(n || '').toLowerCase().replace(/^\s*eng\.?\s*/, '').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim(); if (!s) return ''; for (var i = 0; i < SIG_KEYS.length; i++) { var k = SIG_KEYS[i], w = k.split(' '); if (w.length === 2 ? (s.split(' ')[0] === w[0] && s.split(' ').indexOf(w[1]) > 0) : s.split(' ')[0] === k) return k; } return ''; }
+function sigData(k) { if (SIG_C[k]) return Promise.resolve(SIG_C[k]); return fetch(SIG_URL + k.replace(/ /g, '-') + '.png', { cache: 'force-cache' }).then(function (r) { if (!r.ok) throw 0; return r.blob(); }).then(function (b) { return new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { SIG_C[k] = fr.result; res(fr.result); }; fr.readAsDataURL(b); }); }).catch(function () { return ''; }); }
+/* every "Signature:" box of the certificates gets the signature of the name above it; a person whose signature is not in yet gets the name in a blue hand-written style until it is brought */
+function sigApply(html, sg) { if (!sg || sg === '0' || !/class="[^"]*\bsig\b/.test(html)) return Promise.resolve(html); var doc = new DOMParser().parseFromString(html, 'text/html'), cells = [], need = {};
+  Array.prototype.forEach.call(doc.querySelectorAll('table.sig'), function (t) { var rows = Array.prototype.slice.call(t.querySelectorAll('tr')), nm = rows.filter(function (r) { return /^\s*Name:?\s*$/i.test((r.cells[0] || {}).textContent || ''); })[0], sgr = rows.filter(function (r) { return /^\s*Signature:?\s*$/i.test((r.cells[0] || {}).textContent || ''); })[0]; if (!nm || !sgr) return;
+    [1, 3].forEach(function (c, j) { var cell = sgr.cells[c], name = nm.cells[c] ? nm.cells[c].textContent : ''; if (!cell || !String(name).replace(/eng\.?/i, '').trim()) return; var k = sigKey(name); if (k) need[k] = 1; cells.push({ cell: cell, k: k, name: String(name).replace(/^\s*Eng\.?\s*/i, '').trim(), ap: j === 1 }); }); });
+  if (!cells.length) return Promise.resolve(html); var ks = Object.keys(need); if (sg === 'ss') ks.push('stamp');
+  return Promise.all(ks.map(function (k) { return sigData(k).then(function (d) { return [k, d]; }); })).then(function (L) { var D = {}; L.forEach(function (x) { D[x[0]] = x[1]; });
+    cells.forEach(function (c) { var d = c.k && D[c.k]; c.cell.style.position = 'relative'; c.cell.style.height = '17mm'; c.cell.style.verticalAlign = 'middle';
+      c.cell.innerHTML = (d ? '<img src="' + d + '" alt="" style="height:13mm;max-width:' + (sg === 'ss' && c.ap ? '62%' : '95%') + ';object-fit:contain;display:block;margin:0">' : '<span style="font-family:\'Segoe Script\',\'Lucida Handwriting\',\'Brush Script MT\',cursive;font-style:italic;color:#1B2A9A;font-size:15pt;white-space:nowrap">' + esc(c.name.split(/\s+/).slice(0, 2).join(' ')) + '</span>') +
+        (sg === 'ss' && c.ap && D.stamp ? '<img src="' + D.stamp + '" alt="" style="position:absolute;right:-2mm;top:50%;transform:translateY(-50%) rotate(-4deg);width:50.3mm;height:19mm;opacity:.92;pointer-events:none">' /* the stamp at its real size – 50.3 × 19 mm, as on our price offers */ : ''); });
+    return '<!DOCTYPE html>' + doc.documentElement.outerHTML; }); }
+function pdfPreview(title, html, fname, mode) { var hasSig = /class="[^"]*\bsig\b/.test(html), lhH = /data-lh="1"/.test(html);
+  if (!mode && (lhH || hasSig)) return pdfMode(function (m) { pdfPreview(title, html, fname, m); }, lhH);
+  if (mode && mode !== 'print' && mode.indexOf('+') < 0 && hasSig) return pdfMode(function (m) { pdfPreview(title, html, fname, m === 'print' ? m : m.replace(/^(cust|plain)/, mode)); }, false);
+  var sg = (String(mode || '').split('+')[1]) || ''; mode = String(mode || '').split('+')[0] || null; if (sg === 's') title += ' – signed'; else if (sg === 'ss') title += ' – signed and stamped';
   if (mode === 'cust') { html = html.replace(/<body data-lh="1">/, '<body data-lh="1" class="cust">'); title += ' (for the customer)'; } else if (mode === 'print') title += ' (to print on our paper)';
   var st = { busy: true, d: 0, n: 0, pages: null, blob: null, err: '' };
   openSheet(function () { return { title: 'PDF · ' + title,
@@ -8776,7 +8795,7 @@ function pdfPreview(title, html, fname, mode) {
       : gapNote(html) + '<div class="note">' + st.pages.length + (st.pages.length === 1 ? ' page' : ' pages') + ' – this is the PDF. Check it, then <b>Save PDF</b>.</div>' + st.pages.map(function (pg, i) { return '<div class="pdfpg"><img src="' + pg.src + '" alt="page ' + (i + 1) + '"><span>' + (i + 1) + ' / ' + st.pages.length + '</span></div>'; }).join(''),
     foot: '<button class="btn ghost" id="pdC">Close</button>' + (st.blob ? '<button class="btn" id="pdS">Save PDF</button>' : ''),
     mount: function () { $('#pdC').onclick = closeSheet; var sv = $('#pdS'); if (sv) sv.onclick = function () { saveBlob(st.blob, (fname || title).replace(/[\\\/:*?"<>|]+/g, ' ').trim() + '.pdf'); }; } }; });
-  htmlToPdf(html, function (d, n) { st.d = d; st.n = n; if (sheetFn) renderSheet(); }).then(function (r) { st.busy = false; st.pages = r.pages; st.blob = r.blob; if (sheetFn) renderSheet(); })
+  sigApply(html, sg).then(function (h2) { html = h2; return htmlToPdf(html, function (d, n) { st.d = d; st.n = n; if (sheetFn) renderSheet(); }); }).then(function (r) { st.busy = false; st.pages = r.pages; st.blob = r.blob; if (sheetFn) renderSheet(); })
     .catch(function (e) { st.busy = false; st.err = 'Could not make the PDF here (' + ((e && e.message) || 'error') + '). Use Print and choose “Save as PDF”.'; if (sheetFn) renderSheet(); }); }
 
 
