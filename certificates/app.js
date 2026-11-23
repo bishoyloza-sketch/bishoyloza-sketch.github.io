@@ -886,7 +886,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v607';
+var APP_V = 'v608';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -9903,3 +9903,6 @@ try { new MutationObserver(function () { var pm = document.getElementById('pm');
 window.addEventListener('resize', function () { var pm = document.getElementById('pm'); if (window.innerWidth >= 900 && pm && pm.querySelector('.shedrow') && !pm.querySelector('#cside')) certSide(); });
 Promise.all([MS.ready, CL.ready]).then(function () { if (S.session) boot(); else renderLogin(); });
 })();
+/* a reading is a number: "13%" or "0.05 bar" typed in a reading box keeps only the number (23 Nov 2026 – LT53-11 had "13%" in the reference) */
+document.addEventListener('input', function (e) { var t = (e.composedPath && e.composedPath()[0]) || e.target; if (!t || t.tagName !== 'INPUT') return; var k = t.dataset && (t.dataset.k || (t.dataset.rc || '').split('|')[1]); if (!/^(ref|reading)$/.test(k || '')) return;
+  var m = String(t.value).match(/^\s*(-?\d*[.,]?\d+)\s*(%|[a-zA-Z°µ\/³²]+\.?)\s*$/); if (m) { t.value = m[1]; try { toast('Only the number is written – the unit is in the column title'); } catch (x) {} } }, true);
