@@ -2337,3 +2337,4 @@ table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{ba
 @media(max-width:760px){#gapWin{padding:0}#gapWin .gwbox{border-radius:0}#gapWin .gwm{grid-template-columns:1fr}#gapWin .gwl{display:none}}
 #gapWin{z-index:500;padding:24px}
 body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
+@media (max-width:1420px){body.csideOn #pm{padding-left:232px!important;box-sizing:border-box}}
