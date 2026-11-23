@@ -2267,3 +2267,8 @@ table.tmday{width:100%;border-collapse:collapse;font-size:13px}table.tmday th{ba
 .fupmn{font-size:24px;font-weight:700;color:#13294B;line-height:1.1}.fupmn small{font-size:12.5px;font-weight:500;color:#5b6b82}
 .fupm>small{font-size:12px;color:#5b6b82}.fupmk{font-size:12px;font-weight:600;color:#0F6E56}
 .fupmt{display:flex;align-items:center;gap:8px;margin:4px 0 8px}
+/* v589 – the company list beside every view */
+.hjsd .hjsr .hjtiles{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.hjsd .hjsr .hjacc,.hjsd .hjsr .hjl,.hjsd .hjsr .hcal{border:0}
+.hjsd .hjsl2{align-self:stretch}
+.hjsd .hjsr .hcal .hcm{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
