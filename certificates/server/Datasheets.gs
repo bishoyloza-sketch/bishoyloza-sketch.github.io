@@ -134,11 +134,12 @@ function listPhoto_(req) {
   return { rows: o.rows || [] };
 }
 /* v9: one or two pages of our own handwritten CALIBRATION DATA REPORT (the field sheet) → the items with their readings (Bishoy, 23 Nov 2026) */
-function gem_(parts, maxTok) { var gk = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'); if (!gk) throw new Error('GEMINI_KEY is missing in Script Properties');
-  var MODELS = [MODEL, 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'], mi = 0, think = true, t0 = Date.now();
-  var call = function () { var gc = { responseMimeType: 'application/json', maxOutputTokens: maxTok || 8000 }; if (think) gc.thinkingConfig = { thinkingLevel: 'low' }; return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODELS[mi] + ':generateContent', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': gk }, payload: JSON.stringify({ contents: [{ parts: parts }], generationConfig: gc }) }); };
-  var res = call(); if (res.getResponseCode() === 400 && /thinking/i.test(res.getContentText())) { think = false; res = call(); }
-  while ((res.getResponseCode() === 429 || res.getResponseCode() === 404 || res.getResponseCode() >= 500) && mi < MODELS.length - 1 && Date.now() - t0 < 150000) { mi++; res = call(); if (res.getResponseCode() === 400 && /thinking/i.test(res.getContentText())) { think = false; res = call(); } }
+function gem_(parts, maxTok, lvl) { var gk = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'); if (!gk) throw new Error('GEMINI_KEY is missing in Script Properties');
+  var MODELS = [MODEL, 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'], mi = 0, think = true, t0 = Date.now(), level = lvl || 'low';
+  var call = function () { var gc = { responseMimeType: 'application/json', maxOutputTokens: maxTok || 8000 }; if (think) gc.thinkingConfig = { thinkingLevel: level }; return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODELS[mi] + ':generateContent', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': gk }, payload: JSON.stringify({ contents: [{ parts: parts }], generationConfig: gc }) }); };
+  var fix = function (r) { if (r.getResponseCode() === 400 && /thinking/i.test(r.getContentText())) { if (level !== 'low') { level = 'low'; r = call(); } if (r.getResponseCode() === 400 && /thinking/i.test(r.getContentText())) { think = false; r = call(); } } return r; };
+  var res = fix(call());
+  while ((res.getResponseCode() === 429 || res.getResponseCode() === 404 || res.getResponseCode() >= 500) && mi < MODELS.length - 1 && Date.now() - t0 < 150000) { mi++; res = fix(call()); }
   if (res.getResponseCode() !== 200) throw new Error('Gemini ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 160));
   var j = JSON.parse(res.getContentText()), c = (j.candidates || [])[0] || {}, txt = ((c.content || {}).parts || []).map(function (q) { return q.text || ''; }).join(''), m = txt.match(/\{[\s\S]*\}/);
   try { return m ? JSON.parse(m[0]) : {}; } catch (x) { return {}; } }
@@ -149,7 +150,7 @@ function fieldSheet_(req) {
     '{"form": true, "items": [{"code": "the Code written in ITEM TO BE CALIBRATED (else the UUT Code)", "description": "", "manufacturer": "", "model": "", "serial": "", "location": "", "range": "as written, e.g. 0 -> 28 or (0-10) bar", "resolution": "", "unit": "unit written anywhere on the form (bar, °C, mS/cm, m3/h, mV, %…)", "rows": [{"ref": "number in the Nominal (Reference Value) column", "uut": "number in the U.U.T. Results column"}], "notes": "anything else written (e.g. 6 bar, OK, accepted, New)", "unsure": "the fields or numbers you could not read for sure"}]}\n' +
     'Rules: if the page is not this form, answer {"form": false, "items": []}. Copy numbers digit by digit with their decimal point; never invent a value – leave it empty. A crossed-out value is not taken; the value written next to it is. Keep the rows in the order written.';
   var parts = [{ text: prompt }].concat(imgs.map(function (b) { return { inline_data: { mime_type: 'image/jpeg', data: b } }; }));
-  var o = gem_(parts, 8000); return { form: o.form !== false, items: o.items || [] };
+  var t0 = Date.now(), o = gem_(parts, 6000, 'minimal'); /* v10: minimal thinking – a handwritten page took ~50 s with low */ return { form: o.form !== false, items: o.items || [], secs: Math.round((Date.now() - t0) / 1000) };
 }
 function photo_(req) {
   var imgs = (req.images || []).slice(0, 8); if (!imgs.length) throw new Error('No photos');
