@@ -2345,3 +2345,5 @@ body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 .grc{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}.grc small{color:#5B6B80;font-size:12px}
 .lvinv{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:4px 0 8px}
 .lcd .altc{display:block;font-size:10.5px;color:#7A4B00;font-weight:600}
+.lvsug{margin:4px auto 8px;max-width:780px;border:1px solid #F0D9A8;background:#FFFAF0;border-radius:10px;padding:10px 12px;font-size:13px;color:#5C3A00}
+.lvsug .lvsl{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 8px;font-size:12.5px;color:#33415C}
