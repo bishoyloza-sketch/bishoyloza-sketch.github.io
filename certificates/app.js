@@ -4750,7 +4750,7 @@ function dsRef(p, it) { var g = genDefaults(p); if (g.dsr[it.id] != null && Stri
   var yy = String(g.year).slice(2); return String(o).replace(/\s+/g, '').replace(/^(\d+)-(\d{2})$/, '$1-' + yy); }
 function ptRows(p, it) { /* new readings; if missing or OUT → last year's readings as placeholder */
   var o = it.old, rows = [], ph = [];
-  var RM = rMode(it); if (RM !== 'read' && !genOn(it)) { (o.points || []).forEach(function (q, i) { var v = (it.nv || {})[i] || {}, ref = String(v.ref || '').trim(), st = String(v.set || q.setting || '').trim(); if (!String(q.point == null ? '' : q.point).trim() && !ref && !st) return; if (!ref) ph.push({ point: q.point || st, why: 'no new reading' }); rows.push({ point: q.point, set: st, ref: ref, rd: String(v.reading == null ? '' : v.reading).trim(), cells: [], limit: '', st: ref ? 'Measured' : '' }); }); return { rows: rows, ph: ph }; }
+  var RM = rMode(it); if (RM !== 'read' && !genOn(it)) { (o.points || []).forEach(function (q, i) { var v = (it.nv || {})[i] || {}, ref = String(v.ref || '').trim(), st = String(v.set || q.setting || '').trim(); if (!String(q.point == null ? '' : q.point).trim() && !ref && !st) return; if (!ref) ph.push({ point: q.point || st, why: 'no new reading' }); var ref1 = ref || String(q.ref == null ? '' : q.ref).trim(); /* not typed yet: last year's value stands in, as for every other certificate (Bishoy, 24 Nov 2026) */ rows.push({ point: q.point, set: st, ref: ref1, rd: String(v.reading == null ? '' : v.reading).trim(), cells: [], limit: '', st: ref1 ? 'Measured' : '' }); }); return { rows: rows, ph: ph }; }
   (o.points || []).forEach(function (q, i) { var dirs = o.dirs === 2 ? [1, 2] : [1], row = { point: isTimer(it) ? tmP(it, q.point, 0) : (function () { var d0 = resDec(it); return d0 != null && isNum(q.point) && decOf(String(q.point)) > d0 ? (+numv(q.point)).toFixed(d0) : lead0(q.point); })(), limit: ptLimit(it, q), cells: [] }, out = false, nvi = (it.nv || {})[i] || {};
     /* a blank point (no point value, nothing typed, nothing from last year) is not printed at all */
     if (!String(q.point == null ? '' : q.point).trim() && !String(nvi.ref || nvi.reading || '').trim() && !String(q.ref || q.reading || '').trim()) return;
@@ -5408,8 +5408,8 @@ function gapPts(it) { var o = it && it.old, L = []; if (it) it._gapBi = null; if
   if (!o || genOn(it) || sqOn(it)) return null; var bl = function (x) { return !String(x == null ? '' : x).trim(); };
   (o.points || []).forEach(function (q, i) { var v = (it.nv || {})[i] || {}; if (bl(q.point) && bl(v.ref) && bl(v.reading) && bl(q.ref) && bl(q.reading)) return;
     var typed = !bl(v.reading) || !bl(v.ref), ref = !bl(v.ref) ? v.ref : q.ref, rd = !bl(v.reading) ? v.reading : q.reading, P = 'Point ' + (i + 1) + (bl(q.point) ? '' : ' (' + q.point + ')') + ': ', m = [];
-    if (bl(q.point)) m.push('the point value is empty'); if (bl(ref)) m.push('no reference value'); if (bl(rd)) m.push('no UUT reading');
-    if (!m.length && (!isNum(ref) || !isNum(rd))) m.push('"' + (isNum(ref) ? rd : ref) + '" is not a number');
+    var msd = rMode(it) === 'none' && !noneRd(it); /* Measured (a fridge): there is no UUT reading to ask for */ if (bl(q.point)) m.push('the point value is empty'); if (bl(ref)) m.push('no reference value'); if (bl(rd) && !msd) m.push('no UUT reading');
+    if (!m.length && (!isNum(ref) || (!msd && !isNum(rd)))) m.push('"' + (isNum(ref) ? rd : ref) + '" is not a number');
     if (m.length) L.push(P + m.join(', ') + (typed ? ' – type it in Edit table' : ' – not typed this year, and last year\'s certificate has none')); });
   return L; }
 function gapWhy(o) { var M = o.miss, has = function (rx) { return M.filter(function (x) { return rx.test(x); }); }, L = [];
