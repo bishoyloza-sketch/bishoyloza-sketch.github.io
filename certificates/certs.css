@@ -2347,3 +2347,7 @@ body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 .lcd .altc{display:block;font-size:10.5px;color:#7A4B00;font-weight:600}
 .lvsug{margin:4px auto 8px;max-width:780px;border:1px solid #F0D9A8;background:#FFFAF0;border-radius:10px;padding:10px 12px;font-size:13px;color:#5C3A00}
 .lvsug .lvsl{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 8px;font-size:12.5px;color:#33415C}
+
+/* the Today card sits on the right side, under the bar and clear of the page heading – never over the top of a window (v637) */
+#todayCard{top:auto!important;bottom:84px;right:14px;max-height:calc(100vh - var(--tbh,64px) - 110px);overflow:auto;transform:translateX(18px)}
+#todayCard.in{transform:none}
