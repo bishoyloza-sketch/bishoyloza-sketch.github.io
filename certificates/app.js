@@ -638,6 +638,14 @@ function jobMine(p) { var me = S.session && S.session.userId; if (!me) return tr
 /* saving is gathered: many changes in a short moment are written once (a long list no longer copies every job hundreds of times) – flushed before undo/redo and when the page is hidden or closed */
 var SAVEQ = { t: 0 };
 var DEMO_V = 0;
+/* the jobs are kept in the browser's big store (IndexedDB) once they do not fit in the small one (5 MB) – "Phone storage is full" on 24 Nov 2026 with 33 jobs (Bishoy) */
+var PIDB = { on: (function () { try { return localStorage.getItem(LSP + 'projIdb') === '1'; } catch (e) { return false; } })(), db: null, warned: 0 };
+function pidbOpen() { if (PIDB.db) return Promise.resolve(PIDB.db); return new Promise(function (ok, no) { try { var r = indexedDB.open('akhc-store', 1); r.onupgradeneeded = function () { r.result.createObjectStore('kv'); }; r.onsuccess = function () { PIDB.db = r.result; ok(r.result); }; r.onerror = function () { no(r.error); }; } catch (e) { no(e); } }); }
+function pidbPut(k, v) { return pidbOpen().then(function (db) { return new Promise(function (ok, no) { var t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = function () { ok(); }; t.onerror = function () { no(t.error); }; }); }); }
+function pidbGet(k) { return pidbOpen().then(function (db) { return new Promise(function (ok, no) { var r = db.transaction('kv', 'readonly').objectStore('kv').get(k); r.onsuccess = function () { ok(r.result); }; r.onerror = function () { no(r.error); }; }); }); }
+function projStore(str) { if (!PIDB.on) { try { localStorage.setItem(LSP + 'projects', str); return; } catch (e) { PIDB.on = true; } }
+  pidbPut('projects', str).then(function () { try { localStorage.setItem(LSP + 'projIdb', '1'); localStorage.removeItem(LSP + 'projects'); } catch (e) {} }, function () { if (!PIDB.warned) { PIDB.warned = 1; toast('Storage is full – the jobs stay online, open them with Refresh', true); } }); }
+function projLoad() { if (!PIDB.on) return Promise.resolve(); return pidbGet('projects').then(function (str) { if (!str) return; var pr = JSON.parse(str); pr.forEach(function (p) { (p.items || []).forEach(function (it) { if (it.old && it.old.status === 'searching') it.old = null; }); }); S.projects = pr; }).catch(function () {}); }
 function saveProjects() { DEMO_V++; if (!SAVEQ.t) SAVEQ.t = setTimeout(saveFlush, 300); }
 function saveFlush() { if (SAVEQ.t) { clearTimeout(SAVEQ.t); SAVEQ.t = 0; saveNow(); } }
 try { window.addEventListener('pagehide', saveFlush); window.addEventListener('beforeunload', saveFlush); document.addEventListener('visibilitychange', function () { if (document.hidden) saveFlush(); }); } catch (e) {}
@@ -645,7 +653,7 @@ function saveNow() { try { var me0 = S.session && S.session.userId, cp = S.cur &
   if (cur != null && UNDO.last != null && cur !== UNDO.last && !UNDO.busy) { var now = Date.now();
     if (!UNDO.st.length || UNDO.ns) { UNDO.st.push(UNDO.last); if (UNDO.st.length > UNDO_MAX) UNDO.st.shift(); } UNDO.rd = []; UNDO.ns = false; UNDO.t = now; binCatch(UNDO.last); }
   if (cur != null) { UNDO.last = cur; UNDO.ids = projIds(S.projects); }
-  try { localStorage.setItem(LSP + 'projects', JSON.stringify(S.projects)); } catch (e) { toast('Phone storage is full', true); } undoFab(); try { syncSoon(); } catch (e) {} }
+  projStore(JSON.stringify(S.projects)); undoFab(); try { syncSoon(); } catch (e) {} }
 /* the alarm choices on a certificate (keep last year's, leave out, issue without the symbol…): asked first, then shown done with ✓ Keep / ↶ Undo – nothing is changed by a slip of the mouse */
 var ALARM_SEL = '[data-pha],[data-phc],[data-accoff]';
 document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest(ALARM_SEL); if (!b || b.__ok || b.disabled) return; e.stopImmediatePropagation(); e.preventDefault();
@@ -886,7 +894,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v626';
+var APP_V = 'v627';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -3199,7 +3207,7 @@ function syncMerge(loc, rem) { var base = loc._base || {}, out = JSON.parse(JSON
   out.items = (out.items || []).filter(function (it) { return locIds[it.id] || !base[it.id] || syncHash(it) !== base[it.id]; }); /* removed here and not touched there → removed */
   ['tab', 'ci', 'cv', '_edCi'].forEach(function (k) { if (loc[k] != null) out[k] = loc[k]; }); return out; }
 function syncAdopt(p, rev, at, me) { p._rev = rev; p._syncH = syncHash(syncClean(p)); p._base = syncItemH(p); if (at) p._at = at; if (me) { p._byName = me.name; p._byUser = me.user; } }
-function syncSave() { try { localStorage.setItem(LSP + 'projects', JSON.stringify(S.projects)); } catch (e) {} }
+function syncSave() { projStore(JSON.stringify(S.projects)); }
 function syncSoon() { if (!SYNC.on()) return; clearTimeout(SYNC.t); SYNC.t = setTimeout(syncPush, 2500); }
 function syncPush() { if (!SYNC.on() || SYNC.busy) return Promise.resolve(); var dirty = S.projects.filter(function (p) { return !p.tpl && p.company && syncHash(syncClean(p)) !== p._syncH; }); if (!dirty.length) return Promise.resolve();
   SYNC.busy = true; var me = syncMe();
@@ -9937,7 +9945,7 @@ function certSide() { var pm = document.getElementById('pm'); if (!pm || window.
 function cnCleanup() { if (document.getElementById('cside')) return; ['cnFab', 'cnPop'].forEach(function (id) { var e = document.getElementById(id); if (e) e.remove(); }); }
 try { new MutationObserver(function () { var pm = document.getElementById('pm'); if (pm && pm.querySelector('.shedrow') && !pm.querySelector('#cside')) certSide(); else if (!(pm && pm.querySelector('#cside'))) { document.body.classList.remove('csideOn'); cnCleanup(); } }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true }); } catch (e) {}
 window.addEventListener('resize', function () { var pm = document.getElementById('pm'); if (window.innerWidth >= 900 && pm && pm.querySelector('.shedrow') && !pm.querySelector('#cside')) certSide(); });
-Promise.all([MS.ready, CL.ready]).then(function () { if (S.session) boot(); else renderLogin(); });
+Promise.all([MS.ready, CL.ready, projLoad()]).then(function () { if (S.session) boot(); else renderLogin(); });
 })();
 /* a reading is a number: "13%" or "0.05 bar" typed in a reading box keeps only the number (23 Nov 2026 – LT53-11 had "13%" in the reference) */
 document.addEventListener('input', function (e) { var t = (e.composedPath && e.composedPath()[0]) || e.target; if (!t || t.tagName !== 'INPUT') return; var k = t.dataset && (t.dataset.k || (t.dataset.rc || '').split('|')[1]); if (!/^(ref|reading)$/.test(k || '')) return;
