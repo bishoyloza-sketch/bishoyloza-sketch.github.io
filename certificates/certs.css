@@ -2344,3 +2344,4 @@ body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 .rngw{display:grid;grid-template-columns:1fr 1fr 110px;gap:8px}.rngo{display:flex;flex-direction:column;gap:6px}.rngo .btn{justify-content:flex-start;text-align:left}
 .grc{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}.grc small{color:#5B6B80;font-size:12px}
 .lvinv{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:4px 0 8px}
+.lcd .altc{display:block;font-size:10.5px;color:#7A4B00;font-weight:600}
