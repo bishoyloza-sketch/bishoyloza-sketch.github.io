@@ -897,7 +897,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v660';
+var APP_V = 'v661';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -5661,9 +5661,9 @@ function fitPages(root) { root = root || document; var pgs = Array.prototype.sli
       while (fit < data.length && data[fit].getBoundingClientRect().bottom <= L + 0.5) fit++;
       if (fit >= 2 && fit < data.length) { var t2 = el.cloneNode(false), cg = el.querySelector('colgroup'); if (cg) t2.appendChild(cg.cloneNode(true)); var tb = document.createElement('tbody'); if (hd) tb.appendChild(hd.cloneNode(true)); data.slice(fit).forEach(function (x) { tb.appendChild(x); }); t2.appendChild(tb);
         var pv = el.previousElementSibling; if (pv && pv.tagName === 'H4') { var h4 = pv.cloneNode(true); Array.prototype.slice.call(h4.querySelectorAll('button,.hed')).forEach(function (b) { b.parentNode.removeChild(b); }); h4.textContent = h4.textContent.replace(/^\s*\d+\s*-\s*/, '').trim(); mv.push(h4); }
-        mv.push(t2); at++; } }
+        mv.push(t2); at++; } else if (fit >= data.length) at++; /* every row is on the page, only the last border touches the edge: the table stays whole here – it is never sent to the next page leaving this one empty (Bishoy, 25 Nov 2026) */ }
     var st = at; while (st > h + 1 && k[st - 1] && (k[st - 1].tagName === 'H4' || k[st - 1].classList.contains('sigd'))) st--; if (k[st] && k[st].classList.contains('sig') && k[st - 1] && k[st - 1].classList.contains('sigd')) st--;
-    if (!mv.length && st <= h) return null;
+    if (!mv.length && (st <= h || st >= k.length)) return null;
     for (var q = st; q < k.length; q++) mv.push(k[q]); mv.forEach(function (x) { nw.appendChild(x); });
     var pf = pg.querySelector('.pf'); if (pf) nw.appendChild(pf.cloneNode(true)); pg.parentNode.insertBefore(nw, pg.nextSibling); renum(pg, nw); return nw; };
   for (var i = 0; i < pgs.length && i < 400; i++) { var pg = pgs[i]; if (!over(pg)) continue;
