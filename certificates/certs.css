@@ -2353,5 +2353,7 @@ body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 #todayCard.in{transform:none}
 
 .sopr{display:flex;align-items:center;gap:4px}.sopr .sopi{flex:1}.sope{border:0;background:none;color:#1F6FB5;font-size:15px;cursor:pointer;padding:8px 10px;border-radius:8px}.sope:hover{background:#EAF3FC}
-.sopedit{display:flex;gap:6px;align-items:center;width:100%;padding:6px 4px;flex-wrap:wrap}.sopedit .inp{flex:1;min-width:120px}.sopedit .btn.ghost{background:#fff;color:#B3261E;border:1px solid #E7C3C0}
+.sopr:has(.sopedit){display:block}.sopedit{display:flex;flex-direction:column;gap:12px;width:100%;padding:14px;margin:4px 0;background:#F5F9FD;border:1px solid #CFE0F1;border-radius:12px}
+.sopedit label{display:flex;flex-direction:column;gap:5px}.sopedit label span{font-size:12px;font-weight:600;color:#4A5B70}.sopedit .inp{width:100%;font-size:15px;padding:11px 12px}
+.sopeb{display:flex;align-items:center;gap:8px}.sopeb span{flex:1}.sopeb .btn{padding:10px 20px}.sopeb .ghost2{background:#fff;color:#13294B;border:1px solid #CBD5E1}.sopdel{border:0;background:none;color:#B3261E;font:inherit;font-size:13px;cursor:pointer;padding:6px 2px;text-decoration:underline}
 .sopor #lpPs{flex:1}
