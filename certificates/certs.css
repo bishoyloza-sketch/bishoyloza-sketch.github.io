@@ -2374,3 +2374,16 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 #updPill{display:none!important}
 .tbb.libRun span,.tbb.libDone span{display:inline-flex;align-items:center;gap:5px}.libspin{width:11px;height:11px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .8s linear infinite}
 @keyframes libspin{to{transform:rotate(360deg)}}.libspin{animation:libspin .8s linear infinite!important}
+/* notifications: groups that open on a click */
+#todayCard.ntf{max-height:calc(100vh - var(--tbh,64px) - 30px);overflow-y:auto}
+.ntl{display:flex;flex-direction:column;gap:8px;padding:4px 2px 2px}
+.ntg{background:#fff;border:1px solid #DCE5F0;border-radius:12px;overflow:hidden}.ntg.bad{border-color:#F1C2BC}
+.ntgh{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:2px 8px;width:100%;border:0;background:none;padding:10px 12px;cursor:pointer;text-align:left;font:inherit}
+.ntgh .ntc{font-style:normal;color:#7A889C;transition:transform .15s;grid-row:span 2}.ntg.open .ntgh .ntc{transform:rotate(90deg)}
+.ntgh b{font-size:13.5px;color:#13294B;font-weight:600}.ntgh em{font-style:normal;font-size:12px;font-weight:700;color:#13294B;background:#EEF3F9;border-radius:999px;padding:1px 9px}
+.ntg.bad .ntgh em{background:#FCE8E6;color:#B3261E}.ntgh small{grid-column:2/4;font-size:12px;color:#6B7B90}.ntg.bad .ntgh small{color:#B3261E}
+.ntgb{display:none;border-top:1px solid #EEF2F7}.ntg.open .ntgb{display:block}
+.ntr{display:flex;align-items:center;gap:8px;width:100%;border:0;border-bottom:1px solid #F1F4F8;background:none;padding:8px 12px 8px 34px;text-align:left;cursor:pointer;font:inherit}.ntr:last-child{border-bottom:0}.ntr:hover{background:#F5F9FD}
+.ntr span{flex:1;min-width:0;display:flex;flex-direction:column}.ntr b{font-size:13px;font-weight:600;color:#1B2D52}.ntr small{font-size:12px;color:#6B7B90}.ntr i{font-style:normal;color:#9AA7B8}
+.ntr.lv3{background:#FDF1EF}.ntr.lv3 b,.ntr.lv3 small{color:#B3261E}.ntr.lv2 small{color:#B26A00}
+.ntfoot{text-align:center;font-size:11.5px;color:#8A97A8;padding:8px 0 2px}
