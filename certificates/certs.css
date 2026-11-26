@@ -2413,3 +2413,6 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 .cpnew{padding:12px 14px;border:1px dashed var(--line,#D8E0EA);border-radius:12px}
 .cpnew b{display:block;margin-bottom:8px}
 .ltbl td.ldel{white-space:nowrap}
+
+/* the selection bar stays in sight while scrolling the list (v696) */
+.selbar3{position:sticky;top:6px;z-index:6;box-shadow:0 4px 14px rgba(19,41,75,.10)}
