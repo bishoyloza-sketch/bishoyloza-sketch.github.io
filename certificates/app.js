@@ -898,7 +898,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v692';
+var APP_V = 'v693';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -3217,10 +3217,16 @@ function syncHash(x) { var s = typeof x === 'string' ? x : JSON.stringify(x), h 
 function syncItemH(p) { var m = {}; (p.items || []).forEach(function (it) { m[it.id] = syncHash(it); }); var top = syncClean(p); delete top.items; m.__top = syncHash(top); return m; }
 function syncMeta(p) { var L = []; try { L = certList(p); } catch (e) { L = p.items || []; } return { id: p.id, company: p.company ? (p.company.name || '') : 'New job', done: L.filter(function (x) { return x.saved; }).length, total: L.length, finished: !!p.finished, created: p.created }; }
 /* keep what this person changed since the last sync, take everything else from the server copy */
+/* one item changed on both devices: this device's work wins, but an old certificate found on the other device is never lost to "No old cert" here, and an empty field takes the other side's value (Bishoy, 26 Nov 2026 – Mohamed saw "No old cert" while the job had them) */
+function oldFound(o) { return !!(o && o.status === 'found'); }
+function syncItemMerge(l, r) { var o = JSON.parse(JSON.stringify(l)); if (oldFound(r.old) && !oldFound(l.old)) o.old = JSON.parse(JSON.stringify(r.old));
+  Object.keys(r).forEach(function (k) { var v = o[k]; if ((v == null || v === '') && r[k] != null && r[k] !== '') o[k] = JSON.parse(JSON.stringify(r[k])); });
+  if (r.nv && typeof r.nv === 'object') { var nv = JSON.parse(JSON.stringify(r.nv)); Object.keys(l.nv || {}).forEach(function (k) { nv[k] = l.nv[k]; }); o.nv = nv; } return o; }
+function syncOldHeal(loc, rem) { var by = {}, ch = false; (rem.items || []).forEach(function (it) { by[it.id] = it; }); (loc.items || []).forEach(function (it, i) { var r = by[it.id]; if (r && oldFound(r.old) && !oldFound(it.old)) { loc.items[i] = syncItemMerge(it, r); ch = true; } }); return ch; }
 function syncMerge(loc, rem) { var base = loc._base || {}, out = JSON.parse(JSON.stringify(rem)), lt = syncClean(loc); delete lt.items;
   if (syncHash(lt) !== base.__top) Object.keys(lt).forEach(function (k) { out[k] = lt[k]; });
   var byId = {}; (out.items || []).forEach(function (it, i) { byId[it.id] = i; });
-  (loc.items || []).forEach(function (it, i) { var h = syncHash(it), changed = h !== base[it.id]; if (!changed) return; if (byId[it.id] != null) out.items[byId[it.id]] = it; else { out.items = out.items || []; out.items.splice(Math.min(i, out.items.length), 0, it); } });
+  (loc.items || []).forEach(function (it, i) { var h = syncHash(it), changed = h !== base[it.id]; if (!changed) return; if (byId[it.id] != null) { var ri = out.items[byId[it.id]]; out.items[byId[it.id]] = syncHash(ri) === base[it.id] ? it : syncItemMerge(it, ri); } else { out.items = out.items || []; out.items.splice(Math.min(i, out.items.length), 0, it); } });
   var locIds = {}; (loc.items || []).forEach(function (it) { locIds[it.id] = 1; });
   out.items = (out.items || []).filter(function (it) { return locIds[it.id] || !base[it.id] || syncHash(it) !== base[it.id]; }); /* removed here and not touched there → removed */
   ['tab', 'ci', 'cv', '_edCi'].forEach(function (k) { if (loc[k] != null) out[k] = loc[k]; }); return out; }
@@ -3242,15 +3248,15 @@ function syncApply(j) { if (/^__/.test(j.id)) { if (j.id === '__activity' && !j.
   if (j.deleted) { if (loc && syncHash(syncClean(loc)) === loc._syncH) { S.projects = S.projects.filter(function (q) { return q.id !== j.id; }); if (S.cur === j.id) S.cur = null; return true; } return false; }
   if (!j.json) return false; var rem; try { rem = JSON.parse(j.json); } catch (e) { return false; }
   if (!loc) { S.projects.push(rem); syncAdopt(rem, j.rev, j.updated); rem._byName = j.byName; rem._byUser = j.byUser; return true; }
-  if (j.rev === loc._rev) { loc._byName = j.byName; loc._byUser = j.byUser; loc._at = j.updated; return false; }
+  if (j.rev === loc._rev) { loc._byName = j.byName; loc._byUser = j.byUser; loc._at = j.updated; return syncOldHeal(loc, rem); }
   if (j.rev < (loc._rev || 0)) return false;
   var clean = syncHash(syncClean(loc)) === loc._syncH, nx = clean ? rem : syncMerge(loc, rem), base = loc._base; ['tab', 'ci', 'cv', '_edCi'].forEach(function (k) { if (loc[k] != null) nx[k] = loc[k]; });
   syncInPlace(loc, nx); syncAdopt(loc, j.rev, j.updated); if (!clean) { loc._base = base; loc._syncH = 'x'; } loc._byName = j.byName; loc._byUser = j.byUser; return true; }
-function syncPull(force) { if (!SYNC.on() || SYNC.busy) return Promise.resolve(false); SYNC.busy = true; SYNC.pend = SYNC.pend || {}; var since = force ? 0 : LS.get('jobsSince', 0), changed = false;
+function syncPull(force) { if (!SYNC.on() || SYNC.busy) return Promise.resolve(false); SYNC.busy = true; SYNC.pend = SYNC.pend || {}; var heal0 = !LS.get('oldHeal693', 0), since = force || heal0 ? 0 : LS.get('jobsSince', 0), changed = false; /* once: read every job again so a device that kept "No old cert" takes the old certificates found on another device */
   return jcall('list', { since: since }).then(function (r) { var ed = syncEditing();
     Object.keys(SYNC.pend).forEach(function (id) { if (ed && id === S.cur) return; if (syncApply(SYNC.pend[id])) changed = true; delete SYNC.pend[id]; });
     (r.jobs || []).forEach(function (j) { if (ed && j.id === S.cur) { SYNC.pend[j.id] = j; return; } if (syncApply(j)) changed = true; });
-    SYNC.pres = r.pres || {}; SYNC.viewers = r.viewers || []; LS.set('jobsSince', r.now || Date.now()); SYNC.err = ''; SYNC.last = Date.now(); syncSave(); return changed; })
+    SYNC.pres = r.pres || {}; SYNC.viewers = r.viewers || []; LS.set('jobsSince', r.now || Date.now()); if (heal0) LS.set('oldHeal693', 1); SYNC.err = ''; SYNC.last = Date.now(); syncSave(); return changed; })
     .catch(function (e) { SYNC.err = e.message; return false; }).then(function (c) { SYNC.busy = false; if (S.projects.some(function (p) { return p.company && syncHash(syncClean(p)) !== p._syncH; })) syncSoon(); return c; }); }
 /* a quiet refresh: the home page redraws; an open job only when nobody is typing in it */
 function homeSig() { try { return JSON.stringify((S.projects || []).filter(function (p) { return p.company; }).map(function (p) { var L = certList(p); return [p.id, coName(p), L.length, L.filter(function (x) { return x.saved; }).length, p.finAt || 0, p.printAt || 0, p.sentAt || 0, p._byName || '', p.by || '', Object.keys(p.team || {}).length, Math.floor((Date.now() - (+p._at || 0)) / 864e5), syncOthers(p.id).join()]; })); } catch (e) { return String(Math.random()); } }
