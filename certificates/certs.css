@@ -2402,3 +2402,14 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 .pcrng{margin-top:14px}
 .pcrng>b{display:block;font-size:13px;color:#1f2d45;margin-bottom:6px}
 .pcrng td.tpauto{background:#f4f6f9;font-weight:600}
+
+/* copy a certificate (v695) */
+.lx.lcp{margin-right:4px;font-size:14px}
+.cpchk{display:inline-block;margin-left:6px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#FFF4D6;color:#8A5A00;white-space:nowrap}
+.cpto{display:flex;flex-direction:column;gap:8px}
+.cpopt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:12px 14px;border:1px solid var(--line,#D8E0EA);border-radius:12px;background:#fff;cursor:pointer;font:inherit}
+.cpopt:hover{border-color:#7aa3d6;background:#F5F9FE}
+.cpopt small{color:#6B7787}
+.cpnew{padding:12px 14px;border:1px dashed var(--line,#D8E0EA);border-radius:12px}
+.cpnew b{display:block;margin-bottom:8px}
+.ltbl td.ldel{white-space:nowrap}
