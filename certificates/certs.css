@@ -2371,3 +2371,6 @@ body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 /* the certificate number never breaks over lines – the code and description give way (Bishoy, 26 Nov 2026) */
 .cvno{flex-wrap:nowrap!important}.cvno b{white-space:nowrap!important;flex:0 0 auto!important;font-size:clamp(15px,1.5vw,19px)}.cvno span{white-space:nowrap;flex:0 0 auto}.cvno small{flex:1 1 auto!important;min-width:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+#updPill{display:none!important}
+.tbb.libRun span,.tbb.libDone span{display:inline-flex;align-items:center;gap:5px}.libspin{width:11px;height:11px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .8s linear infinite}
+@keyframes libspin{to{transform:rotate(360deg)}}.libspin{animation:libspin .8s linear infinite!important}
