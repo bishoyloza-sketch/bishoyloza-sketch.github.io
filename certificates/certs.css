@@ -2391,3 +2391,14 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 /* particle count: class limit under each size in the header (v688) */
 .pt th small.tplim{display:block;font-weight:400;font-size:.85em;color:#1f2d45;margin-top:2px}
 .pt th small.tplim.nl{color:#888}
+
+/* particle count: sizes to print (GMP), counter channels (ISO 8573), worked-out ranges (v691) */
+.pcsh{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 10px;font-size:13px}
+.pcsh>span{color:#55606f;margin-right:4px}
+.pcsh small{color:#7a8594;margin-left:6px}
+.pcchip{font:inherit;font-size:12.5px;padding:4px 12px;border-radius:999px;border:1px solid #c9d1dc;background:#fff;color:#33404f;cursor:pointer}
+.pcchip.on{background:#e8f0fb;border-color:#7aa3d6;color:#1f4e79;font-weight:600}
+.tptbl th.pcdim{opacity:.55}
+.pcrng{margin-top:14px}
+.pcrng>b{display:block;font-size:13px;color:#1f2d45;margin-bottom:6px}
+.pcrng td.tpauto{background:#f4f6f9;font-weight:600}
