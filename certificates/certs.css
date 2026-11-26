@@ -2416,3 +2416,13 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 
 /* the selection bar stays in sight while scrolling the list (v696) */
 .selbar3{position:sticky;top:6px;z-index:6;box-shadow:0 4px 14px rgba(19,41,75,.10)}
+
+/* slim action bar at the bottom while rows are ticked (v699) */
+.selbot{display:flex;align-items:center;gap:4px;margin:0 auto;padding:4px 6px 4px 14px;background:#13294B;color:#fff;border-radius:999px;font-size:12.5px;box-shadow:0 6px 18px rgba(19,41,75,.18);max-width:max-content}
+.selbot b{font-weight:600;margin-right:6px;white-space:nowrap}
+.selbot i{width:1px;height:18px;background:rgba(255,255,255,.25);margin:0 4px}
+.selbot button{font:inherit;font-size:12.5px;color:#fff;background:transparent;border:0;border-radius:999px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.selbot button:hover{background:rgba(255,255,255,.12)}
+.selbot button:disabled{opacity:.4;cursor:default}
+.selbot button.rd{color:#FFC9C9}
+.selbot button.rd:hover{background:rgba(226,75,74,.25)}
