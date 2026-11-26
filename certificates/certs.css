@@ -2434,3 +2434,27 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 .lmv{display:inline-flex;flex-direction:column;margin-left:6px;vertical-align:middle;gap:1px}
 .lmvb{font:inherit;font-size:9px;line-height:1;padding:2px 4px;border:0;border-radius:4px;background:transparent;color:#5F6B7A;cursor:pointer}
 .lmvb:hover{background:#DCE8F6;color:#13294B}
+
+/* column filters in the job list (v703) */
+.hfb{font:inherit;font-size:10px;line-height:1;margin-left:4px;padding:2px 4px;border:1px solid #C9D3DF;border-radius:5px;background:#fff;color:#5F6B7A;cursor:pointer;vertical-align:middle}
+.hfb:hover{border-color:#7aa3d6;color:#13294B}
+.hfb.on{background:#185FA5;border-color:#185FA5;color:#fff}
+.hfchips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;font-size:12.5px;color:#55606f}
+.hfchip{font:inherit;font-size:12px;padding:4px 10px;border-radius:999px;border:0;background:#E6F1FB;color:#0C447C;cursor:pointer}
+.hfchip:hover{background:#D3E6F8}
+.hfclr{font:inherit;font-size:12px;border:0;background:transparent;color:#55606f;text-decoration:underline;cursor:pointer}
+.hfcnt{margin-left:auto;color:#7a8594}
+.hfdd{position:fixed;z-index:60;width:260px;background:#fff;border:1px solid #C9D3DF;border-radius:12px;box-shadow:0 12px 32px rgba(19,41,75,.18);padding:8px;display:flex;flex-direction:column;font-size:13px}
+.hfdd input{height:32px;font-size:13px;margin-bottom:6px}
+.hflist{overflow:auto;flex:1;min-height:0}
+.hfsec{font-size:11px;font-weight:600;color:#7a8594;text-transform:uppercase;letter-spacing:.4px;padding:6px 4px 2px}
+.hfrow{display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:7px;cursor:pointer}
+.hfrow:hover{background:#F2F6FB}
+.hfck{width:16px;height:16px;flex:none;border-radius:4px;border:1.5px solid #9FB0C5;display:grid;place-items:center;font-size:11px;color:#fff}
+.hfck.on{background:#185FA5;border-color:#185FA5}
+.hfvl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hfrow small{color:#8a94a3}
+.hfonly{font:inherit;font-size:11px;border:0;background:transparent;color:#185FA5;cursor:pointer;visibility:hidden}
+.hfrow:hover .hfonly{visibility:visible}
+.hfft{display:flex;justify-content:space-between;border-top:1px solid #E3E8EF;margin-top:6px;padding-top:6px}
+.hfft button{font:inherit;font-size:12px;border:0;background:transparent;color:#185FA5;cursor:pointer}
