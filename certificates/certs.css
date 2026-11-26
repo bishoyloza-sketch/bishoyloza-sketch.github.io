@@ -2351,3 +2351,7 @@ body:has(#gapWin) .dlg{z-index:600}body:has(#gapWin) #toast{z-index:700}
 /* the Today card sits on the right side, under the bar and clear of the page heading – never over the top of a window (v637) */
 #todayCard{top:auto!important;bottom:84px;right:14px;max-height:calc(100vh - var(--tbh,64px) - 110px);overflow:auto;transform:translateX(18px)}
 #todayCard.in{transform:none}
+
+.sopr{display:flex;align-items:center;gap:4px}.sopr .sopi{flex:1}.sope{border:0;background:none;color:#1F6FB5;font-size:15px;cursor:pointer;padding:8px 10px;border-radius:8px}.sope:hover{background:#EAF3FC}
+.sopedit{display:flex;gap:6px;align-items:center;width:100%;padding:6px 4px;flex-wrap:wrap}.sopedit .inp{flex:1;min-width:120px}.sopedit .btn.ghost{background:#fff;color:#B3261E;border:1px solid #E7C3C0}
+.sopor #lpPs{flex:1}
