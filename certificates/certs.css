@@ -2426,3 +2426,11 @@ body:has(#sheet-root .sheet-bg) #czBar{z-index:9999}
 .selbot button:disabled{opacity:.4;cursor:default}
 .selbot button.rd{color:#FFC9C9}
 .selbot button.rd:hover{background:rgba(226,75,74,.25)}
+
+/* simpler Select (v701): no big bar on top – a select-all tick in the header, ▲▼ beside the ticked rows, actions in the slim bar below */
+.selbar3{display:none!important}
+.ltbl th .lckall{cursor:pointer}
+.lck.part{background:#185FA5;border-color:#185FA5;color:#fff}
+.lmv{display:inline-flex;flex-direction:column;margin-left:6px;vertical-align:middle;gap:1px}
+.lmvb{font:inherit;font-size:9px;line-height:1;padding:2px 4px;border:0;border-radius:4px;background:transparent;color:#5F6B7A;cursor:pointer}
+.lmvb:hover{background:#DCE8F6;color:#13294B}
