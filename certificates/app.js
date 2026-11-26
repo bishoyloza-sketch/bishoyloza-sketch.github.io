@@ -899,7 +899,7 @@ function comboize(sel) { if (sel.dataset.cb || sel.multiple || sel.options.lengt
   inp.onkeydown = function (e) { if (!box && /Arrow|Enter/.test(e.key)) draw(); if (e.key === 'ArrowDown') { hi = Math.min(items.length - 1, hi + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hi = Math.max(0, hi - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { if (items[hi]) pick(items[hi]); e.preventDefault(); } else if (e.key === 'Escape') { close(); inp.value = cur(); inp.blur(); } }; }
 setInterval(function () { try { Array.prototype.forEach.call(document.querySelectorAll('select:not([data-cb])'), comboize); } catch (e) {} }, 400);
 /* ===== a new version is put up: the app takes it by itself when you are not typing (you stay on the same page), or you tap the note ===== */
-var APP_V = 'v703';
+var APP_V = 'v704';
 /* a new version never reloads the page by itself (no flashing while you work): a note appears, you tap it when you are ready */
 (function () { var shown = false, check = function () { if (DEMO || !navigator.onLine || shown) return; fetch('sw.js?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var m = String(t).match(/akh-certs-v(\d+)/); if (!m || +m[1] <= +String(APP_V).replace(/\D/g, '')) return;
       var go = function () { try { LS.set('lastCur', S.cur || null); LS.set('lastView', S.view || null); LS.set('lastY', window.scrollY || 0); } catch (e) {} n.innerHTML = '<span class="nvi">↻</span><span class="nvt">Updating…</span>'; Promise.all(['app.js', 'certs.css', 'app.css', 'index.html', './'].map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { return navigator.serviceWorker && navigator.serviceWorker.getRegistration ? navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).catch(function () {}) : null; }).then(function () { setTimeout(function () { location.reload(); }, 300); }); };
@@ -8515,7 +8515,7 @@ function ordState(p) { var t = p.orderType ? TYPES[p.orderType][0] : 'Order';
   if (p.orderType) return ['no', t + ' not found']; return ['', '']; }
 function subProject(p, its) { var first = its[0], n = parseInt((String(first.certNo || '').replace(/-\d{4}$/, '').match(/(\d+)$/) || [])[1], 10);
   return Object.assign({}, p, { items: its, machines: (p.machines || []).filter(function (m) { return its.some(function (it) { return it.machineId === m.id; }); }), gen: Object.assign({}, p.gen, { start: isNaN(n) ? (p.gen || {}).start : String(n) }) }); }
-function outPrint(p, its, pdf) { window.__pvRe = function () { outPrint(p, its, pdf); }; genGroups(p); var p2 = its.length === 1 ? subProject(p, its) : Object.assign({}, p, { items: its }), html;
+function outPrint(p, its, pdf) { window.__pvRe = function () { outPrint(p, its, pdf); }; genGroups(p); var p2 = subJob(p, its), html; /* each certificate keeps its number and its machine's cover lists every item (Bishoy, 26 Nov 2026) */
   try { html = printView(p2); } catch (e) { return toast('Could not prepare it: ' + e.message, true); } genGroups(p);
   openSheet(function () { return { title: (pdf ? 'PDF preview · ' : 'Print preview · ') + (its.length === 1 ? esc(its[0].code || its[0].certNo || '') : its.length + ' certificates'),
     body: '<div class="note">Check the pages, then ' + (pdf ? '“Save as PDF”' : '“Print”') + '.</div><iframe class="pv" id="pvf"></iframe>',
@@ -9032,7 +9032,7 @@ function exportSheet(p) { if (demoOn(p)) p = demoClone(p); genGroups(p); var L =
         var ea = $('#exA'); if (ea) { ea.onclick = function () { L.forEach(function (x, i) { st.on[i] = true; }); renderSheet(); }; $('#exN').onclick = function () { st.on = {}; renderSheet(); }; }
         $('#exB').onclick = function () { st.what = ''; renderSheet(); };
         $('#exGo').onclick = function () { var its = chosen(); if (!its.length) return; closeSheet(); if (st.fmt === 'excel') return certXlsx(p, its);
-          var p2 = its.length === 1 ? subProject(p, its) : Object.assign({}, p, { items: its });
+          genGroups(p); var p2 = st.cov === 'cert' ? (function () { var nos = {}; its.forEach(function (i) { nos[i.id] = i.certNo; }); return Object.assign({}, p, { items: p.items.filter(function (i) { return its.indexOf(i) >= 0; }), _sub: 1, _nos: nos, _full: p }); })() : subJob(p, its); /* Export keeps each certificate's own number, and a cover always comes with every item of its machine – the cover had 2 items of 4 and the numbers started again (Bishoy, 26 Nov 2026) */
           if (st.fmt === 'word') { var all = buildAll(p2); genGroups(p); return dlZip(all.files.filter(function (f) { return !/^Letter/.test(f.name) && (st.cov === 'both' || (st.cov === 'cover' ? /cover/i.test(f.name) : !/cover/i.test(f.name))); }), p.company.name + ' certificates.zip'); }
           var html; try { html = printView(p2, { noCover: st.cov === 'cert', onlyCover: st.cov === 'cover' }); } catch (e) { return toast('Could not prepare it: ' + e.message, true); } genGroups(p); window.__demoPv = !!p._demo; htmlPreview(its.length === 1 ? 'Certificate ' + (its[0].certNo || its[0].code) : its.length + ' certificates', html); window.__demoPv = false; }; } }; }); }
 
